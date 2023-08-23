@@ -67,7 +67,53 @@ class MFLIProgram:
         return channels
 
     def merge(self, other: 'MFLIProgram') -> 'MFLIProgram':
-        raise NotImplementedError()
+
+        new_program = MFLIProgram()
+
+        new_program.default_channels = self.default_channels
+
+        if new_program.default_channels is None:
+            new_program.default_channels = other.default_channels
+        elif isinstance(new_program.default_channels, set):
+            new_program.default_channels = new_program.default_channels.union(other.default_channels)
+
+        new_program.channel_mapping = {**self.channel_mapping}
+        if other.channel_mapping is not None:
+            for k, v in other.channel_mapping.items():
+                new_program.channel_mapping[k].update(v)
+
+        if self.windows is not None or other.windows is not None:
+            new_program.windows = {}
+
+            def add_to_windows(name, begins, lengths):
+                if name not in new_program.windows:
+                    new_program.windows[name] = [[], []]
+                for b, l in zip(begins, lengths):
+                    if b not in new_program.windows[name][0]:
+                        new_program.windows[name][0].append(b)
+                        new_program.windows[name][1].append(l)
+
+            if self.windows is not None:
+                for wn, v in self.windows.items():
+                    add_to_windows(wn, v[0], v[1])
+            if other.windows is not None:
+                for wn, v in other.windows.items():
+                    add_to_windows(wn, v[0], v[1])
+            
+            for k, v in new_program.windows.items():
+                new_program.windows[k][0] = np.array(new_program.windows[k][0])
+                new_program.windows[k][1] = np.array(new_program.windows[k][1])
+
+        if other.trigger_settings is not None:
+            new_program.trigger_settings = other.trigger_settings
+
+        new_program.other_settings.update(self.other_settings)
+        new_program.other_settings.update(other.other_settings)
+
+        if other.operations is not None:
+            new_program.operations = other.operations
+
+        return new_program
 
 
 class MFLIDAQ(DAC):
@@ -76,7 +122,7 @@ class MFLIDAQ(DAC):
 
     def __init__(self,
                  api_session: zhinst_core.ziDAQServer,
-                 device,
+                 device_props: Dict,
                  reset: bool = False,
                  timeout: float = 20) -> None:
         """
@@ -84,9 +130,9 @@ class MFLIDAQ(DAC):
         :param timeout:           Timeout in seconds for uploading
         """
         self.api_session = api_session
-        self.device = device
+        self.device_props = device_props
         self.default_timeout = timeout
-        self.serial = device.serial
+        self.serial = device_props["deviceid"]
 
         self.daq = None
         self._init_daq_module()
@@ -108,11 +154,7 @@ class MFLIDAQ(DAC):
         self._armed_program: Optional[MFLIProgram] = None
 
     @classmethod
-    def connect_to(cls, device_serial: str = None,
-                   device_interface: str = '1GbE',
-                   data_server_addr: str = 'localhost',
-                   data_server_port: int = 8004,
-                   api_level_number: int = 6, **init_kwargs):
+    def connect_to(cls, device_serial: str = None, **init_kwargs):
         """
         :param device_serial:     Device serial that uniquely identifies this device to the LabOne data server
         :param device_interface:  Either '1GbE' for ethernet or 'USB'
@@ -120,9 +162,11 @@ class MFLIDAQ(DAC):
         :param data_server_port:  Data server port. Default: 8004 for HDAWG, MF and UHF devices
         :param api_level_number:  Version of API to use for the session, higher number, newer. Default: 6 most recent
         """
-        api_session = zhinst_core.ziDAQServer(data_server_addr, data_server_port, api_level_number)
-        device = api_session.connectDevice(device_serial, device_interface)
-        cls(api_session, device, **init_kwargs)
+        discovery = zhinst_core.ziDiscovery()
+        device_id = discovery.find(device_serial)
+        device_props = discovery.get(device_id)
+        api_session = zhinst_core.ziDAQServer(device_props['serveraddress'], device_props['serverport'], device_props['apilevel'])
+        return cls(api_session, device_props, **init_kwargs)
 
     def _init_daq_module(self):
         self.daq = self.api_session.dataAcquisitionModule()
@@ -167,6 +211,8 @@ class MFLIDAQ(DAC):
         if window_name is None:
             program.default_channels = set(channel_path)
         else:
+            if program.channel_mapping is None:
+                program.channel_mapping = dict()
             program.channel_mapping[window_name] = set(channel_path)
 
     def register_measurement_windows(self, program_name: str, windows: Dict[str, Tuple[np.ndarray,
@@ -433,7 +479,7 @@ class MFLIDAQ(DAC):
                     else:
                         self.daq.set("type", 1)
 
-                    self.daq.set("triggernode", ts.trigger_input)
+                    self.daq.set("triggernode", f"/{self.serial}/{ts.trigger_input}")
 
                     edge_key = ["rising", "falling", "both"].index(ts.edge)
                     self.daq.set("edge", edge_key)
@@ -441,7 +487,7 @@ class MFLIDAQ(DAC):
                     if "trigin" in ts.trigger_input.lower():
                         _trigger_id = int(ts.trigger_input.split("TrigIn")[-1])
                         assert _trigger_id in [1, 2]
-                        self.api_session.setDouble(f'/{self.serial}/triggers/in/{_trigger_id}/level', ts.level);
+                        self.api_session.setDouble(f'/{self.serial}/triggers/in/{_trigger_id-1}/level', ts.level);
                     else:
                         self.daq.set("level", ts.level)
 
@@ -459,7 +505,7 @@ class MFLIDAQ(DAC):
 
             # set the buffer size according to the largest measurement window
             # TODO one might be able to implement this a bit more cleverly
-            measurement_duration = np.max(list(self.programs[program_name]["windows_from_start_max"].values()))
+            measurement_duration = self.programs[program_name].get_minimal_duration()
             measurement_duration += (ts.post_delay + -1 * ts.delay) * 1e9
             larges_number_of_samples = max_sample_rate / 10 ** 9 * measurement_duration
             larges_number_of_samples = np.ceil(larges_number_of_samples)
@@ -523,7 +569,7 @@ class MFLIDAQ(DAC):
 
     def _parse_data(self,
                     recorded_data: Mapping[str, List[xr.DataArray]],
-                    program_name: str,
+                    program: MFLIProgram,
                     fail_on_empty: bool = True) -> Mapping[str, Mapping[str, List[xr.DataArray]]]:
         """ This function parses the recorded data and extracts the measurement masks and applies optional operations
         """
@@ -547,10 +593,10 @@ class MFLIDAQ(DAC):
         # TODO this might be more elegantly implemented or handled using yields!
         shot_index = 0  # TODO make this more flexible to not lose things
 
-        for window_name, (begins, lengths) in self.programs[program_name].windows.items():
+        for window_name, (begins, lengths) in program.windows.items():
             data_by_channel = {}
-            # _wind = self.programs[program_name]["windows"][window_name]
-            for ci, _cn in enumerate(self._get_channels_for_window(program_name, window_name)):
+            # _wind = program["windows"][window_name]
+            for ci, _cn in enumerate(program.channel_mapping[window_name]):
                 cn = f"/{self.serial}/{_cn}".lower()
 
                 if len(recorded_data[cn]) <= shot_index:
@@ -642,6 +688,9 @@ class MFLIDAQ(DAC):
         data = self.daq.read()
         self.daq_read_return.update(data)
 
+        if data is None or len(data) == 0:
+            warnings.warn(f"Reading form the data acquisition module did not work.")
+
         clockbase = self.api_session.getDouble(f'/{self.serial}/clockbase')
 
         # go through the returned object and extract the data of interest
@@ -649,7 +698,7 @@ class MFLIDAQ(DAC):
         recorded_data = {}
 
         for device_name, device_data in data.items():
-            if device_name == self.serial:
+            if device_name == self.serial.lower():
                 for input_name, input_data in device_data.items():
                     for signal_name, signal_data in input_data.items():
                         for final_level_name, final_level_data in signal_data.items():
@@ -726,8 +775,11 @@ class MFLIDAQ(DAC):
             # Then we have nothing to process
             return None
 
-        channels_to_measure = self._get_channels_for_window(self.currently_set_program, None)
-        channels_to_measure = [f"/{self.serial}/{c}" for c in channels_to_measure]
+        channels_to_measure = []
+        for k, v in program.windows.items():
+            channels_to_measure.extend(program.channel_mapping[k])
+        channels_to_measure = list(np.unique(channels_to_measure))
+        channels_to_measure = [f"/{self.serial}/{c}".lower() for c in channels_to_measure]
 
         things_to_remove = {}
 
@@ -735,7 +787,7 @@ class MFLIDAQ(DAC):
 
         for ts in all_ts:
             contained = [k for k, v in creation_ts.items() if ts in v]
-            if all([(c in contained) for c in channels_to_measure]):
+            if all([(c.lower() in contained) for c in channels_to_measure]):
                 # then we have all measurement for that shot
                 that_shot = {}
                 _indexs = [creation_ts[c].index(ts) for c in channels_to_measure]
@@ -746,8 +798,7 @@ class MFLIDAQ(DAC):
 
                 _the_warning_string = f"Parsing some data did not work. This might fix itself later, when the missing data is retrieved from the device. If not, clearing the memory (i.e. self.clear_memory()), resetting the daq_module (i.e. self.reset_daq_module()), or setting the field to the selected program (i.e., self.currently_set_program=None) to None and then rearming the original program might work. For debugging purposes, one might want to call the measure function with the return_raw=True parameter."
                 try:
-                    that_shot_parsed = self._parse_data(that_shot, self.currently_set_program,
-                                                        fail_on_empty=fail_on_empty)
+                    that_shot_parsed = self._parse_data(that_shot, program, fail_on_empty=fail_on_empty)
                 except IndexError as e:
                     traceback.print_exc()
                     warnings.warn(_the_warning_string)
@@ -778,6 +829,7 @@ class MFLIDAQ(DAC):
 
         if not return_raw:
             if len(results) == 0:
+                raise ValueError()
                 return None
             return results
 
