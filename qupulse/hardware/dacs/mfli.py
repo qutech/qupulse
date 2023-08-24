@@ -71,7 +71,6 @@ class MFLIProgram:
         new_program = MFLIProgram()
 
         new_program.default_channels = self.default_channels
-
         if new_program.default_channels is None:
             new_program.default_channels = other.default_channels
         elif isinstance(new_program.default_channels, set):
@@ -104,12 +103,16 @@ class MFLIProgram:
                 new_program.windows[k][0] = np.array(new_program.windows[k][0])
                 new_program.windows[k][1] = np.array(new_program.windows[k][1])
 
+        if self.trigger_settings is not None:
+            new_program.trigger_settings = self.trigger_settings
         if other.trigger_settings is not None:
             new_program.trigger_settings = other.trigger_settings
 
         new_program.other_settings.update(self.other_settings)
         new_program.other_settings.update(other.other_settings)
 
+        if self.operations is not None:
+            new_program.operations = self.operations
         if other.operations is not None:
             new_program.operations = other.operations
 
