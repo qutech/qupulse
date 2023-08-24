@@ -47,6 +47,97 @@ class TriggerSettings:
         return np.isinf(self.measurement_count) or self.measurement_count == 0
 
 
+
+def postprocessing_crop_windows(
+                serial:str,
+                recorded_data: Mapping[str, List[xr.DataArray]],
+                program: "MFLIProgram",
+                fail_on_empty: bool = True, average_window:bool=False) -> Mapping[str, Mapping[str, List[Union[float, xr.DataArray]]]]:
+    """ This function parses the recorded data and extracts the measurement masks
+    """
+
+    # the first dimension of channel_data is expected to be the history of multiple not read data points. This will
+    # be handled as multiple entries in a list. This will then not make too much sense, if not every channel as this
+    # many entries. If this is the case, they will be stacked, such that for the last elements it fits.
+    # TODO do this based on the timestamps and not the indices. That might be more sound than just assuming that.
+
+    # applying measurement windows and optional operations
+    # TODO implement operations
+
+    # targeted structure:
+    # results[<mask_name>][<channel>] -> [data]
+
+    masked_data = {}
+
+    # the MFLI returns a list of measurements. We only proceed with the last ones from this list. One might want to
+    # iterate over that and process all of them.This feature might be useful if after some measurements no read()
+    # operation is called. Then with the later read, the data is returned.
+    # TODO this might be more elegantly implemented or handled using yields!
+    shot_index = 0  # TODO make this more flexible to not lose things
+
+    for window_name, (begins, lengths) in program.windows.items():
+        data_by_channel = {}
+        # _wind = program["windows"][window_name]
+        for ci, _cn in enumerate(program.channel_mapping[window_name]):
+            cn = f"/{serial}/{_cn}".lower()
+
+            if len(recorded_data[cn]) <= shot_index:
+                # then we do not have data for this shot_index, which is intended to cover multiple not yet collected measurements. And thus will not have anything to save.
+                warnings.warn(
+                    f"for channel '{cn}' only {len(recorded_data[cn])} shots are given. This does not allow for taking element [-1-{shot_index}]")
+                continue
+            applicable_data = recorded_data[cn][-1 - shot_index]
+            applicable_data = applicable_data.where(~np.isnan(applicable_data), drop=True)
+
+            if len(applicable_data) == 0 or np.product([*applicable_data.shape]) == 0:
+                if fail_on_empty:
+                    raise ValueError(f"The received data for channel {_cn} is empty.")
+                else:
+                    warnings.warn(f"The received data for channel {_cn} is empty.")
+                    continue
+
+            extracted_data = []
+            for b, l in zip(begins, lengths):
+                # _time_of_first_not_nan_value = applicable_data.where(~np.isnan(applicable_data), drop=True)["time"][:, 0].values
+
+                _time_of_first_not_nan_value = applicable_data["time"][:, 0].values
+
+                time_of_trigger = -1 * applicable_data.attrs["gridcoloffset"][
+                    0] * 1e9 + _time_of_first_not_nan_value
+
+                foo = applicable_data.where((applicable_data["time"] >= (time_of_trigger + b)[:, None]) & (
+                        applicable_data["time"] <= (time_of_trigger + b + l)[:, None]), drop=False)
+                if not average_window:
+                    foo = foo.copy()
+                    foo2 = foo.where(~np.isnan(foo), drop=True)
+                    rows_with_data = np.sum(~np.isnan(foo), axis=-1) > 0
+                    foo2["time"] -= time_of_trigger[rows_with_data, None]
+                    extracted_data.append(foo2)
+                else:
+                    extracted_data.append(np.nanmean(foo))
+
+            data_by_channel.update({cn: extracted_data})
+        masked_data[window_name] = data_by_channel
+
+    return masked_data
+
+
+def postprocessing_average_within_windows(
+                serial:str,
+                recorded_data: Mapping[str, List[xr.DataArray]],
+                program: "MFLIProgram",
+                fail_on_empty: bool = True) -> Mapping[str, Mapping[str, List[float]]]:
+    """ This function returns one float per window that averages each channel individually for that window.
+    """
+
+    return postprocessing_crop_windows(
+                serial = serial,
+                recorded_data = recorded_data,
+                program = program,
+                fail_on_empty = fail_on_empty, 
+                average_window = True)
+
+
 @dataclasses.dataclass
 class MFLIProgram:
     default_channels: Optional[Set[str]] = dataclasses.field(default=None)
@@ -54,7 +145,7 @@ class MFLIProgram:
     windows: Optional[Dict[str, Tuple[np.ndarray, np.ndarray]]] = dataclasses.field(default=None)
     trigger_settings: Optional[TriggerSettings] = dataclasses.field(default=None)
     other_settings: Dict[str, Any] = dataclasses.field(default_factory=dict)
-    operations: Any = dataclasses.field(default=None)
+    operations: Any = dataclasses.field(default=postprocessing_crop_windows)
 
     def get_minimal_duration(self) -> float:
         return max(np.max(begins + lengths) for (begins, lengths) in self.windows.values())
@@ -117,130 +208,6 @@ class MFLIProgram:
 
         return new_program
 
-
-def postprocessing_crop_windows(
-                serial:str,
-                recorded_data: Mapping[str, List[xr.DataArray]],
-                program: MFLIProgram,
-                fail_on_empty: bool = True) -> Mapping[str, Mapping[str, List[xr.DataArray]]]:
-    """ This function parses the recorded data and extracts the measurement masks
-    """
-
-    # the first dimension of channel_data is expected to be the history of multiple not read data points. This will
-    # be handled as multiple entries in a list. This will then not make too much sense, if not every channel as this
-    # many entries. If this is the case, they will be stacked, such that for the last elements it fits.
-    # TODO do this based on the timestamps and not the indices. That might be more sound than just assuming that.
-
-    # applying measurement windows and optional operations
-    # TODO implement operations
-
-    # targeted structure:
-    # results[<mask_name>][<channel>] -> [data]
-
-    masked_data = {}
-
-    # the MFLI returns a list of measurements. We only proceed with the last ones from this list. One might want to
-    # iterate over that and process all of them.This feature might be useful if after some measurements no read()
-    # operation is called. Then with the later read, the data is returned.
-    # TODO this might be more elegantly implemented or handled using yields!
-    shot_index = 0  # TODO make this more flexible to not lose things
-
-    for window_name, (begins, lengths) in program.windows.items():
-        data_by_channel = {}
-        # _wind = program["windows"][window_name]
-        for ci, _cn in enumerate(program.channel_mapping[window_name]):
-            cn = f"/{serial}/{_cn}".lower()
-
-            if len(recorded_data[cn]) <= shot_index:
-                # then we do not have data for this shot_index, which is intended to cover multiple not yet collected measurements. And thus will not have anything to save.
-                warnings.warn(
-                    f"for channel '{cn}' only {len(recorded_data[cn])} shots are given. This does not allow for taking element [-1-{shot_index}]")
-                continue
-            applicable_data = recorded_data[cn][-1 - shot_index]
-            applicable_data = applicable_data.where(~np.isnan(applicable_data), drop=True)
-
-            if len(applicable_data) == 0 or np.product([*applicable_data.shape]) == 0:
-                if fail_on_empty:
-                    raise ValueError(f"The received data for channel {_cn} is empty.")
-                else:
-                    warnings.warn(f"The received data for channel {_cn} is empty.")
-                    continue
-
-            extracted_data = []
-            for b, l in zip(begins, lengths):
-                # _time_of_first_not_nan_value = applicable_data.where(~np.isnan(applicable_data), drop=True)["time"][:, 0].values
-
-                _time_of_first_not_nan_value = applicable_data["time"][:, 0].values
-
-                time_of_trigger = -1 * applicable_data.attrs["gridcoloffset"][
-                    0] * 1e9 + _time_of_first_not_nan_value
-
-                foo = applicable_data.where((applicable_data["time"] >= (time_of_trigger + b)[:, None]) & (
-                        applicable_data["time"] <= (time_of_trigger + b + l)[:, None]), drop=False).copy()
-                foo2 = foo.where(~np.isnan(foo), drop=True)
-                rows_with_data = np.sum(~np.isnan(foo), axis=-1) > 0
-                foo2["time"] -= time_of_trigger[rows_with_data, None]
-                extracted_data.append(foo2)
-
-            data_by_channel.update({cn: extracted_data})
-        masked_data[window_name] = data_by_channel
-
-    return masked_data
-
-
-def postprocessing_average_within_windows(
-                serial:str,
-                recorded_data: Mapping[str, List[xr.DataArray]],
-                program: MFLIProgram,
-                fail_on_empty: bool = True) -> Mapping[str, Mapping[str, List[float]]]:
-    """ This function returns one float per window that averages each channel individually for that window.
-    """
-
-    # targeted structure:
-    # results[<mask_name>][<channel>] -> [data]
-
-    masked_data = {}
-
-    shot_index = 0  # TODO make this more flexible to not lose things
-
-    for window_name, (begins, lengths) in program.windows.items():
-        data_by_channel = {}
-        # _wind = program["windows"][window_name]
-        for ci, _cn in enumerate(program.channel_mapping[window_name]):
-            cn = f"/{serial}/{_cn}".lower()
-
-            if len(recorded_data[cn]) <= shot_index:
-                # then we do not have data for this shot_index, which is intended to cover multiple not yet collected measurements. And thus will not have anything to save.
-                warnings.warn(
-                    f"for channel '{cn}' only {len(recorded_data[cn])} shots are given. This does not allow for taking element [-1-{shot_index}]")
-                continue
-            applicable_data = recorded_data[cn][-1 - shot_index]
-            applicable_data = applicable_data.where(~np.isnan(applicable_data), drop=True)
-
-            if len(applicable_data) == 0 or np.product([*applicable_data.shape]) == 0:
-                if fail_on_empty:
-                    raise ValueError(f"The received data for channel {_cn} is empty.")
-                else:
-                    warnings.warn(f"The received data for channel {_cn} is empty.")
-                    continue
-
-            extracted_data = []
-            for b, l in zip(begins, lengths):
-                # _time_of_first_not_nan_value = applicable_data.where(~np.isnan(applicable_data), drop=True)["time"][:, 0].values
-
-                _time_of_first_not_nan_value = applicable_data["time"][:, 0].values
-
-                time_of_trigger = -1 * applicable_data.attrs["gridcoloffset"][
-                    0] * 1e9 + _time_of_first_not_nan_value
-
-                foo = np.nanmean(applicable_data.where((applicable_data["time"] >= (time_of_trigger + b)[:, None]) & (
-                        applicable_data["time"] <= (time_of_trigger + b + l)[:, None]), drop=False))
-                extracted_data.append(foo)
-
-            data_by_channel.update({cn: extracted_data})
-        masked_data[window_name] = data_by_channel
-
-    return masked_data
 
 class MFLIDAQ(DAC):
     """ This class contains the driver for using the DAQ module of an Zuerich Instruments MFLI with qupulse.
@@ -462,39 +429,6 @@ class MFLIDAQ(DAC):
         """
 
         self.programs.setdefault(program_name, MFLIProgram()).operations = operations
-
-    def _get_channels_for_window(self, program_name: Union[str, None], window_name: Union[str, List[str], None] = None):
-        """ Returns the channels to be measured for a given window
-        """
-        raise NotImplementedError("removed")
-
-        # if window_name is None:
-        #     window_name = list(self.programs[program_name]["windows"].keys())
-        # if not isinstance(window_name, list):
-        #     window_name = [window_name]
-        #
-        # channels: Set[str] = set()
-        #
-        # for wn in window_name:
-        #     try:
-        #         channels.update(self.programs[program_name]["channel_mapping"][wn])
-        #     except KeyError:
-        #         try:
-        #             channels.update(self.programs[program_name]["channel_mapping"][None])
-        #         except KeyError:
-        #             try:
-        #                 channels.update(self.programs[None]["channel_mapping"][wn])
-        #             except KeyError:
-        #                 try:
-        #                     channels.update(self.programs[None]["channel_mapping"][None])
-        #                 except KeyError:
-        #                     pass
-        #
-        # if len(channels) == 0:
-        #     warnings.warn(f"No channels registered to measure with program {program_name} and window {window_name}.")
-        #
-        # channels = set([e.lower() for e in channels])
-        # return channels
 
     def _get_demod(self, channel: str):
         """ This function gets the demodulator corresponding to a channel
