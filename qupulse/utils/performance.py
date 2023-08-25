@@ -1,3 +1,4 @@
+import warnings
 from typing import Tuple
 import numpy as np
 
@@ -22,6 +23,64 @@ def _is_monotonic_numpy(arr: np.ndarray) -> bool:
     # A bit faster than np.all(np.diff(arr) > 0) for small arrays
     # No difference for big arrays
     return np.all(arr[1:] >= arr[:-1])
+
+
+def _shrink_overlapping_windows_numpy(begins, lengths) -> bool:
+    ends = begins + lengths
+
+    overlaps = np.zeros_like(ends)
+    np.maximum(ends[:-1] - begins[1:], 0, out=overlaps[1:])
+
+    if np.any(overlaps >= lengths):
+        raise ValueError("Overlap is bigger than measurement window")
+    if np.any(overlaps > 0):
+        begins += overlaps
+        lengths -= overlaps
+        return True
+    return False
+
+
+@njit
+def _shrink_overlapping_windows_numba(begins, lengths) -> bool:
+    shrank = False
+    for idx in range(len(begins) - 1):
+        end = begins[idx] + lengths[idx]
+        next_begin = begins[idx + 1]
+        overlap = end - next_begin
+
+        if overlap > 0:
+            shrank = True
+            if lengths[idx + 1] > overlap:
+                begins[idx + 1] += overlap
+                lengths[idx + 1] -= overlap
+            else:
+                raise ValueError("Overlap is bigger than measurement window")
+    return shrank
+
+
+class WindowOverlapWarning(RuntimeWarning):
+    pass
+
+
+def shrink_overlapping_windows(begins, lengths, use_numba: bool = numba is not None) -> Tuple[np.array, np.array]:
+    """Shrink windows in place if they overlap. Emits WindowOverlapWarning if a window was shrunk.
+
+    Raises:
+        ValueError: if the overlap is bigger than a window.
+
+    Warnings:
+        WindowOverlapWarning
+    """
+    if use_numba:
+        backend = _shrink_overlapping_windows_numba
+    else:
+        backend = _shrink_overlapping_windows_numpy
+    begins = begins.copy()
+    lengths = lengths.copy()
+    if backend(begins, lengths):
+        warnings.warn("Found overlapping measurement windows which are automatically shrunken if possible.",
+                      category=WindowOverlapWarning)
+    return begins, lengths
 
 
 @njit
@@ -79,6 +138,3 @@ if numba is None:
     is_monotonic = _is_monotonic_numpy
 else:
     is_monotonic = _is_monotonic_numba
-
-
-
