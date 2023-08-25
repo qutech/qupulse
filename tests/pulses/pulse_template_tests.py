@@ -376,6 +376,11 @@ class PulseTemplateTest(unittest.TestCase):
             self.assertEqual(a @ b, 'concat')
             mock_concatenate.assert_called_once_with(a, b)
 
+    def test_pow(self):
+        pt = PulseTemplateStub()
+        pow_pt = pt ** 5
+        self.assertEqual(pow_pt, pt.with_repetition(5))
+
     def test_rmatmul(self):
         a = PulseTemplateStub()
         b = (1, 2, 3)
