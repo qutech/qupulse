@@ -46,9 +46,9 @@ def _shrink_overlapping_windows_numba(begins, lengths) -> bool:
     for idx in range(len(begins) - 1):
         end = begins[idx] + lengths[idx]
         next_begin = begins[idx + 1]
-        overlap = end - next_begin
 
-        if overlap > 0:
+        if end > next_begin:
+            overlap = end - next_begin
             shrank = True
             if lengths[idx + 1] > overlap:
                 begins[idx + 1] += overlap
