@@ -96,6 +96,10 @@ class PulseTemplate(Serializable):
 
         return SequencePulseTemplate.concatenate(other, self)
 
+    def __pow__(self, power: ExpressionLike):
+        """This is a convenience wrapper for :func:`.with_repetition`."""
+        return self.with_repetition(power)
+
     @property
     @abstractmethod
     def integral(self) -> Dict[ChannelID, ExpressionScalar]:
