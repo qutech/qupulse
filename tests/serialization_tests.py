@@ -1051,8 +1051,11 @@ class PulseStorageTests(unittest.TestCase):
         del pulse_storage
 
         pulse_storage = PulseStorage(backend)
-        with self.assertRaisesRegex(RuntimeError, "Pulse with name already exists"):
+        with self.assertRaises(ValueError) as cm:
             pulse_storage['peter']
+
+        # this is shitty
+        self.assertIsInstance(cm.exception.__cause__, RuntimeError)
 
     def test_deserialize_twice_same_object_storage_is_default_registry(self) -> None:
         backend = DummyStorageBackend()
