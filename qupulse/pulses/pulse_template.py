@@ -13,6 +13,7 @@ import itertools
 import collections
 from numbers import Real, Number
 
+import numpy
 import sympy
 
 from qupulse.utils.types import ChannelID, DocStringABCMeta, FrozenDict
@@ -49,6 +50,8 @@ class PulseTemplate(Serializable):
 
     """This is not stable"""
     _DEFAULT_FORMAT_SPEC = 'identifier'
+
+    _CAST_INT_TO_INT64 = True
 
     def __init__(self, *,
                  identifier: Optional[str]) -> None:
@@ -166,8 +169,15 @@ class PulseTemplate(Serializable):
             scope = parameters
         else:
             parameters = dict(parameters)
+            to_int = numpy.int64 if self._CAST_INT_TO_INT64 else lambda x: x
             for parameter_name, value in parameters.items():
-                if not isinstance(value, Number):
+                if type(value) is int:
+                    # numpy casts ints to int32 per default on windows
+                    # this can easily lead to overflows when times of the order of seconds
+                    # are represented with integers
+                    parameters[parameter_name] = to_int(value)
+
+                elif not isinstance(value, Number):
                     parameters[parameter_name] = Expression(value).evaluate_numeric()
 
             scope = DictScope(values=FrozenDict(parameters), volatile=volatile)
