@@ -27,6 +27,10 @@ try:
 except ImportError:
     zhinst = None
 
+try:
+    import numba
+except ImportError:
+    numba = None
 
 def take(n, iterable):
     "Return first n items of the iterable as a list"
@@ -63,6 +67,7 @@ class BinaryWaveformTest(unittest.TestCase):
 
                     self.assertEqual(min(max_rate, n), dyn_n)
 
+    @unittest.skipIf(zhinst is None and numba is None, "BinaryWaveform.from_sampled backend missing")
     def test_marker_data(self):
         channel_1_data = np.linspace(-0.3, 0.4, num=192)
         channel_2_data = np.linspace(-0.1, 0.1, num=192)
