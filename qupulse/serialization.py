@@ -1024,7 +1024,11 @@ class JSONSerializableDecoder(json.JSONDecoder):
                 if get_default_pulse_registry() is self.storage:
                     registry = dict()
 
-                return deserialization_callback(identifier=obj_identifier, registry=registry, **obj_dict)
+                try:
+                    return deserialization_callback(identifier=obj_identifier, registry=registry, **obj_dict)
+                except Exception as err:
+                    raise ValueError(f"Unable to deserialize {type_identifier} from {obj_dict}",
+                                     type_identifier, obj_dict) from err
         return obj_dict
 
 
