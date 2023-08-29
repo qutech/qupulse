@@ -14,6 +14,7 @@ from qupulse.expressions import ExpressionScalar
 from qupulse.parameter_scope import DictScope
 
 from qupulse.program.loop import Loop
+from qupulse.hardware.util import zhinst_voltage_to_uint16
 from qupulse._program.waveforms import ConstantWaveform
 from qupulse._program.seqc import BinaryWaveform, loop_to_seqc, WaveformPlayback, Repeat, SteppingRepeat, Scope,\
     to_node_clusters, find_sharable_waveforms, mark_sharable_waveforms, UserRegisterManager, HDAWGProgramManager,\
@@ -27,10 +28,15 @@ try:
 except ImportError:
     zhinst = None
 
+# This block checks if zhinst_voltage_to_uint16 works. A failing implementation (due to missing dependencies)
+# skips tests further down
 try:
-    import numba
-except ImportError:
-    numba = None
+    zhinst_voltage_to_uint16(np.zeros(16), np.zeros(16),
+                             (np.zeros(16), np.zeros(16), np.zeros(16), np.zeros(16)))
+except AttributeError:
+    # prerequisites not installed
+    zhinst_voltage_to_uint16 = None
+
 
 def take(n, iterable):
     "Return first n items of the iterable as a list"
@@ -67,7 +73,7 @@ class BinaryWaveformTest(unittest.TestCase):
 
                     self.assertEqual(min(max_rate, n), dyn_n)
 
-    @unittest.skipIf(zhinst is None and numba is None, "BinaryWaveform.from_sampled backend missing")
+    @unittest.skipIf(zhinst_voltage_to_uint16 is None, "BinaryWaveform.from_sampled backend missing")
     def test_marker_data(self):
         channel_1_data = np.linspace(-0.3, 0.4, num=192)
         channel_2_data = np.linspace(-0.1, 0.1, num=192)
