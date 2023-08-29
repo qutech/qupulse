@@ -1,26 +1,23 @@
-import unittest
-from unittest import TestCase, mock
-import time
-from itertools import zip_longest, islice
+import hashlib
+import pathlib
 import sys
 import tempfile
-import pathlib
-import hashlib
-import random
+import time
+import unittest
+from itertools import zip_longest, islice
+from unittest import TestCase, mock
 
 import numpy as np
 
-from qupulse.expressions import ExpressionScalar
-from qupulse.parameter_scope import DictScope
-
-from qupulse.program.loop import Loop
-from qupulse.hardware.util import zhinst_voltage_to_uint16
-from qupulse._program.waveforms import ConstantWaveform
-from qupulse._program.seqc import BinaryWaveform, loop_to_seqc, WaveformPlayback, Repeat, SteppingRepeat, Scope,\
-    to_node_clusters, find_sharable_waveforms, mark_sharable_waveforms, UserRegisterManager, HDAWGProgramManager,\
+from qupulse._program.seqc import BinaryWaveform, loop_to_seqc, WaveformPlayback, Repeat, SteppingRepeat, Scope, \
+    to_node_clusters, find_sharable_waveforms, mark_sharable_waveforms, UserRegisterManager, HDAWGProgramManager, \
     UserRegister, WaveformFileSystem
-from qupulse._program.volatile import VolatileRepetitionCount
-
+from qupulse.expressions import ExpressionScalar
+from qupulse.hardware.util import zhinst_voltage_to_uint16
+from qupulse.parameter_scope import DictScope
+from qupulse.program.loop import Loop
+from qupulse.program.volatile import VolatileRepetitionCount
+from qupulse.program.waveforms import ConstantWaveform
 from tests.pulses.sequencing_dummies import DummyWaveform
 
 try:
