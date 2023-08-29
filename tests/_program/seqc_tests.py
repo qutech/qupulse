@@ -1,31 +1,38 @@
-import unittest
-from unittest import TestCase, mock
-import time
-from itertools import zip_longest, islice
+import hashlib
+import pathlib
 import sys
 import tempfile
-import pathlib
-import hashlib
-import random
+import time
+import unittest
+from itertools import zip_longest, islice
+from unittest import TestCase, mock
 
 import numpy as np
 
-from qupulse.expressions import ExpressionScalar
-from qupulse.parameter_scope import DictScope
-
-from qupulse.program.loop import Loop
-from qupulse._program.waveforms import ConstantWaveform
-from qupulse._program.seqc import BinaryWaveform, loop_to_seqc, WaveformPlayback, Repeat, SteppingRepeat, Scope,\
-    to_node_clusters, find_sharable_waveforms, mark_sharable_waveforms, UserRegisterManager, HDAWGProgramManager,\
+from qupulse._program.seqc import BinaryWaveform, loop_to_seqc, WaveformPlayback, Repeat, SteppingRepeat, Scope, \
+    to_node_clusters, find_sharable_waveforms, mark_sharable_waveforms, UserRegisterManager, HDAWGProgramManager, \
     UserRegister, WaveformFileSystem
-from qupulse._program.volatile import VolatileRepetitionCount
-
+from qupulse.expressions import ExpressionScalar
+from qupulse.hardware.util import zhinst_voltage_to_uint16
+from qupulse.parameter_scope import DictScope
+from qupulse.program.loop import Loop
+from qupulse.program.volatile import VolatileRepetitionCount
+from qupulse.program.waveforms import ConstantWaveform
 from tests.pulses.sequencing_dummies import DummyWaveform
 
 try:
     import zhinst
 except ImportError:
     zhinst = None
+
+# This block checks if zhinst_voltage_to_uint16 works. A failing implementation (due to missing dependencies)
+# skips tests further down
+try:
+    zhinst_voltage_to_uint16(np.zeros(16), np.zeros(16),
+                             (np.zeros(16), np.zeros(16), np.zeros(16), np.zeros(16)))
+except AttributeError:
+    # prerequisites not installed
+    zhinst_voltage_to_uint16 = None
 
 
 def take(n, iterable):
@@ -63,6 +70,7 @@ class BinaryWaveformTest(unittest.TestCase):
 
                     self.assertEqual(min(max_rate, n), dyn_n)
 
+    @unittest.skipIf(zhinst_voltage_to_uint16 is None, "BinaryWaveform.from_sampled backend missing")
     def test_marker_data(self):
         channel_1_data = np.linspace(-0.3, 0.4, num=192)
         channel_2_data = np.linspace(-0.1, 0.1, num=192)
