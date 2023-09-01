@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Mapping, Optional, Sequence, ContextManager, Iterable
+from typing import Mapping, Optional, Sequence, ContextManager, Iterable, Tuple
 
 from qupulse import ChannelID, MeasurementWindow
 from qupulse.parameter_scope import Scope
@@ -13,8 +13,18 @@ class DecaDACASCIIProgram:
 
 
 class DecaDACASCIIBuilder:
-    def __init__(self):
-        pass
+    def __init__(self, channels: Tuple[Optional[ChannelID], ...]):
+        assert len(channels) in (20,), "Only 5 slots are supported for now"
+        self._name_to_idx = {idx: name for idx, name in enumerate(channels) if name is not None}
+        self._idx_to_name = channels
+
+    @classmethod
+    def from_channel_dict(cls, channels: Mapping[ChannelID, int]):
+        assert len(set(channels.values())) == len(channels), "no duplicate target channels"
+        channel_list = [None] * 20
+        for ch_name, ch_idx in channels.items():
+            channel_list[ch_idx] = ch_name
+        return cls(tuple(channel_list))
 
     def inner_scope(self, scope: Scope) -> Scope:
         """This function is necessary to inject program builder specific parameter implementations into the build
