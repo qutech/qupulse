@@ -560,7 +560,7 @@ class TaborProgram(ProgramEntry):
 
     def get_sequencer_tables(self) -> Sequence[Sequence[Tuple[TableDescription, Optional[VolatileProperty]]]]:
         wf_to_seq = self._waveform_to_segment
-        return [[((rep_count, wf_to_seq[elem_idx], jump), volatile)
+        return [[(TableDescription(rep_count, wf_to_seq[elem_idx], jump), volatile)
                 for (rep_count, elem_idx, jump), volatile in sequencer_table]
                 for sequencer_table in self._parsed_program.sequencer_tables]
 
