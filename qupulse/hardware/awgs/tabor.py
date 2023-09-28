@@ -500,19 +500,22 @@ class TaborChannelPair(AWG):
 
         segments, segment_lengths = tabor_program.get_sampled_segments()
 
-        waveform_to_segment, to_amend, to_insert = self._find_place_for_segments_in_memory(segments,
-                                                                                           segment_lengths)
+        waveform_to_segment, unique_to_amend, unique_to_insert, unique_segments_idx, inverse_unique_segments_idx = \
+            self._find_place_for_segments_in_memory(segments,segment_lengths)
 
         self._segment_references[waveform_to_segment[waveform_to_segment >= 0]] += 1
 
-        for wf_index in np.flatnonzero(to_insert > 0):
-            segment_index = to_insert[wf_index]
-            self._upload_segment(to_insert[wf_index], segments[wf_index])
+        for wf_index in np.flatnonzero(unique_to_insert > 0):
+            segment_index = unique_to_insert[wf_index]
+            self._upload_segment(unique_to_insert[wf_index], segments[unique_segments_idx[wf_index]])
             waveform_to_segment[wf_index] = segment_index
 
-        if np.any(to_amend):
-            segments_to_amend = [segments[idx] for idx in np.flatnonzero(to_amend)]
-            waveform_to_segment[to_amend] = self._amend_segments(segments_to_amend)
+        if np.any(unique_to_amend):
+            segments_to_amend = [segments[unique_segments_idx[idx]] for idx in np.flatnonzero(unique_to_amend)]
+            waveform_to_segment[unique_to_amend] = self._amend_segments(segments_to_amend)
+            
+        #disentangle waveform_to_segment:
+        waveform_to_segment = waveform_to_segment[inverse_unique_segments_idx]
 
         self._known_programs[name] = TaborProgramMemory(waveform_to_segment=waveform_to_segment,
                                                         program=tabor_program)
@@ -543,16 +546,20 @@ class TaborChannelPair(AWG):
         self.change_armed_program(None)
 
     def _find_place_for_segments_in_memory(self, segments: Sequence, segment_lengths: Sequence) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-        segment_hashes = np.fromiter((hash(segment) for segment in segments), dtype=np.int64, count=len(segments))
-
-        return find_place_for_segments_in_memory(
+        #test for unique hashes
+        u, unique_waveform_indices, inverse_unique_waveform_indices = np.unique(segment_hashes,return_index=True,return_inverse=True)
+        
+        waveform_to_segment, unique_to_amend, unique_to_insert = find_place_for_segments_in_memory(
             current_segment_hashes=self._segment_hashes,
             current_segment_capacities=self._segment_capacity,
             current_segment_references=self._segment_references,
             total_capacity=self.total_capacity,
-            new_segment_lengths=segment_lengths,
-            new_segment_hashes=segment_hashes
+            new_segment_lengths=segment_lengths[unique_waveform_indices],
+            new_segment_hashes=segment_hashes[unique_waveform_indices]
         )
+        
+        #additionally return the indices / inverse indices:
+        return waveform_to_segment, unique_to_amend, unique_to_insert, unique_waveform_indices, inverse_unique_waveform_indices
 
     @with_select
     @with_configuration_guard
