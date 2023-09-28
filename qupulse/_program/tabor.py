@@ -1,3 +1,4 @@
+import dataclasses
 import sys
 from typing import NamedTuple, Optional, List, Generator, Tuple, Sequence, Mapping, Union, Dict, FrozenSet, cast,\
     Hashable
@@ -645,12 +646,12 @@ def prepare_program_for_advanced_sequence_mode(program: Loop, min_seq_len: int, 
             i += 1
 
 
-ParsedProgram = NamedTuple('ParsedProgram', [('advanced_sequencer_table', Sequence[TableEntry]),
-                                             ('sequencer_tables', Sequence[Sequence[
-                                                     Tuple[TableDescription, Optional[VolatileProperty]]]]),
-                                             ('waveforms', Tuple[Waveform, ...]),
-                                             ('volatile_parameter_positions', Dict[Union[int, Tuple[int, int]],
-                                                                                   VolatileRepetitionCount])])
+@dataclasses.dataclass
+class ParsedProgram:
+    advanced_sequencer_table: Sequence[TableEntry]
+    sequencer_tables: Sequence[Sequence[Tuple[TableDescription, Optional[VolatileProperty]]]]
+    waveforms: Tuple[Waveform, ...]
+    volatile_parameter_positions: Dict[Union[int, Tuple[int, int]], VolatileRepetitionCount]
 
 
 def parse_aseq_program(program: Loop, used_channels: FrozenSet[ChannelID]) -> ParsedProgram:
