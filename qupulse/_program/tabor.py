@@ -469,15 +469,17 @@ class TaborProgram(ProgramEntry):
         Returns:
             ((segments, segment_lengths), waveform_to_segment)
         """
-        time_array, segment_lengths = get_sample_times(self._parsed_program.waveforms, self._sample_rate)
+        time_array, waveform_samples = get_sample_times(self._parsed_program.waveforms, self._sample_rate)
 
-        if np.any(segment_lengths % 16 > 0) or np.any(segment_lengths < 192):
+        if np.any(waveform_samples % 16 > 0) or np.any(waveform_samples < 192):
             raise TaborException('At least one waveform has a length that is smaller 192 or not a multiple of 16')
 
         segments: Dict[TaborSegment, int] = {}
+        segment_lengths = []
+
         waveform_to_segment = []
-        for i, waveform in enumerate(self._parsed_program.waveforms):
-            t = time_array[:segment_lengths[i]]
+        for waveform, n_samples in zip(self._parsed_program.waveforms, waveform_samples):
+            t = time_array[:n_samples]
             marker_time = t[::2]
             segment_a = self._channel_data(waveform, t, 0)
             segment_b = self._channel_data(waveform, t, 1)
@@ -489,9 +491,12 @@ class TaborProgram(ProgramEntry):
                                    ch_b=segment_b,
                                    marker_a=marker_a,
                                    marker_b=marker_b)
-            segment_idx = segments.setdefault(segment, len(segments))
+            previous_segment_count = len(segments)
+            segment_idx = segments.setdefault(segment, previous_segment_count)
             waveform_to_segment.append(segment_idx)
-        return (list(segments.keys()), segment_lengths[:len(segments)]), waveform_to_segment
+            if segment_idx == previous_segment_count:
+                segment_lengths.append(n_samples)
+        return (list(segments.keys()), np.array(segment_lengths, dtype=np.uint64)), waveform_to_segment
 
     def setup_single_sequence_mode(self) -> None:
         assert self.program.depth() == 1
