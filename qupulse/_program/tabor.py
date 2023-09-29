@@ -467,7 +467,7 @@ class TaborProgram(ProgramEntry):
     def _calc_sampled_segments(self) -> Tuple[Tuple[Sequence[TaborSegment], Sequence[int]], Sequence[int]]:
         """
         Returns:
-            (segments, segment_lengths)
+            ((segments, segment_lengths), waveform_to_segment)
         """
         time_array, segment_lengths = get_sample_times(self._parsed_program.waveforms, self._sample_rate)
 
