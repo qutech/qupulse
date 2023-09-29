@@ -491,7 +491,7 @@ class TaborProgram(ProgramEntry):
                                    marker_b=marker_b)
             segment_idx = segments.setdefault(segment, len(segments))
             waveform_to_segment.append(segment_idx)
-        return (list(segments.keys()), segment_lengths), waveform_to_segment
+        return (list(segments.keys()), segment_lengths[:len(segments)]), waveform_to_segment
 
     def setup_single_sequence_mode(self) -> None:
         assert self.program.depth() == 1
