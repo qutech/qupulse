@@ -381,12 +381,13 @@ class TaborProgramTests(unittest.TestCase):
             np.testing.assert_equal(sampled_seg.ch_b, data[1])
 
     def test_calc_sampled_segments_deduplication(self):
-        wf1 = ConstantWaveform(duration=1, amplitude=0.1, channel='A')
-        wf2 = ConstantWaveform(duration=1, amplitude=0.2, channel='A')
-        wf3 = SubsetWaveform(
-            ConstantWaveform.from_mapping(duration=1, constant_values={'A': 0.1, 'B': 0.2}),
+        wf1 = ConstantWaveform(duration=2, amplitude=0.1, channel='A')
+        wf2 = SubsetWaveform(
+            ConstantWaveform.from_mapping(duration=2, constant_values={'A': 0.1, 'B': 0.2}),
             {'A'}
         )
+        wf3 = ConstantWaveform(duration=1, amplitude=0.2, channel='A')
+
         loop = Loop(children=[
             Loop(waveform=wf1),
             Loop(waveform=wf2),
@@ -395,7 +396,7 @@ class TaborProgramTests(unittest.TestCase):
         prog = TaborProgram(loop, self.instr_props, ('A', None), (None, None), **self.program_entry_kwargs)
         sampled, sampled_length = prog.get_sampled_segments()
         self.assertEqual(len(sampled), 2)
-        self.assertEqual([192, 192], list(sampled_length))
+        self.assertEqual([192 * 2, 192], list(sampled_length))
 
     def test_update_volatile_parameters_with_depth1(self):
         parameters = {'s': 10, 'not': 13}
