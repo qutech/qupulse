@@ -19,6 +19,7 @@ except ImportError:
 from qupulse._program.tabor import TaborException, TaborProgram, find_place_for_segments_in_memory,\
     TaborSegment, TaborSequencing, PlottableProgram, TableDescription, make_combined_wave, TableEntry
 from qupulse.program.loop import Loop
+from qupulse.program.waveforms import ConstantWaveform, SubsetWaveform
 from qupulse._program.volatile import VolatileRepetitionCount
 from qupulse.hardware.util import voltage_to_uint16
 from qupulse.utils.types import TimeType
@@ -232,8 +233,8 @@ class TaborProgramTests(unittest.TestCase):
         self.assertEqual(t_program.get_advanced_sequencer_table(), [TableDescription(1, 1, 0)])
 
     def test_depth_1_single_sequence(self):
-        program = Loop(children=[Loop(waveform=DummyWaveform(defined_channels={'A'}, duration=1), repetition_count=3),
-                                 Loop(waveform=DummyWaveform(defined_channels={'A'}, duration=1), repetition_count=4)],
+        program = Loop(children=[Loop(waveform=DummyWaveform(sample_output={'A': 0.1}, duration=1), repetition_count=3),
+                                 Loop(waveform=DummyWaveform(sample_output={'A': 0.2}, duration=1), repetition_count=4)],
                        repetition_count=1)
 
         t_program = TaborProgram(program, channels=(None, 'A'), markers=(None, None),
@@ -247,8 +248,8 @@ class TaborProgramTests(unittest.TestCase):
 
     def test_depth_1_single_sequence_2(self):
         """Use the same wf twice"""
-        wf_1 = DummyWaveform(defined_channels={'A'}, duration=1)
-        wf_2 = DummyWaveform(defined_channels={'A'}, duration=1)
+        wf_1 = DummyWaveform(sample_output={'A': 0.1}, duration=1)
+        wf_2 = DummyWaveform(sample_output={'A': 0.2}, duration=1)
 
         program = Loop(children=[Loop(waveform=wf_1, repetition_count=3),
                                  Loop(waveform=wf_2, repetition_count=4),
@@ -266,8 +267,8 @@ class TaborProgramTests(unittest.TestCase):
         self.assertEqual(t_program.get_advanced_sequencer_table(), [TableDescription(1, 1, 0)])
 
     def test_depth_1_advanced_sequence_unroll(self):
-        wf_1 = DummyWaveform(defined_channels={'A'}, duration=1)
-        wf_2 = DummyWaveform(defined_channels={'A'}, duration=1)
+        wf_1 = DummyWaveform(sample_output={'A': 0.1}, duration=1)
+        wf_2 = DummyWaveform(sample_output={'A': 0.2}, duration=1)
 
         program = Loop(children=[Loop(waveform=wf_1, repetition_count=3),
                                  Loop(waveform=wf_2, repetition_count=4)],
@@ -285,8 +286,8 @@ class TaborProgramTests(unittest.TestCase):
         self.assertEqual(t_program.get_advanced_sequencer_table(), [TableEntry(5, 1, 0)])
 
     def test_depth_1_advanced_sequence(self):
-        wf_1 = DummyWaveform(defined_channels={'A'}, duration=1)
-        wf_2 = DummyWaveform(defined_channels={'A'}, duration=1)
+        wf_1 = DummyWaveform(sample_output={'A': 0.1}, duration=1)
+        wf_2 = DummyWaveform(sample_output={'A': 0.2}, duration=1)
 
         program = Loop(children=[Loop(waveform=wf_1, repetition_count=3),
                                  Loop(waveform=wf_2, repetition_count=4),
@@ -380,13 +381,31 @@ class TaborProgramTests(unittest.TestCase):
             np.testing.assert_equal(sampled_seg.ch_a, data[0])
             np.testing.assert_equal(sampled_seg.ch_b, data[1])
 
+    def test_calc_sampled_segments_deduplication(self):
+        wf1 = ConstantWaveform(duration=2, amplitude=0.1, channel='A')
+        wf2 = SubsetWaveform(
+            ConstantWaveform.from_mapping(duration=2, constant_values={'A': 0.1, 'B': 0.2}),
+            {'A'}
+        )
+        wf3 = ConstantWaveform(duration=1, amplitude=0.2, channel='A')
+
+        loop = Loop(children=[
+            Loop(waveform=wf1),
+            Loop(waveform=wf2),
+            Loop(waveform=wf3),
+        ])
+        prog = TaborProgram(loop, self.instr_props, ('A', None), (None, None), **self.program_entry_kwargs)
+        sampled, sampled_length = prog.get_sampled_segments()
+        self.assertEqual(len(sampled), 2)
+        self.assertEqual([192 * 2, 192], list(sampled_length))
+
     def test_update_volatile_parameters_with_depth1(self):
         parameters = {'s': 10, 'not': 13}
         s = VolatileRepetitionCount(expression=ExpressionScalar('s'), scope=DictScope(values=FrozenDict(s=3),
                                                                                       volatile=set('s')))
 
-        wf_1 = DummyWaveform(defined_channels={'A'}, duration=1)
-        wf_2 = DummyWaveform(defined_channels={'A'}, duration=1)
+        wf_1 = DummyWaveform(sample_output={'A': 0.1}, duration=1)
+        wf_2 = DummyWaveform(sample_output={'A': 0.2}, duration=1)
 
         program = Loop(children=[Loop(waveform=wf_1, repetition_count=s),
                                  Loop(waveform=wf_2, repetition_count=4),
@@ -419,8 +438,8 @@ class TaborProgramTests(unittest.TestCase):
         a = VolatileRepetitionCount(expression=ExpressionScalar('a'),
                                     scope=DictScope(values=FrozenDict(a=5), volatile=set('a')))
 
-        wf_1 = DummyWaveform(defined_channels={'A'}, duration=1)
-        wf_2 = DummyWaveform(defined_channels={'A'}, duration=1)
+        wf_1 = DummyWaveform(sample_output={'A': 0.1}, duration=1)
+        wf_2 = DummyWaveform(sample_output={'A': 0.2}, duration=1)
 
         program = Loop(children=[Loop(children=[Loop(waveform=wf_1, repetition_count=s),
                                                 Loop(waveform=wf_2, repetition_count=4),
