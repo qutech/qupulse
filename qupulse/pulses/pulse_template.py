@@ -383,27 +383,31 @@ class PulseTemplate(Serializable):
         else:
             return self
 
-    def pad_to(self, to_new_duration: Union[ExpressionLike, Callable[[Expression], Expression]],
+    def pad_to(self, to_new_duration: Union[ExpressionLike, Callable[[Expression], ExpressionLike]],
                pt_kwargs: Mapping[str, Any] = None) -> 'PulseTemplate':
-        """
+        """Pad this pulse template to the given duration.
+        The target duration can be numeric, symbolic or a callable that returns a new duration from the current
+        duration.
+
         Examples:
             # pad to a fixed duration
-            padded_1 = my_pt.pad_to(1000)
+            >>> padded_1 = my_pt.pad_to(1000)
 
             # pad to a fixed sample coun
-            padded_2 = my_pt.pad_to('sample_rate * 1000')
+            >>> padded_2 = my_pt.pad_to('sample_rate * 1000')
 
             # pad to the next muliple of 16 samples with a symbolic sample rate
-            padded_3 = my_pt.pad_to(to_next_multiple('sample_rate', 16))
+            >>> padded_3 = my_pt.pad_to(to_next_multiple('sample_rate', 16))
 
             # pad to the next muliple of 16 samples with a fixed sample rate of 1 GHz
-            padded_4 = my_pt.pad_to(to_next_multiple(1, 16))
+            >>> padded_4 = my_pt.pad_to(to_next_multiple(1, 16))
         Args:
             to_new_duration: Duration or callable that maps the current duration to the new duration
             pt_kwargs: Keyword arguments for the newly created sequence pulse template.
 
         Returns:
-
+            A pulse template that has the duration given by ``to_new_duration``. It can be ``self`` if the duration is
+            already as required. It is never ``self`` if ``pt_kwargs`` is non-empty.
         """
         from qupulse.pulses import ConstantPT, SequencePT
         current_duration = self.duration
