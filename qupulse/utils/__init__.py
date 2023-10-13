@@ -1,11 +1,14 @@
 """This package contains utility functions and classes as well as custom sympy extensions(hacks)."""
 
-from typing import Union, Iterable, Any, Tuple, Mapping, Iterator, TypeVar, Sequence, AbstractSet
+from typing import Union, Iterable, Any, Tuple, Mapping, Iterator, TypeVar, Sequence, AbstractSet, Optional, Callable
 import itertools
 import re
 import numbers
 from collections import OrderedDict
 from frozendict import frozendict
+from qupulse.expressions import ExpressionScalar, ExpressionLike
+from qupulse.utils.types import TimeType
+from sympy import Max, sign
 
 import numpy
 
@@ -25,7 +28,7 @@ _T = TypeVar('_T')
 
 
 __all__ = ["checked_int_cast", "is_integer", "isclose", "pairwise", "replace_multiple", "cached_property",
-           "forced_hash"]
+           "forced_hash", "to_next_multiple"]
 
 
 def checked_int_cast(x: Union[float, int, numpy.ndarray], epsilon: float=1e-6) -> int:
@@ -122,3 +125,32 @@ def forced_hash(obj) -> int:
             return hash(tuple(map(forced_hash, obj)))
 
         raise
+
+
+def to_next_multiple(sample_rate: ExpressionLike, quantum: int,
+                     min_quanta: Optional[int] = None) -> Callable[[ExpressionLike],ExpressionScalar]:
+    """Construct a helper function to expand a duration to one corresponding to
+    valid sample multiples according to the arguments given.
+    Useful e.g. for PulseTemplate.pad_to's 'to_new_duration'-argument.
+
+    Args:
+        sample_rate: sample rate with respect to which the duration is evaluated.
+        quantum: number of samples to whose next integer multiple the duration shall be rounded up to.
+        min_quanta: number of multiples of quantum not to fall short of.
+    Returns:
+        A function that takes a duration (ExpressionLike) as input, and returns
+        a duration rounded up to the next valid samples count in given sample rate.
+        The function returns 0 if duration==0, <0 is not checked if min_quanta=1.
+
+    """
+    sample_rate = ExpressionScalar(sample_rate)
+    #is it more efficient to omit the Max call if not necessary?
+    if min_quanta is None:
+        #double negative for ceil division.
+        return lambda duration: -(-(duration*sample_rate)//quantum) * (quantum/sample_rate)
+    else:
+        #still return 0 if duration==0
+        return lambda duration: ExpressionScalar((quantum/sample_rate)*\
+                                    Max(-(-(ExpressionScalar(duration)*sample_rate)//quantum),min_quanta)\
+                                    *Max(0,sign(ExpressionScalar(duration))))
+   
