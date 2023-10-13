@@ -140,7 +140,7 @@ def to_next_multiple(sample_rate: ExpressionLike, quantum: int,
     Returns:
         A function that takes a duration (ExpressionLike) as input, and returns
         a duration rounded up to the next valid samples count in given sample rate.
-        The function returns 0 if duration==0, <0 is not checked if min_quanta=1.
+        The function returns 0 if duration==0, <0 is not checked if min_quanta is None.
 
     """
     sample_rate = ExpressionScalar(sample_rate)
