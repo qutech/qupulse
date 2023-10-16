@@ -7,8 +7,6 @@ import numbers
 from collections import OrderedDict
 from frozendict import frozendict
 from qupulse.expressions import ExpressionScalar, ExpressionLike
-from qupulse.utils.types import TimeType
-from sympy import Max, sign
 
 import numpy
 
@@ -150,7 +148,5 @@ def to_next_multiple(sample_rate: ExpressionLike, quantum: int,
         return lambda duration: -(-(duration*sample_rate)//quantum) * (quantum/sample_rate)
     else:
         #still return 0 if duration==0
-        return lambda duration: ExpressionScalar((quantum/sample_rate)\
-                                    *Max(-(-(ExpressionScalar(duration)*sample_rate)//quantum),min_quanta)\
-                                    *Max(0,sign(ExpressionScalar(duration))))
+        return lambda duration: ExpressionScalar(f'{quantum}/({sample_rate})*Max({min_quanta},-(-{duration}*{sample_rate}//{quantum}))*Max(0, sign({duration}))')
    
