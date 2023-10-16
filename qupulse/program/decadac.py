@@ -2,8 +2,20 @@ from dataclasses import dataclass
 from typing import Mapping, Optional, Sequence, ContextManager, Iterable, Tuple
 
 from qupulse import ChannelID, MeasurementWindow
-from qupulse.parameter_scope import Scope
-from qupulse.program import ProgramBuilder, HardwareTime, HardwareVoltage, Waveform, RepetitionCount, TimeType
+from qupulse.parameter_scope import Scope, MappedScope, FrozenDict
+from qupulse.program import (ProgramBuilder, HardwareTime, HardwareVoltage, Waveform, RepetitionCount, TimeType,
+                             SimpleExpression)
+from qupulse.expressions import sympy as sym_expr
+
+
+# TODO: hackedy, hackedy
+sym_expr.ALLOWED_NUMERIC_SCALAR_TYPES = sym_expr.ALLOWED_NUMERIC_SCALAR_TYPES + (SimpleExpression,)
+
+def _channel_to_voltage_location(ch: int) -> int:
+    return 1545 + ch * 16
+
+
+SAFE_MEMORY_LOCATIONS = tuple(range(40693, 40704))
 
 
 @dataclass
@@ -12,36 +24,42 @@ class DecaDACASCIIProgram:
     duration: TimeType
 
 
+@dataclass
+class StackFrame:
+    iterating: Tuple[str, int]
+
+
+class HoldFixed:
+    channels: Sequence[Tuple[int, int]]
+
+
+def _some_code():
+    command = f'*{self._block_number}:'
+    command += 'X' + str(768 + self._block_number) + ';'  # wait for the previous count to finish
+    for channel in voltages:
+        channel_number = self._name_to_idx(channel)
+        dac_value = self.convert_voltage(voltages[channel])
+        B_value = int(channel_number / 5)
+        C_value = channel_number % 5
+
+        command += f'B{B_value};C{C_value};D{dac_value};'
+
+    duration = int(duration * 1000000)
+    command += f'${duration}'
+
+    self._block_number += 1
+
+
 class DecaDACASCIIBuilder:
     def __init__(self, channels: Tuple[Optional[ChannelID], ...]):
         assert len(channels) in (20,), "Only 5 slots are supported for now"
         self._name_to_idx = {idx: name for idx, name in enumerate(channels) if name is not None}
         self._idx_to_name = channels
 
-        self._channel_voltage_location = {1: 1545,
-                                          2: 1561,
-                                          3: 1577,
-                                          4: 1593,
-                                          5: 1609,
-                                          6: 1625,
-                                          7: 1641,
-                                          8: 1657,
-                                          9: 1673,
-                                          10: 1689,
-                                          11: 1705,
-                                          12: 1721,
-                                          13: 1737,
-                                          14: 1753,
-                                          15: 1769,
-                                          16: 1785,
-                                          17: 1801,
-                                          18: 1817,
-                                          19: 1833,
-                                          20: 1849}
-        self._safe_memory_locations = {40693, 40694, 40695, 40696, 40697, 40698, 40699, 40700, 40701, 40702, 40703}
-
         self._block_number = 1
         self._iteration_count = 0
+
+        self._stack = [[]]
         self._program = '{'
 
     @classmethod
@@ -52,30 +70,42 @@ class DecaDACASCIIBuilder:
             channel_list[ch_idx] = ch_name
         return cls(tuple(channel_list))
 
-    def convert_voltage(v) -> int:
-        return int((v + 10) / 20 * 65535)
+    def convert_voltage_to_digit(self, voltage: float) -> int:
+        # hardcoded range for now
+        return int((voltage + 10) / 20 * 65535)
 
     def inner_scope(self, scope: Scope) -> Scope:
         """This function is necessary to inject program builder specific parameter implementations into the build
         process."""
-        raise NotImplementedError('TODO')
+        if self._stack:
+            name, _ = self._stack[-1]
+            return MappedScope(scope, FrozenDict({name: SimpleExpression(base=0, offsets=[(name, 1)])}))
+        else:
+            return scope
 
     def hold_voltage(self, duration: HardwareTime, voltages: Mapping[ChannelID, HardwareVoltage]):
-        command = f'*{self._block_number}:'
-        command += 'X' + str(768 + self._block_number) + ';'  # wait for the previous count to finish
-        for channel in voltages:
-            channel_number = self._name_to_idx(channel)
-            dac_value = self.convert_voltage(voltages[channel])
-            B_value = int(channel_number / 5)
-            C_value = channel_number % 5
+        fixed = {}
+        variable = {}
+        dependents = set()
+        for ch_name, value in voltages.items():
+            ch_idx = self._name_to_idx[ch_name]
+            if isinstance(value, float):
+                fixed[ch_idx] = self.convert_voltage_to_digit(value)
+            else:
+                base = self.convert_voltage_to_digit(value.base)
+                offsets = [(name, self.convert_voltage_to_digit(offset)) for name, offset in value.offsets]
+                dependents.update(name for name, _ in offsets)
+                variable[ch_idx] = SimpleExpression(base, tuple(offsets))
 
-            command += f'B{B_value};C{C_value};D{dac_value};'
+        if isinstance(duration, SimpleExpression):
+            raise NotImplementedError('TODO: support for swept durations')
 
-        duration = int(duration * 1000000)
-        command += f'${duration}'
+        if variable:
+            raise NotImplementedError('TODO: support for swept voltages')
 
-        self._program += command
-        self._block_number += 1
+        channels = sorted(fixed.values())
+
+        self._stack[-1].append(HoldFixed(channels))
 
     def play_arbitrary_waveform(self, waveform: Waveform):
         raise NotImplementedError('Not implemented yet (postponed)')
@@ -86,6 +116,11 @@ class DecaDACASCIIBuilder:
 
     def with_repetition(self, repetition_count: RepetitionCount,
                         measurements: Optional[Sequence[MeasurementWindow]] = None) -> Iterable['ProgramBuilder']:
+        self._stack.append((repetition_count, []))
+        yield self
+        _, blocks = self._stack.pop()
+
+        raise NotImplementedError('TODO: handle repetition block')
         command = f'*{self._block_number}:'
         location = str(self._safe_memory_locations[self._iteration_count])
         iteration_command = 'A' + location + ';P' + str(repetition_count) + ';'
@@ -112,6 +147,12 @@ class DecaDACASCIIBuilder:
 
     def with_iteration(self, index_name: str, rng: range,
                        measurements: Optional[Sequence[MeasurementWindow]] = None) -> Iterable['ProgramBuilder']:
+        self._stack.append((index_name, rng, []))
+        yield self
+        _, _, cmds = self._stack.pop()
+        if cmds:
+            raise NotImplementedError('Process the generated commands')
+        return
         channel_number = self._name_to_idx(index_name)
         dac_value = self.convert_voltage(rng.step)
 
