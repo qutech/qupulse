@@ -47,9 +47,28 @@ class SimpleExpression(Generic[NumVal]):
 
         return NotImplemented
 
+    def __radd__(self, other):
+        return self.__add__(other)
+
+    def __sub__(self, other):
+        return self.__add__(-other)
+
+    def __rsub__(self, other):
+        (-self).__add__(other)
+
+    def __neg__(self):
+        return SimpleExpression(-self.base, tuple((name, -value) for name, value in self.offsets))
+
     def __mul__(self, other: NumVal):
         return SimpleExpression(self.base * other, tuple((name, value * other) for name, value in self.offsets))
 
+    def __rmul__(self, other):
+        return self.__mul__(other)
+
+    def evaluate_in_scope(self, *args, **kwargs):
+        # TODO: remove. It is currently required to avoid nesting this class in an expression for the MappedScope
+        # We can maybe replace is with a HardwareScope or something along those lines
+        return self
 
 
 RepetitionCount = Union[int, VolatileRepetitionCount, SimpleExpression[int]]
