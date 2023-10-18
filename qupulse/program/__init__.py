@@ -59,6 +59,8 @@ class SimpleExpression(Generic[NumVal]):
         return SimpleExpression(-self.base, tuple((name, -value) for name, value in self.offsets))
 
     def __mul__(self, other: NumVal):
+        if isinstance(other, SimpleExpression):
+            return NotImplemented
         return SimpleExpression(self.base * other, tuple((name, value * other) for name, value in self.offsets))
 
     def __rmul__(self, other):
