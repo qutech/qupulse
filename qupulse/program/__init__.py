@@ -10,6 +10,7 @@ from qupulse._program.waveforms import Waveform
 from qupulse.utils.types import MeasurementWindow, TimeType
 from qupulse._program.volatile import VolatileRepetitionCount
 from qupulse.parameter_scope import Scope
+from qupulse.expressions import sympy as sym_expr
 
 from typing import Protocol, runtime_checkable
 
@@ -141,3 +142,7 @@ class ProgramBuilder(Protocol):
 def default_program_builder() -> ProgramBuilder:
     from qupulse.program.loop import LoopBuilder
     return LoopBuilder()
+
+
+# TODO: hackedy, hackedy
+sym_expr.ALLOWED_NUMERIC_SCALAR_TYPES = sym_expr.ALLOWED_NUMERIC_SCALAR_TYPES + (SimpleExpression,)
