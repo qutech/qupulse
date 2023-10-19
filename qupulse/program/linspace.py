@@ -18,7 +18,11 @@ DEFAULT_INCREMENT_RESOLUTION: float = 1e-9
 
 @dataclass(frozen=True)
 class DepKey:
-    """The key that identifies how a certain set command depends on iteration indices."""
+    """The key that identifies how a certain set command depends on iteration indices. The factors are rounded with a
+    given resolution to be independent on rounding errors.
+
+    These objects allow backends which support it to track multiple amplitudes at once.
+    """
     factors: Tuple[int, ...]
 
     @classmethod
@@ -38,6 +42,8 @@ class LinSpaceNode:
 
 @dataclass
 class LinSpaceHold(LinSpaceNode):
+    """Hold voltages for a given time. The voltages and the time may depend on the iteration index."""
+
     bases: Tuple[float, ...]
     factors: Tuple[Optional[Tuple[float, ...]], ...]
 
@@ -52,12 +58,14 @@ class LinSpaceHold(LinSpaceNode):
 
 @dataclass
 class LinSpaceArbitraryWaveform(LinSpaceNode):
+    """This is just a wrapper to pipe arbitrary waveforms through the system."""
     waveform: Waveform
     channels: Tuple[ChannelID, ...]
 
 
 @dataclass
 class LinSpaceRepeat(LinSpaceNode):
+    """Repeat the body count times."""
     body: Tuple[LinSpaceNode, ...]
     count: int
 
@@ -71,7 +79,9 @@ class LinSpaceRepeat(LinSpaceNode):
 
 @dataclass
 class LinSpaceIter(LinSpaceNode):
-    """Iteration in linear space are restricted to range 0 to length. Offsets and spacing are stored in the set node."""
+    """Iteration in linear space are restricted to range 0 to length.
+
+    Offsets and spacing are stored in the hold node."""
     body: Tuple[LinSpaceNode, ...]
     length: int
 
@@ -79,6 +89,7 @@ class LinSpaceIter(LinSpaceNode):
         dependencies = {}
         for node in self.body:
             for idx, deps in node.dependencies().items():
+                # remove the last elemt in index because this iteration sets it -> no external dependency
                 shortened = {dep[:-1] for dep in deps}
                 if shortened != {()}:
                     dependencies.setdefault(idx, set()).update(shortened)
@@ -247,11 +258,10 @@ class DepState:
     iterations: Tuple[int, ...]
 
 
-
-
-
 @dataclass
-class TranslationState:
+class _TranslationState:
+    """This is the state of a translation of a LinSpace program to a command sequence."""
+
     label_num: int = dataclasses.field(default=0)
     commands: List[Command] = dataclasses.field(default_factory=list)
     iterations: List[int] = dataclasses.field(default_factory=list)
@@ -280,86 +290,86 @@ class TranslationState:
             self.active_dep[channel] = key
             self.plain_voltage[channel] = value
 
+    def add_node(self, node: Union[LinSpaceNode, Sequence[LinSpaceNode]]):
+        """Translate a (sequence of) linspace node(s) to commands and add it to the internal command list."""
+        if isinstance(node, Sequence):
+            for lin_node in node:
+                self.add_node(lin_node)
 
-def to_atomic_commands(node: Union[LinSpaceNode, Sequence[LinSpaceNode]], state: TranslationState):
-    """This step replaces iterations with """
-    if isinstance(node, Sequence):
-        for lin_node in node:
-            to_atomic_commands(lin_node, state)
+        elif isinstance(node, LinSpaceRepeat):
+            pre_dep_state = self.get_dependency_state(node.dependencies())
+            label, jmp = self.new_loop(node.count)
+            initial_position = len(self.commands)
+            self.commands.append(label)
+            self.add_node(node.body)
+            post_dep_state = self.get_dependency_state(node.dependencies())
+            if pre_dep_state != post_dep_state:
+                # hackedy
+                self.commands.pop(initial_position)
+                self.commands.append(label)
+                label.count -= 1
+                self.add_node(node.body)
+            self.commands.append(jmp)
 
-    elif isinstance(node, LinSpaceRepeat):
-        pre_dep_state = state.get_dependency_state(node.dependencies())
-        label, jmp = state.new_loop(node.count)
-        initial_position = len(state.commands)
-        state.commands.append(label)
-        to_atomic_commands(node.body, state)
-        post_dep_state = state.get_dependency_state(node.dependencies())
-        if pre_dep_state != post_dep_state:
-            # hackedy
-            state.commands.pop(initial_position)
-            state.commands.append(label)
-            label.count -= 1
-            to_atomic_commands(node.body, state)
-        state.commands.append(jmp)
+        elif isinstance(node, LinSpaceIter):
+            self.iterations.append(0)
+            self.add_node(node.body)
 
-    elif isinstance(node, LinSpaceIter):
-        state.iterations.append(0)
-        to_atomic_commands(node.body, state)
+            if node.length > 1:
+                self.iterations[-1] = node.length
+                label, jmp = self.new_loop(node.length - 1)
+                self.commands.append(label)
+                self.add_node(node.body)
+                self.commands.append(jmp)
+            self.iterations.pop()
 
-        if node.length > 1:
-            state.iterations[-1] = node.length
-            label, jmp = state.new_loop(node.length - 1)
-            state.commands.append(label)
-            to_atomic_commands(node.body, state)
-            state.commands.append(jmp)
-        state.iterations.pop()
+        elif isinstance(node, LinSpaceHold):
+            if node.duration_factors:
+                raise NotImplementedError("TODO")
 
-    elif isinstance(node, LinSpaceHold):
-        if node.duration_factors:
-            raise NotImplementedError("TODO")
+            for ch, (base, factors) in enumerate(zip(node.bases, node.factors)):
+                if factors is None:
+                    self.set_voltage(ch, base)
+                    continue
 
-        for ch, (base, factors) in enumerate(zip(node.bases, node.factors)):
-            if factors is None:
-                state.set_voltage(ch, base)
-                continue
+                dep_key = DepKey.from_voltages(voltages=factors, resolution=self.resolution)
+                new_dep_state = DepState(
+                    base,
+                    iterations=tuple(self.iterations)
+                )
 
-            dep_key = DepKey.from_voltages(voltages=factors, resolution=state.resolution)
-            new_dep_state = DepState(
-                base,
-                iterations=tuple(state.iterations)
-            )
+                current_dep_state = self.dep_states.setdefault(ch, {}).get(dep_key, None)
+                if current_dep_state is None:
+                    assert all(it == 0 for it in self.iterations)
+                    self.commands.append(Set(ch, base, dep_key))
+                    self.active_dep[ch] = dep_key
 
-            current_dep_state = state.dep_states.setdefault(ch, {}).get(dep_key, None)
-            if current_dep_state is None:
-                assert all(it == 0 for it in state.iterations)
-                state.commands.append(Set(ch, base, dep_key))
-                state.active_dep[ch] = dep_key
-
-            else:
-                inc = current_dep_state.base - new_dep_state.base
-                for i, j, factor in zip(current_dep_state.iterations, new_dep_state.iterations, factors):
-                    if i == j:
-                        continue
-                    if i < j:
-                        assert i == 0
-                        # regular iteration
-                        inc += factor
-                    else:
-                        assert j == 0
-                        inc -= factor * i
-                # we insert all inc here (also inc == 0) because it signals to activate this amplitude register
-                if inc or state.active_dep.get(ch, None) != dep_key:
-                    state.commands.append(Increment(ch, inc, dep_key))
-                state.active_dep[ch] = dep_key
-            state.dep_states[ch][dep_key] = new_dep_state
-        state.commands.append(Wait(node.duration_base))
-    elif isinstance(node, LinSpaceArbitraryWaveform):
-        state.commands.append(Play(node.waveform, node.channels))
-    else:
-        raise TypeError("The node type is not handled", type(node), node)
+                else:
+                    inc = current_dep_state.base - new_dep_state.base
+                    for i, j, factor in zip(current_dep_state.iterations, new_dep_state.iterations, factors):
+                        if i == j:
+                            continue
+                        if i < j:
+                            assert i == 0
+                            # regular iteration
+                            inc += factor
+                        else:
+                            assert j == 0
+                            inc -= factor * i
+                    # we insert all inc here (also inc == 0) because it signals to activate this amplitude register
+                    if inc or self.active_dep.get(ch, None) != dep_key:
+                        self.commands.append(Increment(ch, inc, dep_key))
+                    self.active_dep[ch] = dep_key
+                self.dep_states[ch][dep_key] = new_dep_state
+            self.commands.append(Wait(node.duration_base))
+        elif isinstance(node, LinSpaceArbitraryWaveform):
+            self.commands.append(Play(node.waveform, node.channels))
+        else:
+            raise TypeError("The node type is not handled", type(node), node)
 
 
 def to_increment_commands(linspace_nodes: Sequence[LinSpaceNode]) -> List[Command]:
-    state = TranslationState(0, [], [], active_dep={}, dep_states={}, plain_voltage={})
-    to_atomic_commands(linspace_nodes, state)
+    """translate the given linspace node tree to a minimal sequence of set and increment commands as well as loops."""
+    state = _TranslationState()
+    state.add_node(linspace_nodes)
     return state.commands
