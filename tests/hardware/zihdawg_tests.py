@@ -199,7 +199,7 @@ class HDAWGChannelGroupTests(unittest.TestCase):
 @mock.patch('qupulse.hardware.awgs.zihdawg.ELFManager.AWGModule.compiler_upload', new_callable=mock.PropertyMock)
 class ELFManagerTests(unittest.TestCase):
     def test_init(self, compiler_upload):
-        manager = ELFManager(None)
+        manager = ELFManager.DEFAULT_CLS(None)
         compiler_upload.assert_called_once_with(True)
         self.assertIsNone(manager._compile_job)
         self.assertIsNone(manager._upload_job)

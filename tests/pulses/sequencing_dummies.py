@@ -54,7 +54,8 @@ class DummyWaveform(Waveform):
             except AttributeError:
                 pass
             return hash(
-                tuple(sorted((channel, output.tobytes()) for channel, output in self.sample_output.items()))
+                tuple(sorted((channel, getattr(output, 'tobytes', lambda: output)())
+                             for channel, output in self.sample_output.items()))
             )
         else:
             return id(self)

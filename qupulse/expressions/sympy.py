@@ -401,6 +401,12 @@ class ExpressionScalar(Expression):
     def __rtruediv__(self, other: Union['ExpressionScalar', Number, sympy.Expr]) -> 'ExpressionScalar':
         return self.make(self._sympified_expression.__rtruediv__(self._extract_sympified(other)))
 
+    def __floordiv__(self, other: Union['ExpressionScalar', Number, sympy.Expr]) -> 'ExpressionScalar':
+        return self.make(self._sympified_expression.__floordiv__(self._extract_sympified(other)))
+
+    def __rfloordiv__(self, other: Union['ExpressionScalar', Number, sympy.Expr]) -> 'ExpressionScalar':
+        return self.make(self._sympified_expression.__rfloordiv__(self._extract_sympified(other)))
+
     def __neg__(self) -> 'ExpressionScalar':
         return self.make(self._sympified_expression.__neg__())
 
