@@ -1,3 +1,4 @@
+import copy
 import unittest
 from unittest import TestCase
 
@@ -100,6 +101,7 @@ class TiltedCSDTest(TestCase):
         hold = ConstantPT(10**6, {'a': '-1. + idx_a * 0.01 + idx_b * 1e-3', 'b': '-.5 + idx_b * 0.02 - 3e-3 * idx_a'})
         scan_a = hold.with_iteration('idx_a', 200)
         self.pulse_template = scan_a.with_iteration('idx_b', 100)
+        self.repeated_pt = self.pulse_template.with_repetition(42)
 
         self.program = LinSpaceIter(length=100, body=(LinSpaceIter(
             length=200,
@@ -111,6 +113,7 @@ class TiltedCSDTest(TestCase):
                 duration_factors=None
             ),)
         ),))
+        self.repeated_program = LinSpaceRepeat(body=(self.program,), count=42)
 
         key_0 = DepKey.from_voltages((1e-3, 0.01,), DEFAULT_INCREMENT_RESOLUTION)
         key_1 = DepKey.from_voltages((0.02, -3e-3), DEFAULT_INCREMENT_RESOLUTION)
@@ -140,15 +143,29 @@ class TiltedCSDTest(TestCase):
 
             LoopJmp(1),
         ]
+        inner_commands = copy.deepcopy(self.commands)
+        for cmd in inner_commands:
+            if hasattr(cmd, 'idx'):
+                cmd.idx += 1
+        self.repeated_commands = [LoopLabel(0, 42)] + inner_commands + [LoopJmp(0)]
 
     def test_program(self):
         program_builder = LinSpaceBuilder(('a', 'b'))
         program = self.pulse_template.create_program(program_builder=program_builder)
         self.assertEqual([self.program], program)
 
+    def test_repeated_program(self):
+        program_builder = LinSpaceBuilder(('a', 'b'))
+        program = self.repeated_pt.create_program(program_builder=program_builder)
+        self.assertEqual([self.repeated_program], program)
+
     def test_increment_commands(self):
         commands = to_increment_commands([self.program])
         self.assertEqual(self.commands, commands)
+
+    def test_repeated_increment_commands(self):
+        commands = to_increment_commands([self.repeated_program])
+        self.assertEqual(self.repeated_commands, commands)
 
 
 class SingletLoadProcessing(TestCase):

@@ -81,7 +81,7 @@ class LinSpaceIter(LinSpaceNode):
             for idx, deps in node.dependencies().items():
                 shortened = {dep[:-1] for dep in deps}
                 if shortened != {()}:
-                    dependencies.setdefault(idx, set()).update(deps)
+                    dependencies.setdefault(idx, set()).update(shortened)
         return dependencies
 
 
