@@ -391,6 +391,9 @@ class ExpressionScalarTests(unittest.TestCase):
         self.assertExpressionEqual(a - b, -(b - a))
         self.assertExpressionEqual(a * b, b * a)
         self.assertExpressionEqual(a / b, 1 / (b / a))
+        self.assertExpressionEqual(a // 3, ExpressionScalar('floor(a / 3)'))
+        self.assertExpressionEqual(a // 3, ExpressionScalar('a // 3'))
+        self.assertExpressionEqual(3 // a, ExpressionScalar('floor(3 / a)'))
 
     def test_symbolic_math(self):
         a = ExpressionScalar('a')
@@ -400,6 +403,7 @@ class ExpressionScalarTests(unittest.TestCase):
         self.assertExpressionEqual(a - b, -(b - a))
         self.assertExpressionEqual(a * b, b * a)
         self.assertExpressionEqual(a / b, 1 / (b / a))
+        self.assertExpressionEqual(a // b, ExpressionScalar('floor(a / b)'))
 
     def test_sympy_math(self):
         a = ExpressionScalar('a')

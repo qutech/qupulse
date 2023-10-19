@@ -3,6 +3,8 @@ import math
 from unittest import mock
 
 from typing import Optional, Dict, Set, Any, Union
+
+import frozendict
 import sympy
 
 from qupulse.parameter_scope import Scope, DictScope
@@ -26,12 +28,14 @@ from qupulse.program.loop import LoopBuilder
 
 class PulseTemplateStub(PulseTemplate):
     """All abstract methods are stubs that raise NotImplementedError to catch unexpected calls. If a method is needed in
-    a test one should use mock.patch or mock.patch.object"""
+    a test one should use mock.patch or mock.patch.object.
+    Properties can be passed as init argument because mocking them is a pita."""
     def __init__(self, identifier=None,
                  defined_channels=None,
                  duration=None,
                  parameter_names=None,
                  measurement_names=None,
+                 final_values=None,
                  registry=None):
         super().__init__(identifier=identifier)
 
@@ -39,6 +43,7 @@ class PulseTemplateStub(PulseTemplate):
         self._duration = duration
         self._parameter_names = parameter_names
         self._measurement_names = set() if measurement_names is None else measurement_names
+        self._final_values = final_values
         self.internal_create_program_args = []
         self._register(registry=registry)
 
@@ -92,7 +97,10 @@ class PulseTemplateStub(PulseTemplate):
 
     @property
     def final_values(self) -> Dict[ChannelID, ExpressionScalar]:
-        raise NotImplementedError()
+        if self._final_values is None:
+            raise NotImplementedError()
+        else:
+            return self._final_values
 
 
 def get_appending_internal_create_program(waveform=DummyWaveform(),
@@ -363,6 +371,74 @@ class PulseTemplateTest(unittest.TestCase):
                     template.create_program(parameters=parameters, volatile={'abc', 'dfg'})
         _internal_create_program.assert_called_once_with(**expected_internal_kwargs, program_builder=program_builder)
 
+    def test_pad_to(self):
+        from qupulse.pulses import SequencePT
+
+        def to_multiple_of_192(x: Expression) -> Expression:
+            return (x + 191) // 192 * 192
+
+        final_values = frozendict.frozendict({'A': ExpressionScalar(0.1), 'B': ExpressionScalar('a')})
+        measurements = [('M', 0, 'y')]
+
+        pt = PulseTemplateStub(duration=ExpressionScalar(10))
+        padded = pt.pad_to(10)
+        self.assertIs(pt, padded)
+
+        pt = PulseTemplateStub(duration=ExpressionScalar('duration'))
+        padded = pt.pad_to('duration')
+        self.assertIs(pt, padded)
+
+        # padding with numeric durations
+
+        pt = PulseTemplateStub(duration=ExpressionScalar(10),
+                               final_values=final_values,
+                               defined_channels=final_values.keys())
+        padded = pt.pad_to(20)
+        self.assertEqual(padded.duration, 20)
+        self.assertEqual(padded.final_values, final_values)
+        self.assertIsInstance(padded, SequencePT)
+        self.assertIs(padded.subtemplates[0], pt)
+
+        padded = pt.pad_to(20, pt_kwargs=dict(measurements=measurements))
+        self.assertEqual(padded.duration, 20)
+        self.assertEqual(padded.final_values, final_values)
+        self.assertIsInstance(padded, SequencePT)
+        self.assertIs(padded.subtemplates[0], pt)
+        self.assertEqual(measurements, padded.measurement_declarations)
+
+        padded = pt.pad_to(10, pt_kwargs=dict(measurements=measurements))
+        self.assertEqual(padded.duration, 10)
+        self.assertEqual(padded.final_values, final_values)
+        self.assertIsInstance(padded, SequencePT)
+        self.assertIs(padded.subtemplates[0], pt)
+        self.assertEqual(measurements, padded.measurement_declarations)
+
+        # padding with numeric duation and callable
+        padded = pt.pad_to(to_multiple_of_192)
+        self.assertEqual(padded.duration, 192)
+        self.assertEqual(padded.final_values, final_values)
+        self.assertIsInstance(padded, SequencePT)
+        self.assertIs(padded.subtemplates[0], pt)
+
+        # padding with symbolic durations
+
+        pt = PulseTemplateStub(duration=ExpressionScalar('duration'),
+                               final_values=final_values,
+                               defined_channels=final_values.keys())
+        padded = pt.pad_to('new_duration')
+        self.assertEqual(padded.duration, 'new_duration')
+        self.assertEqual(padded.final_values, final_values)
+        self.assertIsInstance(padded, SequencePT)
+        self.assertIs(padded.subtemplates[0], pt)
+
+        # padding symbolic durations with callable
+
+        padded = pt.pad_to(to_multiple_of_192)
+        self.assertEqual(padded.duration, '(duration + 191) // 192 * 192')
+        self.assertEqual(padded.final_values, final_values)
+        self.assertIsInstance(padded, SequencePT)
+        self.assertIs(padded.subtemplates[0], pt)
+
     @mock.patch('qupulse.pulses.pulse_template.default_program_builder')
     def test_create_program_none(self, pb_mock) -> None:
         template = PulseTemplateStub(defined_channels={'A'}, parameter_names={'foo'})
@@ -398,6 +474,11 @@ class PulseTemplateTest(unittest.TestCase):
         with mock.patch.object(SequencePulseTemplate, 'concatenate', return_value='concat') as mock_concatenate:
             self.assertEqual(a @ b, 'concat')
             mock_concatenate.assert_called_once_with(a, b)
+
+    def test_pow(self):
+        pt = PulseTemplateStub()
+        pow_pt = pt ** 5
+        self.assertEqual(pow_pt, pt.with_repetition(5))
 
     def test_rmatmul(self):
         a = PulseTemplateStub()
