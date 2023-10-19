@@ -8,10 +8,25 @@ from qupulse import ChannelID, MeasurementWindow
 from qupulse.parameter_scope import Scope, MappedScope, FrozenDict
 from qupulse.program import (ProgramBuilder, HardwareTime, HardwareVoltage, Waveform, RepetitionCount, TimeType,
                              SimpleExpression)
-from qupulse.expressions import sympy as sym_expr
+from qupulse.program.waveforms import MultiChannelWaveform
 
 
-DEFAULT_RESOLUTION: float = 1e-9
+# this resolution is used to unify increments
+# the increments themselves remain floats
+DEFAULT_INCREMENT_RESOLUTION: float = 1e-9
+
+
+@dataclass(frozen=True)
+class DepKey:
+    """The key that identifies how a certain set command depends on iteration indices."""
+    factors: Tuple[int, ...]
+
+    @classmethod
+    def from_voltages(cls, voltages: Sequence[float], resolution: float):
+        # remove trailing zeros
+        while voltages and voltages[-1] == 0:
+            voltages = voltages[:-1]
+        return cls(tuple(int(round(voltage / resolution)) for voltage in voltages))
 
 
 @dataclass
@@ -19,19 +34,6 @@ class LinSpaceNode:
     """AST node for a program that supports linear spacing of set points as well as nested sequencing and repetitions"""
     def dependencies(self) -> Mapping[int, set]:
         raise NotImplementedError
-
-
-@dataclass
-class LinSpaceSet:
-    channel: int
-    base: float
-    factors: Optional[Tuple[float, ...]]
-
-
-
-@dataclass
-class Wait:
-    duration: TimeType
 
 
 @dataclass
@@ -46,12 +48,6 @@ class LinSpaceHold(LinSpaceNode):
         return {idx: {factors}
                 for idx, factors in enumerate(self.factors)
                 if factors}
-
-    def to_atomic_commands(self):
-        if self.duration_factors:
-            raise NotImplementedError('Variable durations are not implemented for  commands yet')
-        return [LinSpaceSet(idx, base, factors)
-                for idx, (base, factors) in enumerate(zip(self.bases, self.factors))] + [Wait(self.duration_base)]
 
     def to_increment_commands(self, previous: Tuple[float, ...], iter_advance: Sequence[bool]):
         if self.duration_factors:
@@ -79,6 +75,12 @@ class LinSpaceHold(LinSpaceNode):
             assert inc_val is None or set_val is None
             inc_vals.append(inc_val)
             set_vals.append(set_val)
+
+
+@dataclass
+class LinSpaceArbitraryWaveform(LinSpaceNode):
+    waveform: Waveform
+    channels: Tuple[ChannelID, ...]
 
 
 @dataclass
@@ -111,21 +113,20 @@ class LinSpaceIter(LinSpaceNode):
 
 
 class LinSpaceBuilder(ProgramBuilder):
-    def __init__(self, channels: Tuple[Optional[ChannelID], ...]):
+    """This program builder supports efficient translation of pulse templates that use symbolic linearly
+    spaced voltages and durations.
+
+    The channel identifiers are reduced to their index in the given channel tuple.
+
+    Arbitrary waveforms are not implemented yet
+    """
+    def __init__(self, channels: Tuple[ChannelID, ...]):
         super().__init__()
-        self._name_to_idx = {name: idx for idx, name in enumerate(channels) if name is not None}
+        self._name_to_idx = {name: idx for idx, name in enumerate(channels)}
         self._idx_to_name = channels
 
         self._stack = [[]]
         self._ranges = []
-
-    @classmethod
-    def from_channel_dict(cls, channels: Mapping[ChannelID, int]):
-        assert len(set(channels.values())) == len(channels), "no duplicate target channels"
-        channel_list = [None] * 20
-        for ch_name, ch_idx in channels.items():
-            channel_list[ch_idx] = ch_name
-        return cls(tuple(channel_list))
 
     def _root(self):
         return self._stack[0]
@@ -187,7 +188,7 @@ class LinSpaceBuilder(ProgramBuilder):
         self._stack[-1].append(set_cmd)
 
     def play_arbitrary_waveform(self, waveform: Waveform):
-        raise NotImplementedError('Not implemented yet (postponed)')
+        return self._stack[-1].append(LinSpaceArbitraryWaveform(waveform, self._idx_to_name))
 
     def measure(self, measurements: Optional[Sequence[MeasurementWindow]]):
         """Ignores measurements"""
@@ -250,8 +251,22 @@ class Set:
 
 
 @dataclass
+class Wait:
+    duration: TimeType
+
+
+@dataclass
 class LoopJmp:
     idx: int
+
+
+@dataclass
+class Play:
+    waveform: Waveform
+    channels: Tuple[ChannelID]
+
+
+Command = Increment | Set | LoopLabel | LoopJmp | Wait | Play
 
 
 @dataclass(frozen=True)
@@ -260,28 +275,18 @@ class DepState:
     iterations: Tuple[int, ...]
 
 
-@dataclass(frozen=True)
-class DepKey:
-    """The key that identifies how a certain set command depends on iteration indices."""
-    factors: Tuple[int, ...]
 
-    @classmethod
-    def from_voltages(cls, voltages: Sequence[float], resolution: float):
-        # remove trailing zeros
-        while voltages and voltages[-1] == 0:
-            voltages = voltages[:-1]
-        return cls(tuple(int(round(voltage / resolution)) for voltage in voltages))
 
 
 @dataclass
 class TranslationState:
-    label_num: int
-    commands: list
-    iterations: list
-    active_dep: Dict[int, DepKey]
-    dep_states: Dict[int, Dict[DepKey, DepState]]
-    plain_voltage: Dict[int, float]
-    resolution: float = dataclasses.field(default_factory=lambda: DEFAULT_RESOLUTION)
+    label_num: int = dataclasses.field(default=0)
+    commands: List[Command] = dataclasses.field(default_factory=list)
+    iterations: List[int] = dataclasses.field(default_factory=list)
+    active_dep: Dict[int, DepKey] = dataclasses.field(default_factory=dict)
+    dep_states: Dict[int, Dict[DepKey, DepState]] = dataclasses.field(default_factory=dict)
+    plain_voltage: Dict[int, float] = dataclasses.field(default_factory=dict)
+    resolution: float = dataclasses.field(default_factory=lambda: DEFAULT_INCREMENT_RESOLUTION)
 
     def new_loop(self, count: int):
         label = LoopLabel(self.label_num, count)
@@ -376,14 +381,13 @@ def to_atomic_commands(node: Union[LinSpaceNode, Sequence[LinSpaceNode]], state:
                 state.active_dep[ch] = dep_key
             state.dep_states[ch][dep_key] = new_dep_state
         state.commands.append(Wait(node.duration_base))
+    elif isinstance(node, LinSpaceArbitraryWaveform):
+        state.commands.append(Play(node.waveform, node.channels))
+    else:
+        raise TypeError("The node type is not handled", type(node), node)
 
 
-def to_increment_commands(linspace_nodes: Sequence[LinSpaceNode]) -> list:
+def to_increment_commands(linspace_nodes: Sequence[LinSpaceNode]) -> List[Command]:
     state = TranslationState(0, [], [], active_dep={}, dep_states={}, plain_voltage={})
     to_atomic_commands(linspace_nodes, state)
     return state.commands
-
-
-
-
-
