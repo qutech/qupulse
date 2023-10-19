@@ -229,7 +229,6 @@ class LinSpaceBuilder(ProgramBuilder):
             return self._root()
 
 
-
 @dataclass
 class LoopLabel:
     idx: int
@@ -315,7 +314,7 @@ def to_atomic_commands(node: Union[LinSpaceNode, Sequence[LinSpaceNode]], state:
         for lin_node in node:
             to_atomic_commands(lin_node, state)
 
-    if isinstance(node, LinSpaceRepeat):
+    elif isinstance(node, LinSpaceRepeat):
         pre_dep_state = state.get_dependency_state(node.dependencies())
         label, jmp = state.new_loop(node.count)
         initial_position = len(state.commands)
