@@ -94,6 +94,62 @@ class PlainCSDTest(TestCase):
         self.assertEqual(self.commands, commands)
 
 
+class TiltedCSDTest(TestCase):
+    def setUp(self):
+        hold = ConstantPT(10**6, {'a': '-1. + idx_a * 0.01 + idx_b * 1e-3', 'b': '-.5 + idx_b * 0.02 - 3e-3 * idx_a'})
+        scan_a = hold.with_iteration('idx_a', 200)
+        self.pulse_template = scan_a.with_iteration('idx_b', 100)
+
+        self.program = LinSpaceIter(length=100, body=(LinSpaceIter(
+            length=200,
+            body=(LinSpaceHold(
+                bases=(-1., -0.5),
+                factors=((1e-3, 0.01),
+                         (0.02, -3e-3)),
+                duration_base=TimeType(10**6),
+                duration_factors=None
+            ),)
+        ),))
+
+        key_0 = DepKey.from_voltages((1e-3, 0.01,), DEFAULT_INCREMENT_RESOLUTION)
+        key_1 = DepKey.from_voltages((0.02, -3e-3), DEFAULT_INCREMENT_RESOLUTION)
+
+        self.commands = [
+            Set(0, -1.0, key_0),
+            Set(1, -0.5, key_1),
+            Wait(TimeType(10 ** 6)),
+
+            LoopLabel(0, 199),
+            Increment(0, 0.01, key_0),
+            Increment(1, -3e-3, key_1),
+            Wait(TimeType(10 ** 6)),
+            LoopJmp(0),
+
+            LoopLabel(1, 99),
+
+            Increment(0, 1e-3 + -200 * 1e-2, key_0),
+            Increment(1, 0.02 + -200 * -3e-3, key_1),
+            Wait(TimeType(10 ** 6)),
+
+            LoopLabel(2, 199),
+            Increment(0, 0.01, key_0),
+            Increment(1, -3e-3, key_1),
+            Wait(TimeType(10 ** 6)),
+            LoopJmp(2),
+
+            LoopJmp(1),
+        ]
+
+    def test_program(self):
+        program_builder = LinSpaceBuilder(('a', 'b'))
+        program = self.pulse_template.create_program(program_builder=program_builder)
+        self.assertEqual([self.program], program)
+
+    def test_increment_commands(self):
+        commands = to_increment_commands([self.program])
+        self.assertEqual(self.commands, commands)
+
+
 class SingletLoadProcessing(TestCase):
     def setUp(self):
         wait = ConstantPT(10 ** 6, {'a': '-1. + idx_a * 0.01', 'b': '-.5 + idx_b * 0.02'})
