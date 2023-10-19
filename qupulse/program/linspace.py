@@ -249,7 +249,7 @@ class Play:
     channels: Tuple[ChannelID]
 
 
-Command = Increment | Set | LoopLabel | LoopJmp | Wait | Play
+Command = Union[Increment, Set, LoopLabel, LoopJmp, Wait, Play]
 
 
 @dataclass(frozen=True)
