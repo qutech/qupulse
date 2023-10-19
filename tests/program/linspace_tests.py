@@ -1,8 +1,9 @@
+import unittest
 from unittest import TestCase
 
 from qupulse.pulses import *
 from qupulse.program.linspace import *
-
+from qupulse.program.transformation import *
 
 class SingleRampTest(TestCase):
     def setUp(self):
@@ -238,3 +239,34 @@ class SingletLoadProcessing(TestCase):
         commands = to_increment_commands([self.program])
         self.assertEqual(self.commands, commands)
 
+
+class TransformedRampTest(TestCase):
+    def setUp(self):
+        hold = ConstantPT(10 ** 6, {'a': '-1. + idx * 0.01'})
+        self.pulse_template = hold.with_iteration('idx', 200)
+        self.transformation = ScalingTransformation({'a': 2.0})
+
+        self.program = LinSpaceIter(
+            length=200,
+            body=(LinSpaceHold(
+                bases=(-2.,),
+                factors=((0.02,),),
+                duration_base=TimeType(10 ** 6),
+                duration_factors=None
+            ),)
+        )
+
+    def test_global_trafo_program(self):
+        program_builder = LinSpaceBuilder(('a',))
+        program = self.pulse_template.create_program(program_builder=program_builder,
+                                                     global_transformation=self.transformation)
+        self.assertEqual([self.program], program)
+
+    def test_local_trafo_program(self):
+        program_builder = LinSpaceBuilder(('a',))
+        with self.assertRaises(NotImplementedError):
+            # not implemented yet. This test should work as soon as its implemented
+            program = self.pulse_template.create_program(program_builder=program_builder,
+                                                         global_transformation=self.transformation,
+                                                         to_single_waveform={self.pulse_template})
+            self.assertEqual([self.program], program)

@@ -892,7 +892,7 @@ class TransformingWaveform(Waveform):
         if constant_values is None or not transformation.is_constant_invariant():
             return cls(inner_waveform, transformation)
 
-        transformed_constant_values = {key: float(value) for key, value in transformation(0., constant_values).items()}
+        transformed_constant_values = {key: value for key, value in transformation(0., constant_values).items()}
         return ConstantWaveform.from_mapping(inner_waveform.duration, transformed_constant_values)
 
     def is_constant(self) -> bool:
