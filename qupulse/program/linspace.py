@@ -49,33 +49,6 @@ class LinSpaceHold(LinSpaceNode):
                 for idx, factors in enumerate(self.factors)
                 if factors}
 
-    def to_increment_commands(self, previous: Tuple[float, ...], iter_advance: Sequence[bool]):
-        if self.duration_factors:
-            raise NotImplementedError('Variable durations are not implemented for increment commands yet')
-        set_vals = []
-        inc_vals = []
-        for prev, base, factors in zip(previous, self.bases, self.factors):
-            set_val = base
-            if set_val == prev:
-                # TODO: epsilon
-                set_val = None
-
-            if factors:
-                inc_val = 0.
-                for advance, factor in zip(iter_advance, factors):
-                    if advance:
-                        inc_val += factor
-
-                inc_val = None
-                if base != prev:
-
-                    set_vals.append(base)
-                else:
-                    pass
-            assert inc_val is None or set_val is None
-            inc_vals.append(inc_val)
-            set_vals.append(set_val)
-
 
 @dataclass
 class LinSpaceArbitraryWaveform(LinSpaceNode):
