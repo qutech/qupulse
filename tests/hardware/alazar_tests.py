@@ -6,7 +6,7 @@ import numpy as np
 from ..hardware import *
 from qupulse.hardware.dacs.alazar import AlazarCard, AlazarProgram
 from qupulse.utils.types import TimeType
-
+from qupulse.utils.performance import WindowOverlapWarning
 
 class AlazarProgramTest(unittest.TestCase):
     def setUp(self) -> None:
@@ -112,7 +112,7 @@ class AlazarTest(unittest.TestCase):
         with self.assertRaises(KeyError):
             card._make_mask('N', begins, lengths)
 
-        with self.assertRaises(ValueError):
+        with self.assertWarns(WindowOverlapWarning):
             card._make_mask('M', begins, lengths*3)
 
         mask = card._make_mask('M', begins, lengths)

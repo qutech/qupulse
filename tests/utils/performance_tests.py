@@ -2,7 +2,8 @@ import unittest
 
 import numpy as np
 
-from qupulse.utils.performance import _time_windows_to_samples_numba, _time_windows_to_samples_numpy
+from qupulse.utils.performance import (_time_windows_to_samples_numba, _time_windows_to_samples_numpy,
+                                       shrink_overlapping_windows)
 
 
 class TimeWindowsToSamplesTest(unittest.TestCase):
@@ -28,3 +29,17 @@ class TimeWindowsToSamplesTest(unittest.TestCase):
             self.assert_implementations_equal(begins, lengths, sr)
 
 
+class TestOverlappingWindowReduction(unittest.TestCase):
+    def test_shrink_overlapping_windows_numba(self):
+            np.testing.assert_equal(
+                (np.array([1, 4, 8]), np.array([3, 4, 4])),
+                shrink_overlapping_windows(np.array([1, 4, 7]),
+                                           np.array([3, 4, 5]), use_numba=True)
+            )
+
+    def test_shrink_overlapping_windows_numpy(self):
+            np.testing.assert_equal(
+                (np.array([1, 4, 8]), np.array([3, 4, 4])),
+                shrink_overlapping_windows(np.array([1, 4, 7]),
+                                            np.array([3, 4, 5]), use_numba=False)
+            )

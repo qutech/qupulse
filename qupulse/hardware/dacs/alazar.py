@@ -16,7 +16,7 @@ from atsaverage.masks import CrossBufferMask, Mask
 from qupulse.utils.types import TimeType
 from qupulse.hardware.dacs.dac_base import DAC
 from qupulse.hardware.util import traced
-from qupulse.utils.performance import time_windows_to_samples
+from qupulse.utils.performance import time_windows_to_samples, shrink_overlapping_windows
 
 logger = logging.getLogger(__name__)
 
@@ -283,8 +283,7 @@ class AlazarCard(DAC):
         if mask_type not in ('auto', 'cross_buffer', None):
             warnings.warn("Currently only CrossBufferMask is implemented.")
 
-        if np.any(begins[:-1]+lengths[:-1] > begins[1:]):
-            raise ValueError('Found overlapping windows in begins')
+        begins, lengths = shrink_overlapping_windows(begins, lengths)
 
         mask = CrossBufferMask()
         mask.identifier = mask_id
