@@ -1,1 +1,0 @@
-The `repr` implementation of `Loop` will now return an evaluable python expression. The old behaviour moved to the `str` implementation.
