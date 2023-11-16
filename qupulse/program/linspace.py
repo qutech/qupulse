@@ -224,14 +224,14 @@ class LoopLabel:
 class Increment:
     channel: int
     value: float
-    dependency_key: 'DepKey'
+    dependency_key: DepKey
 
 
 @dataclass
 class Set:
     channel: int
     value: float
-    key: 'DepKey' = dataclasses.field(default_factory=lambda: DepKey(()))
+    key: DepKey = dataclasses.field(default_factory=lambda: DepKey(()))
 
 
 @dataclass
