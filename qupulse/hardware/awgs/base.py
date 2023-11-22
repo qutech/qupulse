@@ -9,11 +9,14 @@ Classes:
 
 from abc import abstractmethod
 from numbers import Real
-from typing import Set, Tuple, Callable, Optional, Mapping, Sequence, List
+from typing import Set, Tuple, Callable, Optional, Mapping, Sequence, List, Union
 from collections import OrderedDict
+from enum import Enum
+# from itertools import chain
 
 from qupulse.hardware.util import get_sample_times, not_none_indices
 from qupulse.utils.types import ChannelID
+from qupulse.program.linspace import LinSpaceNode, LinSpaceArbitraryWaveform, to_increment_commands, Play
 from qupulse.program.loop import Loop
 from qupulse.program.waveforms import Waveform
 from qupulse.comparable import Comparable
@@ -162,10 +165,19 @@ class ProgramOverwriteException(Exception):
                " Use force to overwrite.".format(self.name)
 
 
+AllowedProgramTypes = Union[Loop,Sequence[LinSpaceNode],]
+
+class _ProgramType(Enum):
+    FSP = -1
+    Loop = 0
+    Linspace = 1
+
+
 class ProgramEntry:
     """This is a helper class for implementing awgs drivers. A driver can subclass it to help organizing sampled
     waveforms"""
-    def __init__(self, loop: Loop,
+    def __init__(self, program: AllowedProgramTypes,
+                 program_type: _ProgramType,
                  channels: Tuple[Optional[ChannelID], ...],
                  markers: Tuple[Optional[ChannelID], ...],
                  amplitudes: Tuple[float, ...],
@@ -195,17 +207,34 @@ class ProgramEntry:
         self._voltage_transformations = tuple(voltage_transformations)
 
         self._sample_rate = sample_rate
-
-        self._loop = loop
+        
+        self._program_type = program_type
+        self.__loop = program
 
         if waveforms is None:
-            waveforms = OrderedDict((node.waveform, None)
-                                    for node in loop.get_depth_first_iterator() if node.is_leaf()).keys()
+            #gotta force some python 3.10
+            match self._program_type:
+                case _ProgramType.Loop:
+                    waveforms = OrderedDict((node.waveform, None)
+                                        for node in program.get_depth_first_iterator() if node.is_leaf()).keys()
+                case _ProgramType.Linspace:
+                    #not so clean
+                    waveforms = OrderedDict((command.waveform, None)
+                                        for command in to_increment_commands(program) if isinstance(command,Play)).keys()
+                case _:
+                    raise NotImplementedError()
+                    
         if waveforms:
             self._waveforms = OrderedDict(zip(waveforms, self._sample_waveforms(waveforms)))
         else:
             self._waveforms = OrderedDict()
-
+    
+    @property
+    def _loop(self,):
+        if self._program_type != _ProgramType.Loop:
+            raise DeprecationWarning()
+        return self.__loop
+    
     def _sample_empty_channel(self, time: numpy.ndarray) -> Optional[numpy.ndarray]:
         """Override this in derived class to change how empty channels are handled"""
         return None

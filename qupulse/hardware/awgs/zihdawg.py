@@ -30,9 +30,10 @@ except ImportError:
 import time
 
 from qupulse.utils.types import ChannelID, TimeType, time_from_float
-from qupulse._program._loop import Loop, make_compatible
+from qupulse._program._loop import Loop
 from qupulse._program.seqc import HDAWGProgramManager, UserRegister, WaveformFileSystem
-from qupulse.hardware.awgs.base import AWG, ChannelNotFoundException, AWGAmplitudeOffsetHandling
+from qupulse.program.linspace import LinSpaceBuilder, LinSpaceNode, to_increment_commands, LoopLabel, Play, Wait, LoopJmp, Set, Increment
+from qupulse.hardware.awgs.base import AWG, ChannelNotFoundException, AWGAmplitudeOffsetHandling, AllowedProgramTypes
 from qupulse.hardware.util import traced
 from zhinst.toolkit import Session
 
@@ -404,13 +405,7 @@ class HDAWGModulationMode(Enum):
 @traced
 class HDAWGChannelGroup(AWG):
     
-    # MIN_WAVEFORM_LEN = 32 #With the command table and discarding playWaveIndexed,
-    MIN_WAVEFORM_LEN = 64 #test double the size, as errors in repeat occured
-
-    # it should now be relatively reliable to set 32 as the minimum instead of 192
-    WAVEFORM_LEN_QUANTUM = 16
-    
-    MAX_SAMPLE_RATE_DIVIDER = 13
+    # MAX_SAMPLE_RATE_DIVIDER = 13
     
     CT_IDLE_STR = '{"header": {"version": "1.2.1"}, "table": []}'
     
@@ -473,7 +468,7 @@ class HDAWGChannelGroup(AWG):
         return 2 * self.num_channels
 
     def upload(self, name: str,
-               program: Loop,
+               program: AllowedProgramTypes,
                channels: Tuple[Optional[ChannelID], ...],
                markers: Tuple[Optional[ChannelID], ...],
                voltage_transformation: Tuple[Callable, ...],
@@ -524,13 +519,14 @@ class HDAWGChannelGroup(AWG):
         # pulse lengths of 1 and 2 times 16 samples are bad in 2.4Gs as they are inaccurate on floating point level
         # leading to weird qupulse behavior when comparing program.duration (ExpressionScalar/float) with sample rate (TimeType)
         q_sample_rate = self.sample_rate / 10**9
-
-        # Adjust program to fit criteria.
-        if not 'FixedStructureProgram' in [t.__name__ for t in type(program).__mro__]:
-            make_compatible(program,
-                            minimal_waveform_length=self.MIN_WAVEFORM_LEN,
-                            waveform_quantum=self.WAVEFORM_LEN_QUANTUM,
-                            sample_rate=q_sample_rate)
+        
+        #move compat check to add_program to have less mess with typechecks of program
+        # # Adjust program to fit criteria.
+        # if not 'FixedStructureProgram' in [t.__name__ for t in type(program).__mro__]:
+        #     make_compatible(program,
+        #                     minimal_waveform_length=self.MIN_WAVEFORM_LEN,
+        #                     waveform_quantum=self.WAVEFORM_LEN_QUANTUM,
+        #                     sample_rate=q_sample_rate)
 
         if self._amplitude_offset_handling == AWGAmplitudeOffsetHandling.IGNORE_OFFSET:
             voltage_offsets = (0.,) * self.num_channels

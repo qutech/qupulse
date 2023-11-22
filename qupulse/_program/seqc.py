@@ -34,10 +34,12 @@ from pathlib import Path
 from qupulse.utils.types import ChannelID, TimeType
 from qupulse.utils import replace_multiple, grouper
 from qupulse._program.waveforms import Waveform
-from qupulse._program._loop import Loop
+from qupulse._program._loop import Loop, make_compatible
 from qupulse._program.volatile import VolatileRepetitionCount, VolatileProperty
+from qupulse.program.linspace import LinSpaceBuilder, LinSpaceNode, to_increment_commands, LoopLabel, Play, Wait, LoopJmp, Set, Increment
 from qupulse.hardware.awgs.base import ProgramEntry
 from qupulse.hardware.util import zhinst_voltage_to_uint16
+from qupulse.hardware.awgs.base import AllowedProgramTypes, _ProgramType
 
 try:
     # zhinst fires a DeprecationWarning from its own code in some versions...
@@ -54,7 +56,6 @@ from dataclasses import dataclass
 from zhinst.toolkit import Waveforms
 
 __all__ = ["HDAWGProgramManager"]
-
 
 def make_valid_identifier(name: str) -> str:
     # replace all invalid characters and conactenate with hash of original name
@@ -691,7 +692,11 @@ class UserRegisterManager:
 class HDAWGProgramEntry(ProgramEntry):
     USER_REG_NAME_TEMPLATE = 'user_reg_{register:seqc}'
 
-    def __init__(self, loop: Loop, selection_index: int, waveform_memory: WaveformMemory, program_name: str,
+    def __init__(self, program: AllowedProgramTypes,
+                 selection_index: int,
+                 waveform_memory: WaveformMemory,
+                 program_name: str,
+                 program_type: _ProgramType,
                  channels: Tuple[Optional[ChannelID], ...],
                  markers: Tuple[Optional[ChannelID], ...],
                  amplitudes: Tuple[float, ...],
@@ -701,9 +706,15 @@ class HDAWGProgramEntry(ProgramEntry):
                  command_tables: CommandTable,
                  append_seqc_snippet: str = None,
                  ):
-        if not 'FixedStructureProgram' in [t.__name__ for t in type(loop).__mro__]:
-        # if not isinstance(loop,FixedStructureProgram):
-            super().__init__(loop, channels=channels, markers=markers,
+        if program_type == _ProgramType.FSP:
+            self._waveforms = program.waveform_dict
+            self._is_fsp = True
+            self._loop = program
+            self._program_type = program_type
+        elif program_type == _ProgramType.Loop or program_type == _ProgramType.Linspace:
+            # if not isinstance(loop,FixedStructureProgram):
+            super().__init__(program, program_type=program_type,
+                             channels=channels, markers=markers,
                              amplitudes=amplitudes,
                              offsets=offsets,
                              voltage_transformations=voltage_transformations,
@@ -725,11 +736,10 @@ class HDAWGProgramEntry(ProgramEntry):
                         binary_waveforms.append(BinaryWaveform.from_sampled(*sampled_channels, sampled_markers))
                 self._waveforms[waveform] = tuple(binary_waveforms)
             self._is_fsp = False
+        
         else:
-            self._waveforms = loop.waveform_dict
-            self._is_fsp = True
-            self._loop = loop
-                
+            raise NotImplementedError()
+
         self._waveform_manager = ProgramWaveformManager(program_name, waveform_memory)
         self.selection_index = selection_index
         self._trigger_wait_code = None
@@ -848,7 +858,13 @@ class HDAWGProgramEntry(ProgramEntry):
 class HDAWGProgramManager:
     """This class contains everything that is needed to create the final seqc program and provides an interface to write
     the required waveforms to the file system. It does not talk to the device."""
-
+    
+    # MIN_WAVEFORM_LEN = 32 #With the command table and discarding playWaveIndexed,
+    MIN_WAVEFORM_LEN = 64 #test double the size, as errors in repeat occured
+    # it should now be relatively reliable to set 32 as the minimum instead of 192
+    WAVEFORM_LEN_QUANTUM = 16
+    MAX_SAMPLE_RATE_DIVIDER = 13
+    
     class Constants:
         INTEGER_SIZE = 8 #somehow, despite the manual claiming 64 bits, the USERREG creates playback issues before that. so change previous 32 to 16 for safety
         # HOWEVER, this still induces errors. opt for a different method,
@@ -971,7 +987,7 @@ class HDAWGProgramManager:
             if idx not in existing and idx != self.Constants.PROG_SEL_NONE:
                 return idx
 
-    def add_program(self, name: str, loop: Loop,
+    def add_program(self, name: str, program: AllowedProgramTypes,
                     channels: Tuple[Optional[ChannelID], ...],
                     markers: Tuple[Optional[ChannelID], ...],
                     amplitudes: Tuple[float, ...],
@@ -986,7 +1002,7 @@ class HDAWGProgramManager:
 
         Args:
             name: Human readable name of the program (used f.i. for the function name)
-            loop: The program to upload
+            program: The program to upload
             channels: see AWG.upload
             markers: see AWG.upload
             amplitudes: Used to sample the waveforms
@@ -995,6 +1011,24 @@ class HDAWGProgramManager:
             sample_rate: Used to sample the waveforms
         """
         assert name not in self._programs
+        
+        # Adjust program to fit criteria.
+        if 'FixedStructureProgram' in [t.__name__ for t in type(program).__mro__]:
+            program_type = _ProgramType.FSP
+            pass
+        elif isinstance(program,Loop):
+            make_compatible(program,
+                            minimal_waveform_length=self.MIN_WAVEFORM_LEN,
+                            waveform_quantum=self.WAVEFORM_LEN_QUANTUM,
+                            sample_rate=sample_rate)
+            program_type = _ProgramType.Loop
+        elif isinstance(program,Sequence) and isinstance(program[0],LinSpaceNode):
+            #TODO
+            linspace_hdawg_compat(program)
+            program_type = _ProgramType.Linspace
+        else:
+            raise NotImplementedError('Incompatible program type')
+        
         
         max_available_rate_divider = self._awg.MAX_SAMPLE_RATE_DIVIDER - self._awg.sample_rate_divider
         
@@ -1008,10 +1042,10 @@ class HDAWGProgramManager:
         # available_registers = [UserRegister.from_seqc(idx) for idx in range(2, 16)]
         available_registers = [UserRegister.from_seqc(idx) for idx in range(3, 16)] #now another one reserved
 
-        program_entry = HDAWGProgramEntry(loop, selection_index, self._waveform_memory, name,
+        program_entry = HDAWGProgramEntry(program, selection_index, self._waveform_memory, name, program_type,
                                           channels, markers, amplitudes, offsets, voltage_transformations, sample_rate,
                                           self._ct_dict,
-                                          append_seqc_snippet
+                                          append_seqc_snippet,
                                           )
 
         compiler_settings = self._get_compiler_settings(program_name=name)
@@ -1145,6 +1179,10 @@ class HDAWGProgramManager:
 
         return {i:json.dumps(ct.as_dict(),) for i,ct in enumerate(ct_t.values())}
         
+def linspace_hdawg_compat(program: Sequence[LinSpaceNode]):
+    print('TODO: compatibility check / adaption')
+    pass
+
 
 def find_sharable_waveforms(node_cluster: Sequence['SEQCNode']) -> Optional[Sequence[bool]]:
     """Expects nodes to have a compatible stepping
