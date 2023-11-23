@@ -16,7 +16,8 @@ from enum import Enum
 
 from qupulse.hardware.util import get_sample_times, not_none_indices
 from qupulse.utils.types import ChannelID
-from qupulse.program.linspace import LinSpaceNode, LinSpaceArbitraryWaveform, to_increment_commands, Play
+from qupulse.program.linspace import LinSpaceNode, LinSpaceArbitraryWaveform, to_increment_commands, Command, \
+    Increment, Set as LSPSet, LoopLabel, LoopJmp, Wait, Play
 from qupulse.program.loop import Loop
 from qupulse.program.waveforms import Waveform
 from qupulse.comparable import Comparable
@@ -177,14 +178,14 @@ class ProgramEntry:
     """This is a helper class for implementing awgs drivers. A driver can subclass it to help organizing sampled
     waveforms"""
     def __init__(self, program: AllowedProgramTypes,
-                 program_type: _ProgramType,
                  channels: Tuple[Optional[ChannelID], ...],
                  markers: Tuple[Optional[ChannelID], ...],
                  amplitudes: Tuple[float, ...],
                  offsets: Tuple[float, ...],
                  voltage_transformations: Tuple[Optional[Callable], ...],
                  sample_rate: TimeType,
-                 waveforms: Sequence[Waveform] = None):
+                 waveforms: Sequence[Waveform] = None,
+                 program_type: _ProgramType = _ProgramType.Loop):
         """
 
         Args:
@@ -209,8 +210,13 @@ class ProgramEntry:
         self._sample_rate = sample_rate
         
         self._program_type = program_type
+        self._program = program #non-normalized
         self.__loop = program
-
+        
+        
+        if program_type == _ProgramType.Linspace:
+            self._transformed_commands = self._transform_linspace_commands(to_increment_commands(program))
+        
         if waveforms is None:
             #gotta force some python 3.10
             match self._program_type:
@@ -219,8 +225,9 @@ class ProgramEntry:
                                         for node in program.get_depth_first_iterator() if node.is_leaf()).keys()
                 case _ProgramType.Linspace:
                     #not so clean
+                    #TODO: also marker handling not optimal
                     waveforms = OrderedDict((command.waveform, None)
-                                        for command in to_increment_commands(program) if isinstance(command,Play)).keys()
+                                        for command in self._transformed_commands if isinstance(command,Play)).keys()
                 case _:
                     raise NotImplementedError()
                     
@@ -242,7 +249,27 @@ class ProgramEntry:
     def _sample_empty_marker(self, time: numpy.ndarray) -> Optional[numpy.ndarray]:
         """Override this in derived class to change how empty channels are handled"""
         return None
-
+    
+    def _transform_linspace_commands(self, command_list: List[Command]) -> List[Command]:
+        
+        # all commands = Union[Increment, Set, LoopLabel, LoopJmp, Wait, Play]
+        if any(self._voltage_transformations):
+            raise NotImplementedError('how to handle this?')
+        
+        trafos_by_channel = {ch: (v,a,o) for ch,v,a,o in zip(self._channels,self._voltage_transformations,self._amplitudes,self._offsets)}
+        
+        for command in command_list:
+            if isinstance(command,Union[LoopLabel, LoopJmp, Play, Wait]):
+                continue
+            elif isinstance(command,Increment):
+                command.value = command.value / trafos_by_channel[command.channel][1]
+            elif isinstance(command,LSPSet):
+                command.value = (command.value - trafos_by_channel[command.channel][2]) / trafos_by_channel[command.channel][1]
+            else:        
+                raise NotImplementedError()
+        
+        return command_list
+    
     def _sample_waveforms(self, waveforms: Sequence[Waveform]) -> List[Tuple[Tuple[numpy.ndarray, ...],
                                                                              Tuple[numpy.ndarray, ...]]]:
         sampled_waveforms = []

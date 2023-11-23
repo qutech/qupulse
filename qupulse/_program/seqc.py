@@ -36,7 +36,7 @@ from qupulse.utils import replace_multiple, grouper
 from qupulse._program.waveforms import Waveform
 from qupulse._program._loop import Loop, make_compatible
 from qupulse._program.volatile import VolatileRepetitionCount, VolatileProperty
-from qupulse.program.linspace import LinSpaceBuilder, LinSpaceNode, to_increment_commands, LoopLabel, Play, Wait, LoopJmp, Set, Increment
+from qupulse.program.linspace import LinSpaceBuilder, LinSpaceNode, to_increment_commands, LoopLabel, Play, Wait, LoopJmp, Set, Increment, Command, DepKey
 from qupulse.hardware.awgs.base import ProgramEntry
 from qupulse.hardware.util import zhinst_voltage_to_uint16
 from qupulse.hardware.awgs.base import AllowedProgramTypes, _ProgramType
@@ -285,6 +285,7 @@ class WaveformMemory:
                                          ('program_name', str),
                                          ('sample_length',int),
                                          ('sample_rate',int),
+                                         ('ct_idx_usage',int),
                                          ])
 
     def __init__(self,awg_obj):
@@ -311,14 +312,15 @@ class WaveformMemory:
                 wave_placeholder = self.WF_PLACEHOLDER_TEMPLATE.format(id=id(program_set))
                 file_name = self.FILE_NAME_TEMPLATE.format(hash=wave_hash)
                 yield wave_placeholder, self._WaveInfo(wave_name, file_name, wf,
-                                                       0,0,"",len(wf.data)//3,0
+                                                       0,0,"",len(wf.data)//3,0,0
                                                        )
 
     def _concatenated_waveforms_iter(self) -> Iterator[Tuple[str, Tuple[_WaveInfo, ...]]]:
         for program_name, concatenated_waveform_list in self.concatenated_waveforms_subdivided.items():
+            
             # we assume that if the first entry is not empty the rest also isn't
             for pos_index, binary_tuple in enumerate(concatenated_waveform_list):
-                if binary_tuple:
+                if binary_tuple is not None:
                     infos = []
                     for group_index, binary in enumerate(binary_tuple):
                         wave_hash = binary.fingerprint()
@@ -333,13 +335,19 @@ class WaveformMemory:
                                                     pos_index,
                                                     group_index,
                                                     program_name,
-                                                    self.concatenated_waveforms_subdivided_info[program_name][pos_index][0],
-                                                    self.concatenated_waveforms_subdivided_info[program_name][pos_index][1],
+                                                    *self.concatenated_waveforms_subdivided_info[program_name][pos_index],
+                                                    # self.concatenated_waveforms_subdivided_info[program_name][pos_index][1],
                                                     ))
     
                     wave_placeholder = self.WF_PLACEHOLDER_TEMPLATE.format(id=id(binary))
                     yield wave_placeholder, tuple(infos)
-                
+                else:
+                    yield None, (self._WaveInfo(*([None,]*3),
+                                                pos_index,
+                                                None,
+                                                program_name,
+                                                *self.concatenated_waveforms_subdivided_info[program_name][pos_index],
+                                                ),)
                 
     def _fsp_waveforms_iter(self):
         
@@ -388,39 +396,39 @@ class WaveformMemory:
             
         
     
-    def fill_ct_dict(self,ct_dict):
+    # def fill_ct_dict(self,ct_dict):
 
-        # print('\n IN SEQC FILL \n')
-        # print(ct_dict[0].as_dict())        
+    #     # print('\n IN SEQC FILL \n')
+    #     # print(ct_dict[0].as_dict())        
         
-        awg_standard_rate = self._awg.sample_rate_divider
+    #     awg_standard_rate = self._awg.sample_rate_divider
         
-        for i,ct_key in enumerate(ct_dict.keys()):
-            for (ct_idx,info_tuple) in self.ct_info_link.items():
+    #     for i,ct_key in enumerate(ct_dict.keys()):
+    #         for (ct_idx,info_tuple) in self.ct_info_link.items():
                 
-                #ct_dict[ct_key].table[ct_idx].waveform.index = int(info_tuple[0][i])
-                #this shouldn't be explicitly necessary, but do nonetheless...
-                ct_dict[ct_key].table[ct_idx].amplitude0.value = 1.0
-                ct_dict[ct_key].table[ct_idx].amplitude0.increment = False
-                ct_dict[ct_key].table[ct_idx].amplitude0.register = 0
-                ct_dict[ct_key].table[ct_idx].amplitude1.value = 1.0
-                ct_dict[ct_key].table[ct_idx].amplitude1.increment = False
-                ct_dict[ct_key].table[ct_idx].amplitude1.register = 0
+    #             #ct_dict[ct_key].table[ct_idx].waveform.index = int(info_tuple[0][i])
+    #             #this shouldn't be explicitly necessary, but do nonetheless...
+    #             ct_dict[ct_key].table[ct_idx].amplitude0.value = 1.0
+    #             ct_dict[ct_key].table[ct_idx].amplitude0.increment = False
+    #             ct_dict[ct_key].table[ct_idx].amplitude0.register = 0
+    #             ct_dict[ct_key].table[ct_idx].amplitude1.value = 1.0
+    #             ct_dict[ct_key].table[ct_idx].amplitude1.increment = False
+    #             ct_dict[ct_key].table[ct_idx].amplitude1.register = 0
 
-                # print('\n IN SEQC FILL \n')
-                # print(ct_dict[0].as_dict())
+    #             # print('\n IN SEQC FILL \n')
+    #             # print(ct_dict[0].as_dict())
                 
-                #this is not addressing the underlying problem as also only ~1000 entries in the command table can be made. 
-                #(currently one-to-one correspondence between table and waveforms, which is bad, but cannot be done otherwise?
-                # on the other hand, number of sequencer instructions are now possible up to ~16000)
-                #manual claims this could be faster than playWave nonetheless
-                ct_dict[ct_key].table[ct_idx].waveform.index = int(info_tuple[0][i])
-                ct_dict[ct_key].table[ct_idx].waveform.length = int(info_tuple[1])
-                total_rate_divider = int(info_tuple[2])+awg_standard_rate
-                assert total_rate_divider <= self._awg.MAX_SAMPLE_RATE_DIVIDER
-                ct_dict[ct_key].table[ct_idx].waveform.samplingRateDivider = total_rate_divider
+    #             #this is not addressing the underlying problem as also only ~1000 entries in the command table can be made. 
+    #             #(currently one-to-one correspondence between table and waveforms, which is bad, but cannot be done otherwise?
+    #             # on the other hand, number of sequencer instructions are now possible up to ~16000)
+    #             #manual claims this could be faster than playWave nonetheless
+    #             ct_dict[ct_key].table[ct_idx].waveform.index = int(info_tuple[0][i])
+    #             ct_dict[ct_key].table[ct_idx].waveform.length = int(info_tuple[1])
+    #             total_rate_divider = int(info_tuple[2])+awg_standard_rate
+    #             assert total_rate_divider <= HDAWGProgramManager.Constants.MAX_SAMPLE_RATE_DIVIDER
+    #             ct_dict[ct_key].table[ct_idx].waveform.samplingRateDivider = total_rate_divider
             
-        return ct_dict
+    #     return ct_dict
     
     def waveform_declaration(self,ct_dict) -> str:
         """Produces a string that declares all needed waveforms.
@@ -442,8 +450,17 @@ class WaveformMemory:
         # used_wf_idx = set()
         
         for wave_placeholder, wave_infos in self._concatenated_waveforms_iter():
+            if ct_index >= 1024:
+                raise RuntimeError('too many CT entries. Clear HardwareSetup for now. (HardwareSetup.clear_programs())') #needs to be handled otherwise then (somehow)...
+            
+            if wave_placeholder is None:
+                ct_index += wave_infos[0].ct_idx_usage
+                continue
             wft_idxs = []
             for group_index,wave_info in enumerate(wave_infos):
+                # assert wave_info.ct_idx_usage
+                if wave_info.ct_idx_usage != 1:
+                    raise NotImplementedError()
                 current_filename = wave_info.file_name.replace('.csv', '')              
                 if current_filename not in filename_list_list[group_index]: # allegedly `in set` has O(1) complexity
                     # used_wf_idx.add(wave_table_index)
@@ -474,11 +491,8 @@ class WaveformMemory:
                                    +'use e.g. to_single_waveform to circumvent long sequences of short waveforms'
                                    )
             
-            if ct_index >= 1024:
-                raise RuntimeError('too many CT entries. Clear HardwareSetup for now. (HardwareSetup.clear_programs())') #needs to be handled otherwise then (somehow)...
-        
-            ct_index += 1
-            #TODO: this can be more efficient, i believe. correspondent to ct is fine however, since way more waveforms than ct entries available.
+            assert len(set([w.ct_idx_usage for w in wave_infos]))==1
+            ct_index += wave_infos[0].ct_idx_usage
             wave_table_index += 1
         
         for wave_placeholder,wave_info in self._shared_waveforms_iter():
@@ -567,11 +581,13 @@ class ProgramWaveformManager:
             placeholders.append(self._memory.WF_PLACEHOLDER_TEMPLATE.format(id=id(program_set)))
         return ",".join(placeholders)
 
-    def request_list_append(self, binary_waveform: Tuple[BinaryWaveform, ...],
-                            sample_rate_divider: int) -> str:
+    def request_list_append(self, binary_waveform: Optional[Tuple[BinaryWaveform, ...]],
+                            sample_rate_divider: int,
+                            ct_idx_usage: int,
+                            ) -> str:
         """Append the waveform to the concatenated waveform"""        
         self._memory.concatenated_waveforms_subdivided[self._program_name].append(binary_waveform)
-        self._memory.concatenated_waveforms_subdivided_info[self._program_name].append((len(binary_waveform[0].ch1),sample_rate_divider))
+        self._memory.concatenated_waveforms_subdivided_info[self._program_name].append((len(binary_waveform[0].ch1),sample_rate_divider,ct_idx_usage))
 
         return 
     
@@ -691,7 +707,8 @@ class UserRegisterManager:
 
 class HDAWGProgramEntry(ProgramEntry):
     USER_REG_NAME_TEMPLATE = 'user_reg_{register:seqc}'
-
+    DEFAULT_ONES_WF_KEY = 'default_ones'
+    
     def __init__(self, program: AllowedProgramTypes,
                  selection_index: int,
                  waveform_memory: WaveformMemory,
@@ -708,17 +725,17 @@ class HDAWGProgramEntry(ProgramEntry):
                  ):
         if program_type == _ProgramType.FSP:
             self._waveforms = program.waveform_dict
-            self._is_fsp = True
             self._loop = program
             self._program_type = program_type
         elif program_type == _ProgramType.Loop or program_type == _ProgramType.Linspace:
             # if not isinstance(loop,FixedStructureProgram):
-            super().__init__(program, program_type=program_type,
+            super().__init__(program,
                              channels=channels, markers=markers,
                              amplitudes=amplitudes,
                              offsets=offsets,
                              voltage_transformations=voltage_transformations,
-                             sample_rate=sample_rate)
+                             sample_rate=sample_rate,
+                             program_type=program_type,)
             
             self._waveforms_sampled_values = {}
             for waveform, (all_sampled_channels, all_sampled_markers) in self._waveforms.items():
@@ -735,8 +752,15 @@ class HDAWGProgramEntry(ProgramEntry):
                     else:
                         binary_waveforms.append(BinaryWaveform.from_sampled(*sampled_channels, sampled_markers))
                 self._waveforms[waveform] = tuple(binary_waveforms)
-            self._is_fsp = False
-        
+                
+            if program_type == _ProgramType.Linspace:
+                # self._renormalize_commands()
+                #TODO: what about offsets / voltage trafos...?
+                quant = HDAWGProgramManager.Constants.MIN_WAVEFORM_LEN
+                # self._waveforms[self.DEFAULT_ONES_WF_KEY] = \
+                #     tuple([BinaryWaveform.from_sampled(np.ones(quant),np.ones(quant),(0b0000*np.ones(quant)).astype(int)) for i in range(len(channels)//2)])
+
+
         else:
             raise NotImplementedError()
 
@@ -750,14 +774,19 @@ class HDAWGProgramEntry(ProgramEntry):
         self._user_register_source = None
         self._ct_dict = command_tables
         self.append_seqc_snippet = append_seqc_snippet
+    
+    # def renormalize_commands(self,):
+    #     raise NotImplementedError()
         
+    
     def compile(self,
                 min_repetitions_for_for_loop: int,
                 min_repetitions_for_shared_wf: int,
                 indentation: str,
                 trigger_wait_code: str,
                 available_registers: Iterable[UserRegister],
-                max_rate_divider: int
+                max_rate_divider: int,
+                num_channels: int,
                 ):
         """Compile the loop representation to an internal sequencing c one using `loop_to_seqc`
 
@@ -770,23 +799,50 @@ class HDAWGProgramEntry(ProgramEntry):
         Returns:
 
         """
-        # max_rate_divider = self._aw
         
         pos_var_name = 'pos'
         
-        if self._seqc_node:
+        if self._seqc_node or self._seqc_source:
             self._waveform_manager.clear_requested()
 
         user_registers = UserRegisterManager(available_registers, self.USER_REG_NAME_TEMPLATE)
         
-        if not self._is_fsp:
+        if self._program_type == _ProgramType.FSP:
+            self._seqc_node = None
+            self._seqc_source = self._loop.get_seqc_program_body(pos_var_name)
+            self._waveform_manager._memory.fsp_waveforms[self._waveform_manager._waveform_name] = (self._loop.wf_declarations_and_ct,self._loop.wf_definitions_iter)
+        
+        
+        elif self._program_type == _ProgramType.Loop:
             self._seqc_node = loop_to_seqc(self._loop,
                                        min_repetitions_for_for_loop=min_repetitions_for_for_loop,
                                        min_repetitions_for_shared_wf=min_repetitions_for_shared_wf,
                                        waveform_to_bin=self.get_binary_waveform,
                                        user_registers=user_registers,
                                        max_rate_divider=max_rate_divider)
-
+            
+            self._seqc_source = '\n'.join(self._seqc_node.to_source_code(self._waveform_manager,
+                                                                     map(str, itertools.count(1)),
+                                                                     line_prefix=indentation,
+                                                                     pos_var_name=pos_var_name))
+            
+        elif self._program_type == _ProgramType.Linspace:
+            self._seqc_node = linspace_to_seqc(self._transformed_commands,
+                                       waveform_to_bin=self.get_binary_waveform,
+                                       user_registers=user_registers,
+                                       max_rate_divider=max_rate_divider,
+                                       num_channels=num_channels,
+                                       )
+            
+            self._seqc_source = '\n'.join(self._seqc_node.to_source_code(self._waveform_manager,
+                                                                     map(str, itertools.count(1)),
+                                                                     line_prefix=[indentation,],#hacky
+                                                                     pos_var_name=pos_var_name))
+            
+        
+        else:
+            raise NotImplementedError()
+        
         self._user_register_source = '\n'.join(
             '{indentation}var {user_reg_name} = getUserReg({register});'.format(indentation=indentation,
                                                                                 user_reg_name=user_reg_name,
@@ -801,14 +857,6 @@ class HDAWGProgramEntry(ProgramEntry):
                                                                                )
                 
         self._trigger_wait_code = indentation + trigger_wait_code
-        if not self._is_fsp:
-            self._seqc_source = '\n'.join(self._seqc_node.to_source_code(self._waveform_manager,
-                                                                     map(str, itertools.count(1)),
-                                                                     line_prefix=indentation,
-                                                                     pos_var_name=pos_var_name))
-        else:
-            self._seqc_source = self._loop.get_seqc_program_body(pos_var_name)
-            self._waveform_manager._memory.fsp_waveforms[self._waveform_manager._waveform_name] = (self._loop.wf_declarations_and_ct,self._loop.wf_definitions_iter)
         
         if self.append_seqc_snippet is not None:
             self._seqc_source += '\n'+self.append_seqc_snippet
@@ -819,6 +867,7 @@ class HDAWGProgramEntry(ProgramEntry):
         
     @property
     def seqc_node(self) -> 'SEQCNode':
+        assert self._program_type == _ProgramType.Loop, 'only implemented for Loop'
         assert self._seqc_node is not None, "compile not called"
         return self._seqc_node
 
@@ -859,13 +908,18 @@ class HDAWGProgramManager:
     """This class contains everything that is needed to create the final seqc program and provides an interface to write
     the required waveforms to the file system. It does not talk to the device."""
     
-    # MIN_WAVEFORM_LEN = 32 #With the command table and discarding playWaveIndexed,
-    MIN_WAVEFORM_LEN = 64 #test double the size, as errors in repeat occured
-    # it should now be relatively reliable to set 32 as the minimum instead of 192
-    WAVEFORM_LEN_QUANTUM = 16
-    MAX_SAMPLE_RATE_DIVIDER = 13
-    
     class Constants:
+        # MIN_WAVEFORM_LEN = 32 #With the command table and discarding playWaveIndexed,
+        MIN_WAVEFORM_LEN = 64 #test double the size, as errors in repeat occured
+        # it should now be relatively reliable to set 32 as the minimum instead of 192
+        WAVEFORM_LEN_QUANTUM = 16
+        MAX_SAMPLE_RATE_DIVIDER = 13
+        
+        MAX_CT_ENTRIES = 1024
+        
+        MIN_REGISTER = 1
+        MAX_REGISTER = 4
+        
         INTEGER_SIZE = 8 #somehow, despite the manual claiming 64 bits, the USERREG creates playback issues before that. so change previous 32 to 16 for safety
         # HOWEVER, this still induces errors. opt for a different method,
         # utilize multiple userregs.
@@ -1018,8 +1072,8 @@ class HDAWGProgramManager:
             pass
         elif isinstance(program,Loop):
             make_compatible(program,
-                            minimal_waveform_length=self.MIN_WAVEFORM_LEN,
-                            waveform_quantum=self.WAVEFORM_LEN_QUANTUM,
+                            minimal_waveform_length=self.Constants.MIN_WAVEFORM_LEN,
+                            waveform_quantum=self.Constants.WAVEFORM_LEN_QUANTUM,
                             sample_rate=sample_rate)
             program_type = _ProgramType.Loop
         elif isinstance(program,Sequence) and isinstance(program[0],LinSpaceNode):
@@ -1030,7 +1084,7 @@ class HDAWGProgramManager:
             raise NotImplementedError('Incompatible program type')
         
         
-        max_available_rate_divider = self._awg.MAX_SAMPLE_RATE_DIVIDER - self._awg.sample_rate_divider
+        max_available_rate_divider = self.Constants.MAX_SAMPLE_RATE_DIVIDER - self._awg.sample_rate_divider
         
         #probably need to disable this to always reinstantiate, cause also always filled.
         # if self._ct_dict is None:
@@ -1053,7 +1107,8 @@ class HDAWGProgramManager:
         # TODO: put compilation in seperate function
         self._ct_start_idx = program_entry.compile(**compiler_settings,
                                   available_registers=available_registers,
-                                  max_rate_divider=max_available_rate_divider
+                                  max_rate_divider=max_available_rate_divider,
+                                  num_channels=self._awg.num_channels,
                                   )
 
         self._programs[name] = program_entry
@@ -1146,7 +1201,7 @@ class HDAWGProgramManager:
         
         replacements_waveforms = self._waveform_memory.waveform_name_replacements()
         replacements_pos_var = self._waveform_memory.pos_var_start_name_replacements()
-        
+
         replacements = replacements_waveforms | replacements_pos_var
         
         #TODO: replace_multiple with empty-dict-check?
@@ -1169,15 +1224,29 @@ class HDAWGProgramManager:
         else:
             lines.append(self._get_program_selection_code())
         
+        ##fill ct?
+        self._ct_dict_json = self.finalize_ct_dict()
+        
         return '\n'.join(lines)
 
-    def finalize_ct_dict(self) -> str:
+    def finalize_ct_dict(self,single_program: Optional[str] = None) -> str:
         
-        #TODO: might need reset before?
-        ct_t = self._ct_dict
-        ct_t = self._waveform_memory.fill_ct_dict(ct_t)
-
-        return {i:json.dumps(ct.as_dict(),) for i,ct in enumerate(ct_t.values())}
+        # pos_var_start = self._waveform_memory.program_pos_var_start[program_name]
+        # 
+        
+        ct_idx_counter = CTidxCounter(0,self._waveform_memory.ct_info_link,self._awg.sample_rate_divider,self._awg.num_channels)
+        
+        if single_program:
+            pos_var_start = self._waveform_memory.program_pos_var_start[single_program]
+            self.programs[single_program]._seqc_node.fill_ct(self._ct_dict,ct_idx_counter)
+        else:
+            for program_name, program in self.programs.items():
+                pos_var_start = self._waveform_memory.program_pos_var_start[program_name]
+                assert ct_idx_counter.ct_idx == pos_var_start, 'something went wrong with CT idx'
+                program._seqc_node.fill_ct(self._ct_dict,ct_idx_counter)
+                ct_idx_counter.new_program()
+        
+        return {i:json.dumps(ct.as_dict(),) for i,ct in enumerate(self._ct_dict.values())}
         
 def linspace_hdawg_compat(program: Sequence[LinSpaceNode]):
     print('TODO: compatibility check / adaption')
@@ -1417,6 +1486,71 @@ def loop_to_seqc(loop: Loop,
         return node
 
 
+def group_commands(commands: List) -> List[Tuple]:
+    return [tuple(group) for _, group in itertools.groupby(commands, key=type)]
+
+@dataclass
+class _ValidLinspaceCommands:
+    Play = Play
+    Increment = Increment
+    Set = Set
+    LoopLabel = LoopLabel
+    LoopJmp = LoopJmp
+    Wait = Wait
+
+def linspace_to_seqc(commands: List[Command],
+                 waveform_to_bin: Callable[[Waveform], Tuple[BinaryWaveform, ...]],
+                 user_registers: UserRegisterManager,
+                 barebone_sample_rate: TimeType,
+                 max_rate_divider: int,
+                 num_channels: int,
+                 setincr_wf_quant: int = HDAWGProgramManager.Constants.MIN_WAVEFORM_LEN,
+                 setincr_marker_option: Tuple[ChannelID] = tuple(),
+                 ) -> 'SEQCNode':
+    
+    
+    binary_marker_data = 0b0000
+    
+    if len(setincr_marker_option)>0:
+        raise NotImplementedError('marker on set / increment / (wait)?')
+
+    set_increment_wf = BinaryWaveform.from_sampled(np.ones(setincr_wf_quant),np.ones(setincr_wf_quant),(binary_marker_data*np.ones(setincr_wf_quant)).astype(int))
+    
+    commands_grouped = group_commands(commands)
+    valid_commands = _ValidLinspaceCommands()
+    node_list = []
+        
+    for command_tuple in commands_grouped:
+        # if ct_idx > 1023:
+        #     raise RuntimeError('too many CT entries in program')
+        match type(command_tuple[0]):
+            case valid_commands.Play:
+                #may differentiate here between concatenation of wf and sequential playback
+                node_list += [WaveformPlayback(c.waveform) for c in command_tuple]
+                continue
+            case valid_commands.LoopLabel:
+                node_list += [CTLoopLabel(c) for c in command_tuple]
+                continue
+            case valid_commands.LoopJmp:
+                node_list += [CTLoopJmp(c) for c in command_tuple]
+                continue
+            case valid_commands.Set:
+                node_list += [CTSet(command_tuple,waveform=set_increment_wf)]
+                continue
+            case valid_commands.Increment:
+                node_list += [CTIncrement(command_tuple,waveform=set_increment_wf)]
+                continue
+            case valid_commands.Wait:
+                node_list += [CTWait(command_tuple,barebone_sample_rate=barebone_sample_rate)]
+                continue
+            case _:
+                raise NotImplementedError()
+            
+    top_node = Scope(node_list)
+   
+    return top_node
+
+
 class SEQCNode(metaclass=abc.ABCMeta):
     __slots__ = ()
 
@@ -1425,7 +1559,11 @@ class SEQCNode(metaclass=abc.ABCMeta):
     @abc.abstractmethod
     def samples(self) -> int:
         pass
-
+    
+    @abc.abstractmethod
+    def ct_idx_usage(self) -> int:
+        """how many ct entries are used here"""
+    
     @abc.abstractmethod
     def stepping_hash(self) -> int:
         """hash of the stepping properties of this node"""
@@ -1482,6 +1620,320 @@ class SEQCNode(metaclass=abc.ABCMeta):
                                                  for attr in getattr(base_class, '__slots__', ()))
 
 
+
+class CTidxCounter:
+    _ct_idx: int
+    _ct_info_dict: dict
+    _awg_rate_divider: int
+    _awg_channels: int
+    _borrowed_samples: int = 0
+    _ch_reg_iter: List[iter] = None
+    _depkey_to_reg_dict_list: List[Dict[DepKey,int]] = None
+    
+    def __post_init__(self):
+        self.new_program()
+    
+    def push(self,n:int=1)->int:
+        """return new value"""
+        self._ct_idx += n
+        return self.ct_idx
+    
+    @property
+    def ct_idx(self)->int:
+        return self._ct_idx
+    
+    @property
+    def awg_rate_divider(self)->int:
+        return self._awg_rate_divider
+    
+    @property
+    def ct_info_dict(self)->int:
+        return self._ct_info_dict
+    
+    def add_borrow(self,samples:int) -> int:
+        self._borrowed_samples += samples
+        return self._borrowed_samples
+    
+    def subtract_borrow(self,samples:int,check:bool=True) -> int:
+        if check:
+            assert self._borrowed_samples - samples >= 0, 'makes no sense'
+        self._borrowed_samples -= samples
+        return self._borrowed_samples
+    
+    def zero_borrow(self,) -> int:
+        self._borrowed_samples = 0
+        return self._borrowed_samples
+    
+    @property
+    def borrowed_samples(self,):
+        return self._borrowed_samples
+    
+    @property
+    def ch_reg_iter(self)->List[iter]:
+        return self._ch_reg_iter
+    
+    @property
+    def depkey_to_reg_dict_list(self)->List[Dict[DepKey,int]]:
+        return self._depkey_to_reg_dict_list
+    
+    def new_program(self):
+        assert self.borrowed_samples==0,'invalid program end'
+        
+        self._ch_reg_iter = [iter(range(HDAWGProgramManager.Constants.MIN_REGISTER,HDAWGProgramManager.Constants.MAX_REGISTER)) for i in range(self._awg_channels)]
+        self._depkey_to_reg_dict_list = [{} for i in range(self._awg_channels)]
+        
+        
+def get_mod2_amp(ct,i):
+    if i%2==0:
+        return ct.amplitude0
+    else:
+        return ct.amplitude1
+
+
+# Command = Union[Increment, Set, LoopLabel, LoopJmp, Wait, Play]
+
+# this bends the concept a bit as it is not really a node anymore but rather
+# a piece in the command list, but don't want to reimplement other code...
+
+class LinspaceCommand(SEQCNode):
+    """Linspace command"""
+    
+    ONE_INDENT_LEVEL = ['  ',]
+    __slots__ = ('command','barebone_sample_rate','waveform')
+    
+    def __init__(self, command: Union[Command,Tuple[Command]],
+                 barebone_sample_rate: Optional[TimeType]=None,
+                 waveform: Optional[Tuple[BinaryWaveform, ...]]=None
+                 ):
+        self.command = command
+        self.barebone_sample_rate = barebone_sample_rate
+        self.waveform = waveform
+        
+    def _visit_nodes(self, waveform_manager: ProgramWaveformManager):
+        return
+    
+    def iter_waveform_playbacks(self):
+        raise NotImplementedError()
+    
+    def same_stepping(self, other):
+        raise NotImplementedError()
+    
+    def stepping_hash(self):
+        raise NotImplementedError()
+           
+    @abc.abstractmethod
+    def fill_ct(self, ct_tuple: Dict[CommandTable], ct_idx_counter: CTidxCounter):
+        """fill CT"""
+
+# Command = Union[Increment, Set, LoopLabel, LoopJmp, Wait, Play]
+#line_prefix now [' ',]
+
+class CTLoopLabel(LinspaceCommand):
+    
+    def samples(self) -> int:
+        return 0
+    
+    def ct_idx_usage(self) -> int:
+        return 0
+    
+    def to_source_code(self, waveform_manager: ProgramWaveformManager,
+                        node_name_generator: Iterator[str],
+                        line_prefix: List[str],
+                        pos_var_name: str,
+                        advance_pos_var: bool = True
+                        ):
+        #command should be tuple(LoopLabel)
+        # assert not advance_pos_var, 'makes no sense'
+        
+        for repeat in self.command:
+            current_line_prefix= ''.join(line_prefix)
+            line_prefix += self.ONE_INDENT_LEVEL
+            yield '{}repeat({}){{'.format(current_line_prefix,repeat.count)
+            
+
+    def fill_CT(self,ct_tuple: Dict[CommandTable], ct_idx_counter: CTidxCounter):
+        return
+
+class CTLoopJmp(LinspaceCommand):
+    
+    def samples(self) -> int:
+        return 0
+    
+    def ct_idx_usage(self) -> int:
+        return 0
+    
+    def to_source_code(self, waveform_manager: ProgramWaveformManager,
+                        node_name_generator: Iterator[str],
+                        line_prefix: List[str],
+                        pos_var_name: str,
+                        advance_pos_var: bool = True
+                        ):
+        #command should be tuple(LoopLabel)
+        # assert not advance_pos_var, 'makes no sense'
+        
+        for repeat in self.command:
+            current_line_prefix= ''.join(line_prefix)
+            line_prefix.pop()
+            yield f'{current_line_prefix}}}'
+            
+
+    def fill_CT(self,ct_tuple: Tuple[CommandTable], ct_idx_counter: CTidxCounter):
+        return
+    
+    
+class CTWait(LinspaceCommand):
+    
+    #the actual samples cannot be viewed without context of the preceding nodes (Set/increment)
+    #so just return as if no preceding command for now...
+    def samples(self) -> int:
+        return sum([w.duration for w in self.command]) * self.barebone_sample_rate
+    
+    def ct_idx_usage(self) -> int:
+        return 1
+    
+    def to_source_code(self, waveform_manager: ProgramWaveformManager,
+                        node_name_generator: Iterator[str],
+                        line_prefix: List[str],
+                        pos_var_name: str,
+                        advance_pos_var: bool = True
+                        ):
+        
+        current_line_prefix = ''.join(line_prefix)
+        advance_cmd = f' ++{pos_var_name};' if advance_pos_var else ''
+        waveform_manager.request_list_append(None,None,self.ct_idx_usage())
+        
+        yield f'{current_line_prefix}executeTableEntry({pos_var_name});' + advance_cmd
+
+
+    def fill_ct(self, ct_dict: Dict[CommandTable], ct_idx_counter: CTidxCounter):
+        #command should be tuple(Wait)
+        total_wait_samples = sum([w.duration for w in self.command])*self.barebone_sample_rate - ct_idx_counter.borrowed_samples
+        assert total_wait_samples >= HDAWGProgramManager.Constants.MIN_WAVEFORM_LEN
+        ct_idx_counter.zero_borrow()
+        
+        ct_idx = ct_idx_counter.ct_idx
+        total_rate_divider = ct_idx_counter.awg_rate_divider
+        
+        for i,ct_key in enumerate(ct_dict.keys()):
+            ct_dict[ct_key].table[ct_idx].waveform.playHold = True
+            ct_dict[ct_key].table[ct_idx].waveform.length = total_wait_samples
+            ct_dict[ct_key].table[ct_idx].waveform.samplingRateDivider = total_rate_divider
+
+        ct_idx_counter.push(self.ct_idx_usage())
+            
+        return
+
+    
+    
+class CTSet(LinspaceCommand):
+    
+    def samples(self) -> int:
+        return 0 #to comply with summing up all samples
+    
+    def sample_borrow(self) -> int:
+        wf_lens = set(map(len, self.waveform))
+        assert len(wf_lens) == 1
+        wf_len, = wf_lens
+        return wf_len
+    
+    def ct_idx_usage(self) -> int:
+        return 1
+    
+    def to_source_code(self, waveform_manager: ProgramWaveformManager,
+                        node_name_generator: Iterator[str],
+                        line_prefix: List[str],
+                        pos_var_name: str,
+                        advance_pos_var: bool = True
+                        ):
+        
+        current_line_prefix = ''.join(line_prefix)
+        advance_cmd = f' ++{pos_var_name};' if advance_pos_var else ''
+        waveform_manager.request_list_append(self.waveform,0,self.ct_idx_usage())
+        
+        yield f'{current_line_prefix}executeTableEntry({pos_var_name});' + advance_cmd
+    
+    def fill_ct(self, ct_dict: Dict[CommandTable], ct_idx_counter: CTidxCounter):
+        #command should be tuple(Set)
+        
+        actual_samples = self.sample_borrow()
+        
+        ct_idx = ct_idx_counter.ct_idx
+        total_rate_divider = ct_idx_counter.awg_rate_divider
+        
+        for i,ct_key in enumerate(ct_dict.keys()):
+            ct_dict[ct_key].table[ct_idx].waveform.samplingRateDivider = total_rate_divider
+            ct_dict[ct_key].table[ct_idx].waveform.index = ct_idx_counter.ct_info_dict[ct_idx][0][i]
+            ct_dict[ct_key].table[ct_idx].waveform.length = actual_samples
+            
+        for setter in self.command:
+            #assuming the channel argument is a number starting from 0
+            #TODO: register handling. <- might be done with depkey now.
+            #TODO: amplitude handling (scaling by awg amp.) - should be done (for now) in ProgramEntry
+            get_mod2_amp(ct_dict[setter.channel//2].table[ct_idx]).register = ct_idx_counter.depkey_to_reg_dict_list[setter.channel][setter.key] \
+                if setter.key in ct_idx_counter.depkey_to_reg_dict_list[setter.channel].keys() \
+                else ct_idx_counter.depkey_to_reg_dict_list[setter.channel].setdefault(setter.key,next(ct_idx_counter.ch_reg_iter[setter.channel]))
+            get_mod2_amp(ct_dict[setter.channel//2].table[ct_idx]).value = setter.value
+            get_mod2_amp(ct_dict[setter.channel//2].table[ct_idx]).increment = False
+
+        ct_idx_counter.push(self.ct_idx_usage())
+        ct_idx_counter.add_borrow(actual_samples)
+
+        return
+
+
+class CTIncrement(LinspaceCommand):
+    
+    def samples(self) -> int:
+        return 0 #to comply with summing up all samples
+    
+    def sample_borrow(self) -> int:
+        wf_lens = set(map(len, self.waveform))
+        assert len(wf_lens) == 1
+        wf_len, = wf_lens
+        return wf_len
+    
+    def ct_idx_usage(self) -> int:
+        return 1
+    
+    def to_source_code(self, waveform_manager: ProgramWaveformManager,
+                       node_name_generator: Iterator[str], line_prefix: str,
+                       pos_var_name: str, advance_pos_var: bool = True):
+        
+        current_line_prefix = ''.join(line_prefix)
+        advance_cmd = f' ++{pos_var_name};' if advance_pos_var else ''
+        waveform_manager.request_list_append(self.waveform,0,self.ct_idx_usage())
+        
+        yield f'{current_line_prefix}executeTableEntry({pos_var_name});' + advance_cmd
+
+    def fill_ct(self, ct_dict: Dict[CommandTable], ct_idx_counter: CTidxCounter):
+        #command should be tuple(Increment)
+        
+        actual_samples = self.sample_borrow()
+        
+        ct_idx = ct_idx_counter.ct_idx
+        total_rate_divider = ct_idx_counter.awg_rate_divider
+        
+        for i,ct_key in enumerate(ct_dict.keys()):
+            ct_dict[ct_key].table[ct_idx].waveform.samplingRateDivider = total_rate_divider
+            ct_dict[ct_key].table[ct_idx].waveform.index = ct_idx_counter.ct_info_dict[ct_idx][0][i]
+            ct_dict[ct_key].table[ct_idx].waveform.length = actual_samples
+            
+        for setter in self.command:
+            #assuming the channel argument is a number starting from 0
+            #TODO: register handling. <- might be done with depkey now.
+            #TODO: amplitude handling (scaling by awg amp.) - should be done (for now) in ProgramEntry
+            get_mod2_amp(ct_dict[setter.channel//2].table[ct_idx]).register = ct_idx_counter.depkey_to_reg_dict_list[setter.channel][setter.key] \
+                if setter.key in ct_idx_counter.depkey_to_reg_dict_list[setter.channel].keys() \
+                else ct_idx_counter.depkey_to_reg_dict_list[setter.channel].setdefault(setter.key,next(ct_idx_counter.ch_reg_iter[setter.channel]))
+            get_mod2_amp(ct_dict[setter.channel//2].table[ct_idx]).value = setter.value
+            get_mod2_amp(ct_dict[setter.channel//2].table[ct_idx]).increment = True
+
+        ct_idx_counter.push(self.ct_idx_usage())
+        ct_idx_counter.add_borrow(actual_samples)
+
+        return
+
+
 class Scope(SEQCNode):
     """Sequence of nodes"""
 
@@ -1492,6 +1944,9 @@ class Scope(SEQCNode):
 
     def samples(self):
         return sum(node.samples() for node in self.nodes)
+    
+    def ct_idx_usage(self):
+        return sum(node.ct_idx_usage() for node in self.nodes)
 
     def iter_waveform_playbacks(self) -> Iterator['WaveformPlayback']:
         for node in self.nodes:
@@ -1518,6 +1973,11 @@ class Scope(SEQCNode):
                                            pos_var_name=pos_var_name,
                                            node_name_generator=node_name_generator,
                                            advance_pos_var=advance_pos_var)
+
+    def fill_CT(self,ct_tuple: Dict[CommandTable], ct_idx_counter: CTidxCounter):
+        for node in self.nodes:
+            node.fill_ct(ct_tuple,ct_idx_counter)
+        return
 
     def __eq__(self, other):
         if type(other) is type(self):
@@ -1557,6 +2017,9 @@ class Repeat(SEQCNode):
 
     def samples(self):
         return self.scope.samples()
+
+    def ct_idx_usage(self) -> int:
+        return 0
 
     def same_stepping(self, other: 'Repeat'):
         return (type(self) == type(other) and
@@ -1644,7 +2107,12 @@ class Repeat(SEQCNode):
         if advance_strategy == self._AdvanceStrategy.POST_ADVANCE:
             yield '{line_prefix}++{pos_var_name};'.format(line_prefix=line_prefix,
                                                           pos_var_name=pos_var_name)
-
+        
+    def fill_CT(self,ct_tuple: Dict[CommandTable], ct_idx_counter: CTidxCounter):
+        self.scope.fill_ct(ct_tuple,ct_idx_counter)
+        return
+            
+        
 
 class SteppingRepeat(SEQCNode):
     STEPPING_REPEAT_COMMENT = ' // stepping repeat'
@@ -1655,7 +2123,10 @@ class SteppingRepeat(SEQCNode):
 
     def samples(self) -> int:
         return self.repetition_count * self.node_cluster[0].samples()
-
+    
+    def ct_idx_usage(self) -> int:
+        return 0
+    
     @property
     def repetition_count(self):
         return len(self.node_cluster)
@@ -1693,6 +2164,11 @@ class SteppingRepeat(SEQCNode):
             node._visit_nodes(waveform_manager)
 
         yield '{line_prefix}}}'.format(line_prefix=line_prefix)
+        
+    def fill_CT(self,ct_tuple: Dict[CommandTable], ct_idx_counter: CTidxCounter):
+        for node in self.node_cluster:
+            node.fill_ct(ct_tuple,ct_idx_counter)
+        return
 
 
 class WaveformPlayback(SEQCNode):
@@ -1700,10 +2176,14 @@ class WaveformPlayback(SEQCNode):
     # ENABLE_DYNAMIC_RATE_REDUCTION = False #TODO: fix this, enable this, and care for pre-set rate reduction in awg tab
     ENABLE_DYNAMIC_RATE_REDUCTION = True #TODO: fix this, enable this, and care for pre-set rate reduction in awg tab
 
-    __slots__ = ('waveform', 'shared', 'rate')
+    __slots__ = ('waveform', 'shared', 'rate', '_via_playwave')
 
     def __init__(self, waveform: Tuple[BinaryWaveform, ...], shared: bool = False,
-                 rate: int = None, max_rate_divider: int = 13):
+                 rate: int = None, max_rate_divider: int = 13,
+                 via_playwave: bool = False
+                 ):
+        if via_playwave:
+            raise NotImplementedError('TBD')
         assert isinstance(waveform, tuple)
         if rate is not None:
             assert rate <= max_rate_divider
@@ -1716,7 +2196,8 @@ class WaveformPlayback(SEQCNode):
         self.waveform = waveform
         self.shared = shared
         self.rate = rate
-
+        self._via_playwave = via_playwave
+        
     def __repr__(self):
         return f"WaveformPlayback(<{id(self)}>)"
 
@@ -1731,7 +2212,12 @@ class WaveformPlayback(SEQCNode):
             if self.rate is not None:
                 wf_len //= (1 << self.rate)
             return wf_len
-
+    
+    def ct_idx_usage(self) -> int:
+        raise NotImplementedError('TODO: either via CT or via playwave?')
+        
+        return 0
+        
     def rate_reduced_waveform(self) -> Tuple[BinaryWaveform]:
         if self.rate is None:
             return self.waveform
@@ -1763,20 +2249,55 @@ class WaveformPlayback(SEQCNode):
                        node_name_generator: Iterator[str], line_prefix: str, pos_var_name: str,
                        advance_pos_var: bool = True):
         rate_adjustment = "" if self.rate is None else f", {self.rate}"
+        
+        if isinstance(line_prefix,list):
+            line_prefix = ''.join(line_prefix)
+        
         if self.shared:
             yield f'{line_prefix}playWave(' \
                   f'{waveform_manager.request_shared(self.rate_reduced_waveform())}' \
                   f'{rate_adjustment});'
         else:
-            waveform_manager.request_list_append(self.rate_reduced_waveform(),self.rate if self.rate is not None else 0)
+            waveform_manager.request_list_append(self.rate_reduced_waveform(),self.rate if self.rate is not None else 0,self.ct_idx_usage())
             play_cmd = f'{line_prefix}executeTableEntry({pos_var_name});'
-
+            
+            #if playwave
+            # wave_str = ','.join(['{i},placeholder({length},true,true)'.format(i=i,length=wave_info.sample_length) for i in range(2*group_index+1,2*group_index+3)]) #should be same for all
+            
             if advance_pos_var:
                 advance_cmd = f' ++{pos_var_name};' #now always step one by one for index
             else:
                 advance_cmd = self.ADVANCE_DISABLED_COMMENT
             yield play_cmd + advance_cmd
 
+    
+    def fill_CT(self,ct_dict: Dict[CommandTable], ct_idx_counter: CTidxCounter):
+        
+        if self._via_playwave:
+            raise NotImplementedError()
+        
+        assert len(ct_dict.keys()) == range(len(self.waveform)), 'inconsistent channel grouping'
+        
+        ct_idx = ct_idx_counter.ct_idx
+        
+        for i,ct_key in enumerate(ct_dict.keys()):
+            ct_dict[ct_key].table[ct_idx].amplitude0.value = 1.0
+            ct_dict[ct_key].table[ct_idx].amplitude0.increment = False
+            ct_dict[ct_key].table[ct_idx].amplitude0.register = 0
+            ct_dict[ct_key].table[ct_idx].amplitude1.value = 1.0
+            ct_dict[ct_key].table[ct_idx].amplitude1.increment = False
+            ct_dict[ct_key].table[ct_idx].amplitude1.register = 0
+            
+            ct_dict[ct_key].table[ct_idx].waveform.index = ct_idx_counter.ct_info_dict[ct_idx][0][i]
+            ct_dict[ct_key].table[ct_idx].waveform.length = self.samples()
+            
+            total_rate_divider = int(ct_idx_counter.ct_info_dict[ct_idx][2])+ct_idx_counter.awg_rate_divider
+            assert total_rate_divider <= HDAWGProgramManager.Constants.MAX_SAMPLE_RATE_DIVIDER
+            ct_dict[ct_key].table[ct_idx].waveform.samplingRateDivider = total_rate_divider
+            
+        ct_idx_counter.push(self.ct_idx_usage())
+            
+        return
 
 # _PROGRAM_SELECTION_BLOCK = """\
 # while (true) {{

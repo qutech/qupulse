@@ -557,8 +557,9 @@ class HDAWGChannelGroup(AWG):
         #TODO: may be omitted if placeholder wfs used, perhaps faster?
         self._program_manager.waveform_memory.sync_to_file_system(self.master_device.waveform_file_system)
         
+        #TODO: move to to_seqc_program
         #needs to be uploaded only after everything else (elf-upload) done
-        self._current_ct_dict = self._program_manager.finalize_ct_dict()
+        self._current_ct_dict = self._program_manager._ct_dict_json
 
         
         # start compiling the source (non-blocking)
