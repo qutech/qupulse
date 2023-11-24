@@ -32,7 +32,7 @@ import time
 from qupulse.utils.types import ChannelID, TimeType, time_from_float
 from qupulse._program._loop import Loop
 from qupulse._program.seqc import HDAWGProgramManager, UserRegister, WaveformFileSystem
-from qupulse.program.linspace import LinSpaceBuilder, LinSpaceNode, to_increment_commands, LoopLabel, Play, Wait, LoopJmp, Set, Increment
+from qupulse.program.linspace import LinSpaceBuilder, LinSpaceNode, to_increment_commands, LoopLabel, Play, Wait, LoopJmp, Set as CTSet, Increment
 from qupulse.hardware.awgs.base import AWG, ChannelNotFoundException, AWGAmplitudeOffsetHandling, AllowedProgramTypes
 from qupulse.hardware.util import traced
 from zhinst.toolkit import Session
@@ -196,7 +196,15 @@ class HDAWGRepresentation:
     @property
     def serial(self) -> str:
         return self._dev_ser
+    
+    @property
+    def sample_clock(self) -> TimeType:
+        """The sample clock of the AWG, w/o sample rate divider"""
+        node_path = '/{}/system/clocks/sampleclock/freq'.format(self.serial)
+        sample_clock = self.api_session.getDouble(node_path)
 
+        return time_from_float(sample_clock)
+    
     def _initialize(self) -> None:
         settings = [(f'/{self.serial}/awgs/*/userregs/*', 0),  # Reset all user registers to 0.
                     (f'/{self.serial}/*/single', 1)]  # Single execution mode of sequence.
@@ -408,6 +416,7 @@ class HDAWGChannelGroup(AWG):
     # MAX_SAMPLE_RATE_DIVIDER = 13
     
     CT_IDLE_STR = '{"header": {"version": "1.2.1"}, "table": []}'
+    AWG_IDLE_PROGRAM = ''
     
     def __init__(self,
                  identifier: str,
@@ -416,15 +425,18 @@ class HDAWGChannelGroup(AWG):
         self.timeout = timeout
 
         self._awg_module = None
+        self._master_device = None
+
         self._program_manager = HDAWGProgramManager(self,self.get_ct_schemata)
         self._elf_manager = None
         self._required_seqc_source = self._program_manager.to_seqc_program()
+        # self._required_seqc_source = self.AWG_IDLE_PROGRAM
+
         self._uploaded_seqc_source = None
         self._current_ct_dict = {i:self.CT_IDLE_STR for i in range(self.num_channels//2)}
         self._current_program = None  # Currently armed program.
         self._upload_generator = ()
 
-        self._master_device = None
         
         #TODO: this was a first test to integrate own code snippets. may be deleted/altered
         self.append_seqc_snippet = None
@@ -555,6 +567,7 @@ class HDAWGChannelGroup(AWG):
         self._required_seqc_source = self._program_manager.to_seqc_program(name)
         
         #TODO: may be omitted if placeholder wfs used, perhaps faster?
+        #(also malfuncitoning due to hacky NoneType for commands)
         self._program_manager.waveform_memory.sync_to_file_system(self.master_device.waveform_file_system)
         
         #TODO: move to to_seqc_program
@@ -703,6 +716,8 @@ class HDAWGChannelGroup(AWG):
         self._program_manager.clear()
         self._current_program = None
         self._required_seqc_source = self._program_manager.to_seqc_program()
+        # self._required_seqc_source = self.AWG_IDLE_PROGRAM
+
         self._current_ct_dict = {i:self.CT_IDLE_STR for i in range(self.num_channels//2)}
         self._start_compile_and_upload()
         self.arm(None)
@@ -748,6 +763,7 @@ class HDAWGChannelGroup(AWG):
         if name is None:
             # self._required_seqc_source = ""
             self._required_seqc_source = self._program_manager.to_seqc_program()
+            # self._required_seqc_source = self.AWG_IDLE_PROGRAM
         else:
             self._required_seqc_source = self._program_manager.to_seqc_program(name)
         if self._required_seqc_source != self._uploaded_seqc_source:
@@ -855,7 +871,7 @@ class HDAWGChannelGroup(AWG):
         imprecision will give rise to errors for very long pulses. fractions.Fraction does not accept floating point
         numerator, which sample_clock could potentially be."""
         return time_from_float(sample_clock) / 2 ** sample_rate_num
-
+    
     def connect_group(self, hdawg_device: HDAWGRepresentation):
         self.disconnect_group()
         self._master_device = weakref.proxy(hdawg_device)

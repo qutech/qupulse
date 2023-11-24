@@ -213,23 +213,24 @@ class ProgramEntry:
         self._program = program #non-normalized
         self.__loop = program
         
-        
+        print(type(program_type))
+        print(type(_ProgramType.Linspace))
+        print(program_type is _ProgramType.Linspace)
         if program_type == _ProgramType.Linspace:
             self._transformed_commands = self._transform_linspace_commands(to_increment_commands(program))
         
         if waveforms is None:
             #gotta force some python 3.10
-            match self._program_type:
-                case _ProgramType.Loop:
+            if program_type is _ProgramType.Loop:
                     waveforms = OrderedDict((node.waveform, None)
                                         for node in program.get_depth_first_iterator() if node.is_leaf()).keys()
-                case _ProgramType.Linspace:
+            elif program_type is _ProgramType.Linspace:
                     #not so clean
                     #TODO: also marker handling not optimal
                     waveforms = OrderedDict((command.waveform, None)
                                         for command in self._transformed_commands if isinstance(command,Play)).keys()
-                case _:
-                    raise NotImplementedError()
+            else:
+                raise NotImplementedError()
                     
         if waveforms:
             self._waveforms = OrderedDict(zip(waveforms, self._sample_waveforms(waveforms)))
@@ -237,10 +238,14 @@ class ProgramEntry:
             self._waveforms = OrderedDict()
     
     @property
-    def _loop(self,):
-        if self._program_type != _ProgramType.Loop:
+    def _loop(self,) -> _ProgramType:
+        if self._program_type is not _ProgramType.Loop and self._program_type is not _ProgramType.FSP:
             raise DeprecationWarning()
         return self.__loop
+    
+    @_loop.setter
+    def _loop(self,program:_ProgramType):
+        self.__loop = program
     
     def _sample_empty_channel(self, time: numpy.ndarray) -> Optional[numpy.ndarray]:
         """Override this in derived class to change how empty channels are handled"""
@@ -256,15 +261,19 @@ class ProgramEntry:
         if any(self._voltage_transformations):
             raise NotImplementedError('how to handle this?')
         
-        trafos_by_channel = {ch: (v,a,o) for ch,v,a,o in zip(self._channels,self._voltage_transformations,self._amplitudes,self._offsets)}
+        _channelname_to_idx = {name: idx for idx, name in enumerate(self._channels)}
+        trafos_by_channel_idx = {ch: (v,a,o) for ch,v,a,o in zip(_channelname_to_idx.values(),self._voltage_transformations,self._amplitudes,self._offsets)}
+        #the channels are now in idx in the commands.
+        
+        print(trafos_by_channel_idx)
         
         for command in command_list:
             if isinstance(command,Union[LoopLabel, LoopJmp, Play, Wait]):
                 continue
             elif isinstance(command,Increment):
-                command.value = command.value / trafos_by_channel[command.channel][1]
+                command.value = command.value / trafos_by_channel_idx[command.channel][1]
             elif isinstance(command,LSPSet):
-                command.value = (command.value - trafos_by_channel[command.channel][2]) / trafos_by_channel[command.channel][1]
+                command.value = (command.value - trafos_by_channel_idx[command.channel][2]) / trafos_by_channel_idx[command.channel][1]
             else:        
                 raise NotImplementedError()
         

@@ -1,6 +1,7 @@
 import abc
 import contextlib
 import dataclasses
+import numpy as np
 from dataclasses import dataclass
 from typing import Mapping, Optional, Sequence, ContextManager, Iterable, Tuple, Union, Dict, List, Iterator
 
@@ -142,6 +143,16 @@ class LinSpaceBuilder(ProgramBuilder):
             if isinstance(value, float):
                 bases.append(value)
                 factors.append(None)
+                continue
+            #there mightbe a bug in some waveform.constant_value, where an array of float instead of float is returned
+            #(goes against the typehints)
+            if isinstance(value, np.ndarray):
+                try:
+                    value = float(value)
+                    bases.append(value)
+                    factors.append(None)
+                except:
+                    raise RuntimeError('hack doesnt work')
                 continue
             offsets = value.offsets
             base = value.base
