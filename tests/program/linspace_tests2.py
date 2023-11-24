@@ -168,13 +168,13 @@ class TiltedCSDTest(TestCase):
         self.assertEqual(self.repeated_commands, commands)
 
 
-class SingletLoadProcessing(TestCase):
-    def setUp(self):
-        wait = ConstantPT(10 ** 6, {'a': '-1. + idx_a * 0.01', 'b': '-.5 + idx_b * 0.02'})
+class SingletLoadProcessing():
+    def setUp(self,time_factor=1e2,rep_factor=2):
+        wait = ConstantPT(64*time_factor*1e1, {'a': '-1. + idx_a * 0.01', 'b': '-.5 + idx_b * 0.02'})
         load_random = ConstantPT(10 ** 5, {'a': -.4, 'b': -.3})
-        meas = ConstantPT(10 ** 5, {'a': 0.05, 'b': 0.06})
+        meas = ConstantPT(64*time_factor, {'a': 0.05, 'b': 0.06})
 
-        singlet_scan = (load_random @ wait @ meas).with_iteration('idx_a', 200).with_iteration('idx_b', 100)
+        singlet_scan = (load_random @ wait @ meas).with_iteration('idx_a', rep_factor*10*2).with_iteration('idx_b', rep_factor*10)
         self.pulse_template = singlet_scan
 
         self.program = LinSpaceIter(length=100, body=(LinSpaceIter(
@@ -255,7 +255,6 @@ class SingletLoadProcessing(TestCase):
     def test_singlet_scan_commands(self):
         commands = to_increment_commands([self.program])
         self.assertEqual(self.commands, commands)
-
 
 class TransformedRampTest(TestCase):
     def setUp(self):
