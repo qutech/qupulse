@@ -43,10 +43,10 @@ class SingleRampTest(TestCase):
 
 
 class PlainCSDTest(TestCase):
-    def setUp(self):
-        hold = ConstantPT(10**6, {'a': '-1. + idx_a * 0.01', 'b': '-.5 + idx_b * 0.02'})
-        scan_a = hold.with_iteration('idx_a', 200)
-        self.pulse_template = scan_a.with_iteration('idx_b', 100)
+    def setUp(self,time_factor=1e3,rep_factor=2):
+        hold = ConstantPT(64*time_factor, {'a': '-1. + idx_a * 0.01', 'b': '-.5 + idx_b * 0.02'})
+        scan_a = hold.with_iteration('idx_a', rep_factor*10)
+        self.pulse_template = scan_a.with_iteration('idx_b', rep_factor*10)
 
         self.program = LinSpaceIter(length=100, body=(LinSpaceIter(
             length=200,
@@ -97,10 +97,10 @@ class PlainCSDTest(TestCase):
 
 
 class TiltedCSDTest(TestCase):
-    def setUp(self):
-        hold = ConstantPT(10**6, {'a': '-1. + idx_a * 0.01 + idx_b * 1e-3', 'b': '-.5 + idx_b * 0.02 - 3e-3 * idx_a'})
-        scan_a = hold.with_iteration('idx_a', 200)
-        self.pulse_template = scan_a.with_iteration('idx_b', 100)
+    def setUp(self,time_factor=1e3,rep_factor=2):
+        hold = ConstantPT(64*time_factor, {'a': '-1. + idx_a * 0.01 + idx_b * 1e-3', 'b': '-.5 + idx_b * 0.02 - 3e-3 * idx_a'})
+        scan_a = hold.with_iteration('idx_a', rep_factor*10)
+        self.pulse_template = scan_a.with_iteration('idx_b', rep_factor*10)
         self.repeated_pt = self.pulse_template.with_repetition(42)
 
         self.program = LinSpaceIter(length=100, body=(LinSpaceIter(
@@ -255,6 +255,7 @@ class SingletLoadProcessing():
     def test_singlet_scan_commands(self):
         commands = to_increment_commands([self.program])
         self.assertEqual(self.commands, commands)
+
 
 class TransformedRampTest(TestCase):
     def setUp(self):

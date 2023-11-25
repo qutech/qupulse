@@ -1233,7 +1233,8 @@ class HDAWGProgramManager:
             lines.append(self._get_program_selection_code())
         
         ##fill ct?
-        self._ct_dict_json = self.finalize_ct_dict()
+        if bool(self.programs):
+            self._ct_dict_json = self.finalize_ct_dict(single_program)
         
         return '\n'.join(lines)
 
