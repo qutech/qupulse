@@ -1538,7 +1538,7 @@ def linspace_to_seqc(commands: List[Command],
         match type(command_tuple[0]):
             case valid_commands.Play:
                 #may differentiate here between concatenation of wf and sequential playback
-                node_list += [WaveformPlayback(c.waveform) for c in command_tuple]
+                node_list += [WaveformPlayback(waveform_to_bin(c.waveform),max_rate_divider=max_rate_divider) for c in command_tuple]
                 continue
             case valid_commands.LoopLabel:
                 node_list += [CTLoopLabel((c,)) for c in command_tuple]
@@ -2254,9 +2254,9 @@ class WaveformPlayback(SEQCNode):
             return wf_len
     
     def ct_idx_usage(self) -> int:
-        raise NotImplementedError('TODO: either via CT or via playwave?')
-        
-        return 0
+        if self._via_playwave:
+            raise NotImplementedError('TODO: how via playwave?')
+        return 1
         
     def rate_reduced_waveform(self) -> Tuple[BinaryWaveform]:
         if self.rate is None:
@@ -2316,7 +2316,7 @@ class WaveformPlayback(SEQCNode):
         if self._via_playwave:
             raise NotImplementedError()
         
-        assert len(ct_dict.keys()) == range(len(self.waveform)), 'inconsistent channel grouping'
+        assert len(ct_dict.keys()) == len(self.waveform), 'inconsistent channel grouping'
         
         ct_idx = ct_idx_counter.ct_idx
         

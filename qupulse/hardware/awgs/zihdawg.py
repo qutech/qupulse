@@ -41,7 +41,9 @@ logger = logging.getLogger('qupulse.hdawg')
 
 #export for zurich tests
 import pickle
-DEBUG_SAVE = r'F:\\ZIHDAWG_DEBUG\\'
+# DEBUG_SAVE = r'F:\\ZIHDAWG_DEBUG\\'
+DEBUG_SAVE = None
+
 from datetime import datetime
 
 def valid_channel(function_object):
