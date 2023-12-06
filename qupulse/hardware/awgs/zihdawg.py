@@ -207,7 +207,7 @@ class HDAWGRepresentation:
     
     def _initialize(self) -> None:
         settings = [(f'/{self.serial}/awgs/*/userregs/*', 0),  # Reset all user registers to 0.
-                    (f'/{self.serial}/*/single', 1)]  # Single execution mode of sequence.
+                    (f'/{self.serial}/awgs/*/single', 1)]  # Single execution mode of sequence.
         for ch in range(0, 8):  # Route marker 1 signal for each channel to marker output.
             if ch % 2 == 0:
                 output = HDAWGTriggerOutSource.OUT_1_MARK_1.value
@@ -221,7 +221,8 @@ class HDAWGRepresentation:
     def reset(self) -> None:
         #TODO: is this intended behavior that sequencer still running? add disable now.
         self.disable_all_sequencers()
-        zhinst.utils.disable_everything(self.api_session, self.serial)
+        #!!! this is buggy
+        # zhinst.utils.disable_everything(self.api_session, self.serial)
         self._initialize()
         for tuple in self.channel_tuples:
             tuple.clear()
@@ -229,7 +230,7 @@ class HDAWGRepresentation:
             (f'/{self.serial}/awgs/*/time', 0),
             (f'/{self.serial}/sigouts/*/range', HDAWGVoltageRange.RNG_1V.value),
             (f'/{self.serial}/awgs/*/outputs/*/amplitude', 1.0),
-            (f'/{self.serial}/outputs/*/modulation/mode', HDAWGModulationMode.OFF.value),
+            (f'/{self.serial}/awgs/*/outputs/*/modulation/mode', HDAWGModulationMode.OFF.value),
         ])
 
         # marker outputs
