@@ -1520,6 +1520,7 @@ def linspace_to_seqc(commands: List[Command],
                  setincr_marker_option: Tuple[ChannelID] = tuple(),
                  ) -> 'SEQCNode':
     
+    channel_set = set(range(num_channels)) #TODO: is this always the case?
     
     binary_marker_data = 0b0000
     
@@ -1531,7 +1532,10 @@ def linspace_to_seqc(commands: List[Command],
     commands_grouped = group_commands(commands)
     valid_commands = _ValidLinspaceCommands()
     node_list = []
-        
+    
+    last_ch_set_val = {ch:valid_commands.Set(ch,0.0) for ch in channel_set}
+    default_ch_incr_val = {ch:valid_commands.Increment(ch,0.0,last_ch_set_val[ch].key) for ch in channel_set}
+    
     for command_tuple in commands_grouped:
         # if ct_idx > 1023:
         #     raise RuntimeError('too many CT entries in program')
@@ -1547,10 +1551,16 @@ def linspace_to_seqc(commands: List[Command],
                 node_list += [CTLoopJmp((c,)) for c in command_tuple]
                 continue
             case valid_commands.Set:
-                node_list += [CTSet(command_tuple,waveform=set_increment_wf)]
+                assert len(set([c.channel for c in command_tuple])) == len(command_tuple), 'Multiple Sets for one chan in one command group'
+                for c in command_tuple:
+                    last_ch_set_val[c.channel] = c
+                node_list += [CTSet(tuple(last_ch_set_val.values()),waveform=set_increment_wf)]
                 continue
             case valid_commands.Increment:
-                node_list += [CTIncrement(command_tuple,waveform=set_increment_wf)]
+                incr_chans = set([c.channel for c in command_tuple])
+                assert len(incr_chans) == len(command_tuple), 'Multiple Increments for one chan in one command group'
+                default_incr_chans = channel_set - incr_chans
+                node_list += [CTIncrement(command_tuple+tuple([default_ch_incr_val[d] for d in default_incr_chans]),waveform=set_increment_wf)]
                 continue
             case valid_commands.Wait:
                 node_list += [CTWait(command_tuple,barebone_sample_rate=barebone_sample_rate)]
