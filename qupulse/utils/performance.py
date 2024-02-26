@@ -1,4 +1,4 @@
-from typing import Tuple
+from typing import *
 import numpy as np
 
 try:
@@ -79,6 +79,74 @@ if numba is None:
     is_monotonic = _is_monotonic_numpy
 else:
     is_monotonic = _is_monotonic_numba
+
+def compress_array_LZ77(array:np.ndarray, allow_intermediates:bool=True, using_diffs:bool=True) -> List[Tuple[int, int, np.ndarray]]:
+    """ This function applies LZ77 to compress a array.
+    """
+
+    assert len(array.shape) == 2
+    assert array.shape[0] > 0
+
+    array_to_compress = array.copy() if not using_diffs else np.concatenate([array[None, 0, :], np.diff(array, axis=0)], axis=0)
+    atc = array_to_compress
+    # print(f"{atc=}")
+
+    compressed_stack = [(0, 0, array_to_compress[0, :])]
+    i = 1
+    while i < atc.shape[0]:
+        os = [0, ]
+        ds = [0, ]
+        
+        o = 1
+        d = 0
+        while o <= i:
+            d = 0
+            while i+d < atc.shape[0] and np.array_equal(atc[i-o+(d%o)], atc[i+d]):
+                d += 1
+            if d > 0:
+                os.append(o)
+                ds.append(d)
+            o += 1
+
+        os = np.array(os)
+        ds = np.array(ds)
+
+        if os[-1] > 0:
+            if os[0] == 0:
+                os = os[1:]
+                ds = ds[1:]
+            if not allow_intermediates:
+                mask = os<=ds
+                os = os[mask]
+                ds = ds[mask]
+            if len(os) == 0:
+                os, ds = [0], [0]
+            j = len(ds)-np.argmax(ds[::-1])-1
+            sos, sds = os[j], ds[j]
+            i += ds[j]+1
+        else:
+            sos, sds = 0, 0
+            i += 0+1
+        if i-1 < atc.shape[0]:
+            sa = atc[i-1]
+        else:
+            sa = None
+        compressed_stack.append((sos, sds, sa))
+
+
+    return compressed_stack
+
+def uncompress_array_LZ77(compressed_array) -> np.ndarray:
+    output = []
+
+    for o, l, c in compressed_array:
+        initial_length = len(output)
+        for i in range(l):
+            output.append(output[initial_length-o+i])
+        if c is not None:
+            output.append(c)
+
+    return np.array(output)
 
 
 
