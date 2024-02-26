@@ -1,1 +1,0 @@
-Promote parts of the private subpackage `qupulse._program` to the public subpackage `qupulse.program`, i.e. `loop`, `volatile`, `transformation` and `waveforms`. This allows external packages/drivers to rely on stability of the `Loop` class.

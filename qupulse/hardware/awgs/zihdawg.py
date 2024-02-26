@@ -30,14 +30,21 @@ except ImportError:
 import time
 
 from qupulse.utils.types import ChannelID, TimeType, time_from_float
-from qupulse.program.loop import Loop, make_compatible
+from qupulse._program._loop import Loop
 from qupulse._program.seqc import HDAWGProgramManager, UserRegister, WaveformFileSystem
-from qupulse.hardware.awgs.base import AWG, ChannelNotFoundException, AWGAmplitudeOffsetHandling
+from qupulse.program.linspace import LinSpaceBuilder, LinSpaceNode, to_increment_commands, LoopLabel, Play, Wait, LoopJmp, Set as CTSet, Increment
+from qupulse.hardware.awgs.base import AWG, ChannelNotFoundException, AWGAmplitudeOffsetHandling, AllowedProgramTypes
 from qupulse.hardware.util import traced
-
+from zhinst.toolkit import Session
 
 logger = logging.getLogger('qupulse.hdawg')
 
+#export for zurich tests
+import pickle
+# DEBUG_SAVE = r'F:\\ZIHDAWG_DEBUG\\'
+DEBUG_SAVE = None
+
+from datetime import datetime
 
 def valid_channel(function_object):
     """Check if channel is a valid AWG channels. Expects channel to be 2nd argument after self."""
@@ -104,19 +111,29 @@ class HDAWGRepresentation:
         :param reset:             Reset device before initialization
         :param timeout:           Timeout in seconds for uploading
         """
-        self._api_session = zhinst_core.ziDAQServer(data_server_addr, data_server_port, api_level_number)
+        
+        self._zhinst_session = Session(data_server_addr, data_server_port)
+        
+        #api_level_number not in use anymore (?)
+        self._device = self._zhinst_session.connect_device(serial=device_serial, interface=device_interface)
+
+        self._api_session = self._zhinst_session.daq_server
         assert zhinst.utils.api_server_version_check(self.api_session)  # Check equal data server and api version.
-        self.api_session.connectDevice(device_serial, device_interface)
+
         self.default_timeout = timeout
         self._dev_ser = device_serial
 
         if reset:
             # Create a base configuration: Disable all available outputs, awgs, demods, scopes,...
+            #TODO: this currently creates errors when the sequencer is running as waveforms are deleted. need to disable sequencer separately?
+            self.disable_all_sequencers()
             zhinst.utils.disable_everything(self.api_session, self.serial)
 
         self._initialize()
-
-        waveform_path = pathlib.Path(self.api_session.awgModule().getString('directory'), 'awg', 'waves')
+        
+        self._base_path = pathlib.Path(self.api_session.awgModule().getString('directory'))
+        waveform_path = pathlib.Path(self._base_path,'awg', 'waves')
+        
         self._waveform_file_system = WaveformFileSystem.get_waveform_file_system(waveform_path)
         self._channel_groups: Dict[HDAWGChannelGrouping, Tuple[HDAWGChannelGroup, ...]] = {}
 
@@ -141,8 +158,15 @@ class HDAWGRepresentation:
         if grouping is None:
             grouping = self.channel_grouping
         # activates channel groups
+        # TODO: sometimes weird behavior with MDS? does this code always do what it is intended for?
         self.channel_grouping = grouping
-
+        
+    def disable_all_sequencers(self):
+        for i in range(4):
+            node_path = '/{}/awgs/{:d}/enable'.format(self.serial, i)
+            self.api_session.setInt(node_path, 0)
+            self.api_session.sync()  # Global sync: Ensure settings have taken effect on the device.
+            
     @property
     def waveform_file_system(self) -> WaveformFileSystem:
         return self._waveform_file_system
@@ -174,22 +198,33 @@ class HDAWGRepresentation:
     @property
     def serial(self) -> str:
         return self._dev_ser
+    
+    @property
+    def sample_clock(self) -> TimeType:
+        """The sample clock of the AWG, w/o sample rate divider"""
+        node_path = '/{}/system/clocks/sampleclock/freq'.format(self.serial)
+        sample_clock = self.api_session.getDouble(node_path)
 
+        return time_from_float(sample_clock)
+    
     def _initialize(self) -> None:
         settings = [(f'/{self.serial}/awgs/*/userregs/*', 0),  # Reset all user registers to 0.
-                    (f'/{self.serial}/*/single', 1)]  # Single execution mode of sequence.
+                    (f'/{self.serial}/awgs/*/single', 1)]  # Single execution mode of sequence.
         for ch in range(0, 8):  # Route marker 1 signal for each channel to marker output.
             if ch % 2 == 0:
                 output = HDAWGTriggerOutSource.OUT_1_MARK_1.value
             else:
-                output = HDAWGTriggerOutSource.OUT_1_MARK_2.value
+                output = HDAWGTriggerOutSource.OUT_2_MARK_1.value
             settings.append(['/{}/triggers/out/{}/source'.format(self.serial, ch), output])
 
         self.api_session.set(settings)
         self.api_session.sync()  # Global sync: Ensure settings have taken effect on the device.
 
     def reset(self) -> None:
-        zhinst.utils.disable_everything(self.api_session, self.serial)
+        #TODO: is this intended behavior that sequencer still running? add disable now.
+        self.disable_all_sequencers()
+        #!!! this is buggy
+        # zhinst.utils.disable_everything(self.api_session, self.serial)
         self._initialize()
         for tuple in self.channel_tuples:
             tuple.clear()
@@ -197,7 +232,7 @@ class HDAWGRepresentation:
             (f'/{self.serial}/awgs/*/time', 0),
             (f'/{self.serial}/sigouts/*/range', HDAWGVoltageRange.RNG_1V.value),
             (f'/{self.serial}/awgs/*/outputs/*/amplitude', 1.0),
-            (f'/{self.serial}/outputs/*/modulation/mode', HDAWGModulationMode.OFF.value),
+            (f'/{self.serial}/awgs/*/outputs/*/modulation/mode', HDAWGModulationMode.OFF.value),
         ])
 
         # marker outputs
@@ -206,7 +241,7 @@ class HDAWGRepresentation:
             if ch % 2 == 0:
                 output = HDAWGTriggerOutSource.OUT_1_MARK_1.value
             else:
-                output = HDAWGTriggerOutSource.OUT_1_MARK_2.value
+                output = HDAWGTriggerOutSource.OUT_2_MARK_1.value
             marker_settings.append([f'/{self.serial}/triggers/out/{ch}/source', output])
         self.api_session.set(marker_settings)
         self.api_session.sync()
@@ -226,6 +261,13 @@ class HDAWGRepresentation:
                     return group
             else:
                 raise
+            
+    def set_sample_clock(self,sample_clock_Hz: float):
+        assert sample_clock_Hz >= 1e8, 'Must be >= 100MHz'
+        assert sample_clock_Hz <= 2.4e9, 'Must be <= 2.4GHz'
+        
+        node_path = '/{}/system/clocks/sampleclock/freq'.format(self.serial)
+        sample_clock_Hz = self.api_session.setDouble(node_path,sample_clock_Hz)
 
     @property
     def channel_grouping(self) -> 'HDAWGChannelGrouping':
@@ -253,7 +295,7 @@ class HDAWGRepresentation:
         for group in self._get_groups(channel_grouping):
             if not group.is_connected():
                 group.connect_group(self)
-
+        
     @valid_channel
     def offset(self, channel: int, voltage: float = None) -> float:
         """Query channel offset voltage and optionally set it."""
@@ -273,10 +315,16 @@ class HDAWGRepresentation:
     def get_status_table(self):
         """Return node tree of instrument with all important settings, as well as each channel group as tuple."""
         return (self.api_session.get('/{}/*'.format(self.serial)),
-                self.channel_pair_AB.awg_module.get('awgModule/*'),
-                self.channel_pair_CD.awg_module.get('awgModule/*'),
-                self.channel_pair_EF.awg_module.get('awgModule/*'),
-                self.channel_pair_GH.awg_module.get('awgModule/*'))
+                # self.channel_pair_AB.awg_module.get('awgModule/*'),
+                # self.channel_pair_CD.awg_module.get('awgModule/*'),
+                # self.channel_pair_EF.awg_module.get('awgModule/*'),
+                # self.channel_pair_GH.awg_module.get('awgModule/*'),
+                self.api_session.get('/{}/awg/{:d}/*'.format(self.serial,0)),
+                self.api_session.get('/{}/awg/{:d}/*'.format(self.serial,1)),
+                self.api_session.get('/{}/awg/{:d}/*'.format(self.serial,2)),
+                self.api_session.get('/{}/awg/{:d}/*'.format(self.serial,3)),
+                
+                )
 
     def _get_mds_group_idx(self) -> Optional[int]:
         idx = 0
@@ -367,9 +415,12 @@ class HDAWGModulationMode(Enum):
 
 @traced
 class HDAWGChannelGroup(AWG):
-    MIN_WAVEFORM_LEN = 192
-    WAVEFORM_LEN_QUANTUM = 16
-
+    
+    # MAX_SAMPLE_RATE_DIVIDER = 13
+    
+    CT_IDLE_STR = '{"header": {"version": "1.2.1"}, "table": []}'
+    AWG_IDLE_PROGRAM = ''
+    
     def __init__(self,
                  identifier: str,
                  timeout: float) -> None:
@@ -377,23 +428,33 @@ class HDAWGChannelGroup(AWG):
         self.timeout = timeout
 
         self._awg_module = None
-        self._program_manager = HDAWGProgramManager()
+        self._master_device = None
+
+        self._program_manager = HDAWGProgramManager(self,self.get_ct_schemata)
         self._elf_manager = None
         self._required_seqc_source = self._program_manager.to_seqc_program()
+        # self._required_seqc_source = self.AWG_IDLE_PROGRAM
+
         self._uploaded_seqc_source = None
+        self._current_ct_dict = {i:self.CT_IDLE_STR for i in range(self.num_channels//2)}
         self._current_program = None  # Currently armed program.
         self._upload_generator = ()
 
-        self._master_device = None
-
+        
+        #TODO: this was a first test to integrate own code snippets. may be deleted/altered
+        self.append_seqc_snippet = None
+        
     def _initialize_awg_module(self):
         """Only run once"""
+        #TODO: if at some point the offline compilation works with grouped mode,
+        # this can be reworked as awgModules no longer needed (in favor of zhinst_toolkit)
         if self._awg_module:
             self._awg_module.clear()
         self._awg_module = self.master_device.api_session.awgModule()
         self._awg_module.set('awgModule/device', self.master_device.serial)
         self._awg_module.set('awgModule/index', self.awg_group_index)
         self._awg_module.execute()
+        # self._elf_manager = ELFManager(self.awg_module)
         self._elf_manager = ELFManager.DEFAULT_CLS(self._awg_module)
         self._upload_generator = ()
 
@@ -403,7 +464,7 @@ class HDAWGChannelGroup(AWG):
         if self._master_device is None:
             raise HDAWGValueError('Channel group is currently not connected')
         return self._master_device
-
+    
     @property
     def awg_module(self) -> zhinst_core.AwgModule:
         """Each AWG channel group has its own awg module to manage program compilation and upload."""
@@ -422,11 +483,12 @@ class HDAWGChannelGroup(AWG):
         return 2 * self.num_channels
 
     def upload(self, name: str,
-               program: Loop,
+               program: AllowedProgramTypes,
                channels: Tuple[Optional[ChannelID], ...],
                markers: Tuple[Optional[ChannelID], ...],
                voltage_transformation: Tuple[Callable, ...],
-               force: bool = False) -> None:
+               force: bool = False,
+               ) -> None:
         """Upload a program to the AWG.
 
         Physically uploads all waveforms required by the program - excluding those already present -
@@ -452,6 +514,12 @@ class HDAWGChannelGroup(AWG):
         Returning from setting user register in seqc can take from 50ms to 60 ms. Fluctuates heavily. Not a good way to
         have deterministic behaviour "setUserReg(PROG_SEL, PROG_IDLE);".
         """
+        
+        # TODO
+        # now in hardwaresetup cause tabor also affected
+        # roll_constant_waveforms(program=program,
+        #                         minimal_waveform_quanta: int, waveform_quantum: int, sample_rate: TimeType)
+        
         if len(channels) != self.num_channels:
             raise HDAWGValueError('Channel ID not specified')
         if len(markers) != self.num_markers:
@@ -463,13 +531,17 @@ class HDAWGChannelGroup(AWG):
             raise HDAWGValueError('{} is already known on {}'.format(name, self.identifier))
 
         # Go to qupulse nanoseconds time base.
+        # pulse lengths of 1 and 2 times 16 samples are bad in 2.4Gs as they are inaccurate on floating point level
+        # leading to weird qupulse behavior when comparing program.duration (ExpressionScalar/float) with sample rate (TimeType)
         q_sample_rate = self.sample_rate / 10**9
-
-        # Adjust program to fit criteria.
-        make_compatible(program,
-                        minimal_waveform_length=self.MIN_WAVEFORM_LEN,
-                        waveform_quantum=self.WAVEFORM_LEN_QUANTUM,
-                        sample_rate=q_sample_rate)
+        
+        #move compat check to add_program to have less mess with typechecks of program
+        # # Adjust program to fit criteria.
+        # if not 'FixedStructureProgram' in [t.__name__ for t in type(program).__mro__]:
+        #     make_compatible(program,
+        #                     minimal_waveform_length=self.MIN_WAVEFORM_LEN,
+        #                     waveform_quantum=self.WAVEFORM_LEN_QUANTUM,
+        #                     sample_rate=q_sample_rate)
 
         if self._amplitude_offset_handling == AWGAmplitudeOffsetHandling.IGNORE_OFFSET:
             voltage_offsets = (0.,) * self.num_channels
@@ -490,11 +562,22 @@ class HDAWGChannelGroup(AWG):
                                           voltage_transformations=voltage_transformation,
                                           sample_rate=q_sample_rate,
                                           amplitudes=amplitudes,
-                                          offsets=voltage_offsets)
-
-        self._required_seqc_source = self._program_manager.to_seqc_program()
+                                          offsets=voltage_offsets,
+                                          append_seqc_snippet=self.append_seqc_snippet,
+                                          )
+        
+        #USERREGBUG: only upload single program always?
+        self._required_seqc_source = self._program_manager.to_seqc_program(name)
+        
+        #TODO: may be omitted if placeholder wfs used, perhaps faster?
+        #(also malfuncitoning due to hacky NoneType for commands)
         self._program_manager.waveform_memory.sync_to_file_system(self.master_device.waveform_file_system)
+        
+        #TODO: move to to_seqc_program
+        #needs to be uploaded only after everything else (elf-upload) done
+        self._current_ct_dict = self._program_manager._ct_dict_json
 
+        
         # start compiling the source (non-blocking)
         self._start_compile_and_upload()
 
@@ -503,17 +586,106 @@ class HDAWGChannelGroup(AWG):
         self._upload_generator = self._elf_manager.compile_and_upload(self._required_seqc_source)
         logger.debug(f"_start_compile_and_upload: %r", next(self._upload_generator, "Finished"))
 
-    def _wait_for_compile_and_upload(self):
+    def _wait_for_compile_and_upload_elf(self):
         for state in self._upload_generator:
             logger.debug("wait_for_compile_and_upload: %r", state)
             time.sleep(.1)
-        self._uploaded_seqc_source = self._required_seqc_source
+        
         logger.debug("AWG %d: wait_for_compile_and_upload has finished", self.awg_group_index)
 
+    def _wait_for_compile_and_upload(self):
+        
+        self._wait_for_compile_and_upload_elf()
+        
+        print('ELF finished')
+        
+        #extra sleep here...
+        time.sleep(0.1)
+        # print(self._program_manager._waveform_memory._zhinst_waveforms_tuple)
+        #TODO: this should be the most time-consuming here...
+        # with self._master_device._device.set_transaction(): #disable set_transaction for now.
+        for i in range(self.num_channels//2):
+            self._master_device._device.awgs[self.awg_group_index+i].write_to_waveform_memory(self._program_manager._waveform_memory._zhinst_waveforms_tuple[i])
+        
+        time.sleep(0.1)
+
+        # #try to do it 2 times...
+        # for i in range(self.num_channels//2):
+        #     self._master_device._device.awgs[self.awg_group_index+i].write_to_waveform_memory(self._program_manager._waveform_memory._zhinst_waveforms_tuple[i])
+        
+        
+        print('WFs finished')
+        # print(self._current_ct_dict)
+        
+        # self._upload_ct_dict(self._current_ct_dict)
+        
+        #test other way of uploading this
+        # with self._master_device._device.set_transaction(): #disable set_transaction for now.
+        for i in range(self.num_channels//2):
+            self._master_device._device.awgs[self.awg_group_index+i].commandtable.upload_to_device(self._current_ct_dict[i])
+        
+        
+        print('CT finished')
+        
+        #TODO: sometimes there seemed to be an error with upload - why?
+        time.sleep(0.1)
+        
+        #!!! does this mean everything uploaded? check others too, or not relevant if grouped / potentially harmful?
+        self._master_device._device.awgs[self.awg_group_index].ready.wait_for_state_change(1,timeout=self.timeout)
+        
+        print('state change ready')
+        
+        sequencer_ready_status = self._master_device.api_session.getInt('/{}/AWGS/{}/READY'.format(self.master_device.serial, self.awg_group_index))
+        
+        if not  sequencer_ready_status == 1:
+            print('sequencer ready status: ' + str(sequencer_ready_status))
+            raise RuntimeError('the Zurich package did not appropriately wait for state change')
+            
+        
+        #only after everything done set correctly.
+        self._uploaded_seqc_source = self._required_seqc_source
+
+    def set_sample_rate_num(self,sample_rate_num: int):
+        assert type(sample_rate_num)==int, 'Must be integer'
+        assert sample_rate_num >= 0, 'Must be >=0'
+        assert sample_rate_num <= 13, 'Must be <= 13'
+        
+        node_path = '/{}/awgs/{}/time'.format(self.master_device.serial, self.awg_group_index)
+        self.master_device.api_session.setInt(node_path,sample_rate_num)
+
+    @property
+    def commandtable(self) -> str:
+        node_base_path = '/{}/awgs/{}'.format(self.master_device.serial, self.awg_group_index)
+        tree_dict =  self.master_device.api_session.getString(node_base_path+'/commandtable/data')
+        return tree_dict[str(self.master_device.serial)]["awgs"][str(self.awg_group_index)]["commandtable"]["data"]
+        
+    @commandtable.setter
+    def commandtable(self, ct: str):
+        node_base_path = '/{}/awgs/{}'.format(self.master_device.serial, self.awg_group_index)
+        self.master_device.api_session.set(node_base_path+'/commandtable/data', ct)
+    
+    def get_commandtable_schema(self,awg_int=None) -> dict:
+        node_base_path = '/{}/awgs/{}'.format(self.master_device.serial, awg_int if awg_int is not None else self.awg_group_index)
+        #there seems to be no method to get "vector" entries directly?
+        tree_dict = self.master_device.api_session.get(node_base_path+'/commandtable/schema')
+
+        return tree_dict[str(self.master_device.serial).lower()]["awgs"][str(awg_int if awg_int is not None else self.awg_group_index)]["commandtable"]["schema"][0]["vector"]
+    
+    def get_ct_schemata(self, idx: tuple=(0,1,2,3)) -> Tuple[str]:
+        return tuple([self.get_commandtable_schema(i) for i in idx])
+    
+    def _upload_ct_dict(self, ct_dict: Dict[int,str]):
+        for i,ct in enumerate(ct_dict.values()):
+            node_base_path = '/{}/awgs/{}'.format(self.master_device.serial, self.awg_group_index+i)
+            self.master_device.api_session.set(node_base_path+'/commandtable/data', ct)
+    
     def was_current_program_finished(self) -> bool:
         """Return true if the current program has finished at least once"""
-        playback_finished_mask = int(HDAWGProgramManager.Constants.PLAYBACK_FINISHED_MASK, 2)
-        return bool(self.user_register(HDAWGProgramManager.Constants.PROG_SEL_REGISTER) & playback_finished_mask)
+        # playback_finished_mask = int(HDAWGProgramManager.Constants.PLAYBACK_FINISHED_MASK, 2)
+        # return bool(self.user_register(HDAWGProgramManager.Constants.PROG_SEL_REGISTER) & playback_finished_mask)
+        #TODO: currently disabled.
+        return 'Function currently disabled'
+        # return bool(self.user_register(HDAWGProgramManager.Constants.PROG_SEL_REGISTER)==HDAWGProgramManager.Constants.PLAYBACK_FINISHED_VALUE)
 
     def set_volatile_parameters(self, program_name: str, parameters: Mapping[str, numbers.Real]):
         """Set the values of parameters which were marked as volatile on program creation."""
@@ -532,7 +704,12 @@ class HDAWGChannelGroup(AWG):
             name: The name of the program to remove.
         """
         self._program_manager.remove(name)
-        self._required_seqc_source = self._program_manager.to_seqc_program()
+        #USERREGBUG
+        # self._required_seqc_source = self._program_manager.to_seqc_program()
+        if name != self._current_program:
+            self._required_seqc_source = self._program_manager.to_seqc_program(self._current_program)
+        else:
+            self._required_seqc_source = self._program_manager.to_seqc_program()
 
     def clear(self) -> None:
         """Removes all programs and waveforms from the AWG.
@@ -542,9 +719,39 @@ class HDAWGChannelGroup(AWG):
         self._program_manager.clear()
         self._current_program = None
         self._required_seqc_source = self._program_manager.to_seqc_program()
+        # self._required_seqc_source = self.AWG_IDLE_PROGRAM
+
+        self._current_ct_dict = {i:self.CT_IDLE_STR for i in range(self.num_channels//2)}
         self._start_compile_and_upload()
         self.arm(None)
-
+    
+    #TODO: this only becomes relevant for self-triggering in the future
+    def _prepare_for_DIO(self):
+        
+        node_base = '/{}'.format(self.master_device.serial)
+        
+        self.master_device.api_session.setInt(node_base+'/DIOS/0/MODE',1)
+        self.master_device.api_session.setInt(node_base+'/DIOS/0/DRIVE',1)
+        for i in range(4):
+            self.master_device.api_session.setInt(node_base+f'/AWGS/{i}/DIO/VALID/POLARITY',2)
+            self.master_device.api_session.setInt(node_base+f'/AWGS/{i}/DIO/VALID/INDEX',0)
+            self.master_device.api_session.setInt(node_base+f'/AWGS/{i}/DIO/STROBE/SLOPE',0)
+        
+        
+        with self.master_device._device.set_transaction():
+            # Settings in 'DIO' tab
+            self.master_device._device.dios[0].drive(0b0001)                        # Enable driving first byte
+            self.master_device._device.dios[0].output(0x00)                         # Reset DIO to clean state
+            self.master_device._device.dios[0].mode('awg_sequencer_commands')       # Switch to "AWG Sequencer" mode
+            
+            # Settings in "AWG Sequencer" - "Trigger" sub-tab
+            self.master_device._device.awgs["*"].dio.valid.polarity('high')
+            self.master_device._device.awgs["*"].dio.valid.index(0)
+            self.master_device._device.awgs["*"].dio.strobe.slope('off')
+        
+        # pass
+        return  
+        
     def arm(self, name: Optional[str]) -> None:
         """Load the program 'name' and arm the device for running it. If name is None the awg will "dearm" its current
         program.
@@ -552,18 +759,43 @@ class HDAWGChannelGroup(AWG):
         Currently hardware triggering is not implemented. The HDAWGProgramManager needs to emit code that calls
         `waitDigTrigger` to do that.
         """
-        if self.num_channels > 8:
-            if name is None:
-                self._required_seqc_source = ""
-            else:
-                self._required_seqc_source = self._program_manager.to_seqc_program(name)
-            self._start_compile_and_upload()
-
+        
+        # self._prepare_for_DIO()
+        
+        #!!! this now is a workaround to avoid playback problems occuring when using the program selection via user reg.
+        if name is None:
+            # self._required_seqc_source = ""
+            self._required_seqc_source = self._program_manager.to_seqc_program()
+            # self._required_seqc_source = self.AWG_IDLE_PROGRAM
+        else:
+            self._required_seqc_source = self._program_manager.to_seqc_program(name)
         if self._required_seqc_source != self._uploaded_seqc_source:
+            self._start_compile_and_upload()
+        
+        if self._required_seqc_source != self._uploaded_seqc_source:
+        #!!! does this break if it's already equal? should not...
+        #TODO: clear_program does not work yet somehow...
             self._wait_for_compile_and_upload()
+        
         assert self._required_seqc_source == self._uploaded_seqc_source, "_wait_for_compile_and_upload did not work " \
-                                                                         "as expected."
-
+                                                                 "as expected."
+        
+        #DEBUG
+        #it doesn't save waveforms objects correctly... apparently.
+        debug_waveforms = [None,]*4
+        for i,waveforms in enumerate(self._program_manager._waveform_memory._zhinst_waveforms_tuple):
+            debug_waveforms[i] = {j:(w[0].tolist(),w[1].tolist(),w[2].tolist()) for j,w in waveforms.items()}
+        p_dict = {}
+        p_dict['seqc_source'] = self._required_seqc_source
+        p_dict['ct_dict'] = self._current_ct_dict
+        # p_dict['waveforms_tuple'] = self._program_manager._waveform_memory._zhinst_waveforms_tuple
+        p_dict['waveforms_tuple'] = debug_waveforms
+        if DEBUG_SAVE is not None:
+            with open(DEBUG_SAVE+str(datetime.now()).replace(':','_').replace('.','_')+str(self.master_device.serial)+'.pickle', 'wb') as handle:
+                pickle.dump(p_dict, handle, protocol=pickle.HIGHEST_PROTOCOL)
+        # DEBUG_SAVE
+        
+        
         self.user_register(self._program_manager.Constants.TRIGGER_REGISTER, 0)
 
         if name is None:
@@ -578,14 +810,24 @@ class HDAWGChannelGroup(AWG):
             # set the registers of initial repetition counts
             for register, value in self._program_manager.get_register_values(name).items():
                 assert register not in (self._program_manager.Constants.PROG_SEL_REGISTER,
-                                        self._program_manager.Constants.TRIGGER_REGISTER)
+                                        self._program_manager.Constants.TRIGGER_REGISTER,
+                                        # self._program_manager.Constants.PLAYBACK_FINISHED_AND_RESET_REGISTER,
+                                        )
                 self.user_register(register, value)
-
+            
+            #TODO: why is this even here then?
             self.user_register(self._program_manager.Constants.PROG_SEL_REGISTER,
-                               self._program_manager.name_to_index(name) | int(self._program_manager.Constants.NO_RESET_MASK, 2))
-
-        if name is not None:
-            self.enable(True)
+                               # self._program_manager.name_to_index(name) | int(self._program_manager.Constants.NO_RESET_MASK, 2))
+                               self._program_manager.name_to_index(name))
+            # self.user_register(self._program_manager.Constants.PLAYBACK_FINISHED_REGISTER,
+            #                     # self._program_manager.name_to_index(name) | int(self._program_manager.Constants.NO_RESET_MASK, 2))
+            #                     0)
+        # this was a workaround for problems in the past and I totally forgot why it was here
+        # for ch_pair in self.master.channel_tuples:
+        #    ch_pair._wait_for_compile_and_upload()
+        
+        # !!!as a workaround: do not enable upon arm anymore...
+        # self.enable(True)
 
     def run_current_program(self) -> None:
         """Run armed program."""
@@ -603,6 +845,22 @@ class HDAWGChannelGroup(AWG):
     def programs(self) -> Set[str]:
         """The set of program names that can currently be executed on the hardware AWG."""
         return set(self._program_manager.programs.keys())
+    
+    @property
+    def sample_rate_divider(self) -> int:
+        """The integer sample rate divider of the AWG channel group, [0,13],
+        sample rate = sample clock / 2**divider"""
+        node_path = '/{}/awgs/{}/time'.format(self.master_device.serial, self.awg_group_index)
+        sample_rate_num = self.master_device.api_session.getInt(node_path)
+        return sample_rate_num
+    
+    @sample_rate_divider.setter
+    def sample_rate_divider(self, divider: int) -> int:
+        """The integer sample rate divider of the AWG channel group, [0,13],
+        sample rate = sample clock / 2**divider"""
+        node_path = '/{}/awgs/{}/time'.format(self.master_device.serial, self.awg_group_index)
+        self.master_device.api_session.setInt(node_path,divider)
+        return self.sample_rate_divider
 
     @property
     def sample_rate(self) -> TimeType:
@@ -616,7 +874,7 @@ class HDAWGChannelGroup(AWG):
         imprecision will give rise to errors for very long pulses. fractions.Fraction does not accept floating point
         numerator, which sample_clock could potentially be."""
         return time_from_float(sample_clock) / 2 ** sample_rate_num
-
+    
     def connect_group(self, hdawg_device: HDAWGRepresentation):
         self.disconnect_group()
         self._master_device = weakref.proxy(hdawg_device)
@@ -667,15 +925,19 @@ class MDSChannelGroup(HDAWGChannelGroup):
     def __init__(self,
                  identifier: str,
                  timeout: float) -> None:
-        super().__init__(identifier, timeout)
-
+        #change order
         self._master_device = None
         self._mds_devices = None
-
+        
+        super().__init__(identifier, timeout)
+        
     @property
     def num_channels(self) -> int:
         """Number of channels"""
-        return len(self._mds_devices) * 8
+        if self._mds_devices is not None:
+            return len(self._mds_devices) * 8
+        else:
+            return 0
 
     @property
     def awg_group_index(self):
@@ -698,11 +960,15 @@ class MDSChannelGroup(HDAWGChannelGroup):
     def enable(self, status: bool = None) -> bool:
         """Start the AWG sequencer."""
         # There is also 'awgModule/awg/enable', which seems to have the same functionality.
-        node_path = '/{}/awgs/{:d}/enable'.format(self.master_device.serial, 0)
+        node_path = '/{}/awgs/{:d}/enable'.format(self.master_device.serial, self.awg_group_index)
         if status is not None:
-            self.awg_module.set('awg/enable', int(status))
+            # self.awg_module.set('awg/enable', int(status))
+            self.master_device.api_session.setInt(node_path, int(status))
+            #TODO: following line copied from SingleDeviceChannelGroup. necessary?
+            # self.master_device.api_session.sync()  # Global sync: Ensure settings have taken effect on the device.
         else:
-            status = self.awg_module.get('awg/module')
+            # status = self.awg_module.get('awg/module')
+            self.master_device.api_session.get('/{}/awgs/{:d}/module'.format(self.master_device.serial, self.awg_group_index))
 
         #return bool(status)
         """
@@ -745,7 +1011,8 @@ class SingleDeviceChannelGroup(HDAWGChannelGroup):
                  group_size: int,
                  identifier: str,
                  timeout: float) -> None:
-        super().__init__(identifier, timeout)
+        
+        #change order
         self._device = None
 
         assert group_idx in range(4)
@@ -753,6 +1020,9 @@ class SingleDeviceChannelGroup(HDAWGChannelGroup):
 
         self._group_idx = group_idx
         self._group_size = group_size
+        
+        super().__init__(identifier, timeout)
+        
 
     @property
     def num_channels(self) -> int:
@@ -801,11 +1071,10 @@ class SingleDeviceChannelGroup(HDAWGChannelGroup):
 
     def offsets(self) -> Tuple[float, ...]:
         return tuple(map(self.master_device.offset, self._channels()))
-
+    
 
 class ELFManager(ABC):
     DEFAULT_CLS = None
-
     class AWGModule:
         def __init__(self, awg_module: zhinst_core.AwgModule):
             """Provide an easily mockable interface to the zhinst AwgModule object"""
@@ -882,6 +1151,8 @@ class ELFManager(ABC):
         def index(self) -> int:
             return self._module.getInt('index')
 
+        
+
     def __init__(self, awg_module: zhinst_core.AwgModule):
         """This class organizes compiling and uploading of compiled programs. The source code file is named based on the
         code hash to cache compilation results. This requires that the waveform names are unique.
@@ -927,25 +1198,21 @@ class ELFManager(ABC):
     def compile_and_upload(self, source_string: str) -> Generator[str, str, None]:
         """The function returns a generator that yields the current state of the progress. The generator is empty iff
         the upload is complete. An exception is raised if there is an error.
-
         To abort send 'abort' to the generator. (not implemented :P)
-
         Example:
             >>> my_source = 'playWave("my_wave");'
             >>> for state in elf_manager.compile_and_upload(my_source):
             ...     print('Current state:', state)
             ...     time.sleep(1)
-
         Args:
             source_string: Source code to compile
-
         Returns:
             Generator object that needs to be consumed
         """
 
 
 class SimpleELFManager(ELFManager):
-    def __init__(self, awg_module: zhinst.ziPython.AwgModule):
+    def __init__(self, awg_module: zhinst_core.AwgModule):
         """This implementation does not attempt to do something clever like caching."""
         super().__init__(awg_module)
 
@@ -981,7 +1248,7 @@ ELFManager.DEFAULT_CLS = SimpleELFManager
 
 
 class CachingELFManager(ELFManager):
-    def __init__(self, awg_module: zhinst.ziPython.AwgModule):
+    def __init__(self, awg_module: zhinst_core.AwgModule):
         """FAILS TO UPLOAD THE CORRECT ELF FOR SOME REASON"""
         super().__init__(awg_module)
 
@@ -1075,10 +1342,13 @@ class CachingELFManager(ELFManager):
             assert elf_upload == 0
 
     def _upload(self, elf_file) -> Generator[str, str, None]:
-        if self.awg_module.compiler_upload:
-            pass
-        else:
-            self._start_elf_upload(elf_file)
+        #!!! TODO:
+        # if self.awg_module.compiler_upload:
+        #     ###error when this is true -> upload_job stays None -> cannot unpack NoneType later?
+            
+        #     pass
+        # else:
+        self._start_elf_upload(elf_file)
 
         while True:
             self._update_upload_job_status()
@@ -1195,14 +1465,15 @@ def get_group_for_channels(hdawg: HDAWGRepresentation, channels: Set[int]) -> HD
     assert not channels - set(range(8)), "Channels must be in 0..=7"
 
     channel_range = range(min(channels) // 2 * 2, (max(channels) + 2) // 2 * 2)
-    if len(channel_range) > 4 or len(channel_range) == 4 and channel_range.start == 2:
+    # if len(channel_range) > 4 or len(channel_range) == 4 and channel_range.start == 2:
+    if True: # !!! disable other channel grouping modes as not seem to be compatible... (?)
         c = (HDAWGChannelGrouping.CHAN_GROUP_1x8, 0)
-    elif len(channel_range) == 4:
-        assert channel_range.start in (0, 4)
-        c = (HDAWGChannelGrouping.CHAN_GROUP_2x4, channel_range.start // 4)
-    else:
-        assert len(channel_range) == 2
-        c = (HDAWGChannelGrouping.CHAN_GROUP_4x2, channel_range.start // 2)
+    # elif len(channel_range) == 4:
+    #     assert channel_range.start in (0, 4)
+    #     c = (HDAWGChannelGrouping.CHAN_GROUP_2x4, channel_range.start // 4)
+    # else:
+    #     assert len(channel_range) == 2
+    #     c = (HDAWGChannelGrouping.CHAN_GROUP_4x2, channel_range.start // 2)
 
     hdawg.channel_grouping = c[0]
     return hdawg.channel_tuples[c[1]]
