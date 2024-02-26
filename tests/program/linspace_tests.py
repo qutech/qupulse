@@ -2,9 +2,39 @@ import copy
 import unittest
 from unittest import TestCase
 
+from qupulse.expressions import ExpressionScalar
 from qupulse.pulses import *
 from qupulse.program.linspace import *
 from qupulse.program.transformation import *
+
+
+class SimpleExpressionTest(TestCase):
+    def setUp(self):
+        self.linear_expression = ExpressionScalar('2 * (a + b * 3 + c * 5 + 6)')
+        self.index_expressions = {
+            'a': SimpleExpression(base=0, offsets=[('a', 1)]),
+            'b': SimpleExpression(base=0, offsets=[('b', 1)]),
+            'c': SimpleExpression(base=0, offsets=[('c', 1)]),
+        }
+        self.linear_simple = SimpleExpression(base=12, offsets=(('a', 2), ('b', 6), ('c', 10)))
+        self.sin_expression = ExpressionScalar('sin(a * 3)')
+    def test_linear(self):
+        scoped = self.linear_expression.evaluate_in_scope(self.index_expressions)
+        self.assertEqual(self.linear_simple, scoped)
+
+        num = self.linear_expression.evaluate_numeric(**self.index_expressions)
+        self.assertEqual(self.linear_simple, num)
+
+        symb = self.linear_expression.evaluate_symbolic(self.index_expressions)
+        self.assertEqual(ExpressionScalar(self.linear_simple), symb)
+
+    def test_sin(self):
+        scoped = self.sin_expression.evaluate_in_scope(self.index_expressions)
+        self.assertEqual(self.linear_simple, scoped)
+
+
+
+
 
 class SingleRampTest(TestCase):
     def setUp(self):
@@ -287,3 +317,29 @@ class TransformedRampTest(TestCase):
                                                          global_transformation=self.transformation,
                                                          to_single_waveform={self.pulse_template})
             self.assertEqual([self.program], program)
+
+
+class FunctionPTTest(TestCase):
+    def setUp(self):
+        time_factor = 1e2
+        rep_factor = 2
+        wait = ConstantPT(64 * time_factor * 1e1, {'a': '-1. + idx_a * 0.01', 'b': '-.5 + idx_b * 0.02'})
+        load_random = ConstantPT(10 ** 5, {'a': -.4, 'b': -.3})
+        meas = ConstantPT(64 * time_factor, {'a': 0.05, 'b': 0.06})
+
+        funky_stuff = FunctionPT(f'sin(0.01 * t)', duration_expression=time_factor * 64, channel='a')
+        funky_stuff = funky_stuff.with_parallel_channels({'b': 1})
+
+        singlet_scan = (load_random @ funky_stuff @ wait @ meas).with_iteration('idx_a',
+                                                                                rep_factor * 10 * 2).with_iteration(
+            'idx_b', rep_factor * 10)
+        self.pulse_template = singlet_scan
+
+        #self.waveform = self.pulse_template.build_waveform(parameters={}, channel_mapping={'a': 'a', 'b': 'b'})
+        #self.program = LinSpaceArbitraryWaveform(waveform=self.waveform, channels=('a', 'b'))
+        self.program = None
+
+    def test_function_pt_program(self):
+        program_builder = LinSpaceBuilder(('a', 'b'))
+        program = self.pulse_template.create_program(program_builder=program_builder)
+        self.assertEqual([self.program], program)

@@ -158,12 +158,8 @@ class LinSpaceBuilder(ProgramBuilder):
             base = value.base
             incs = []
             for rng_name, rng in ranges.items():
-                start = 0.
-                step = 0.
-                for off_name, offset in offsets:
-                    if off_name == rng_name:
-                        start += rng.start * offset
-                        step += rng.step * offset
+                start = rng.start * offsets.get(rng_name, 0)
+                step = rng.step * offsets.get(rng_name, 0)
                 base += start
                 incs.append(step)
             factors.append(tuple(incs))

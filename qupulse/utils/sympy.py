@@ -195,21 +195,43 @@ sympify_namespace = {'len': Len,
 
 
 def numpy_compatible_mul(*args) -> Union[sympy.Mul, sympy.Array]:
-    if any(isinstance(a, sympy.NDimArray) for a in args):
+    special_arg_type = MANUAL_ARITHMETICS + (sympy.NDimArray,)
+
+    if any(isinstance(a, special_arg_type) for a in args):
         result = 1
-        for a in args:
-            result = result * (numpy.array(a.tolist()) if isinstance(a, sympy.NDimArray) else a)
-        return sympy.Array(result)
+        return_array = False
+
+        for factor in args:
+            if isinstance(factor, sympy.NDimArray):
+                factor = numpy.array(factor.tolist())
+                return_array = True
+            result = result * factor
+        if return_array:
+            return sympy.Array(result)
+        else:
+            return result
+
     else:
         return sympy.Mul(*args)
 
 
 def numpy_compatible_add(*args) -> Union[sympy.Add, sympy.Array]:
-    if any(isinstance(a, sympy.NDimArray) for a in args):
+    special_arg_type = MANUAL_ARITHMETICS + (sympy.NDimArray,)
+
+    if any(isinstance(a, special_arg_type) for a in args):
         result = 0
-        for a in args:
-            result = result + (numpy.array(a.tolist()) if isinstance(a, sympy.NDimArray) else a)
-        return sympy.Array(result)
+        return_array = False
+
+        for summand in args:
+            if isinstance(summand, sympy.NDimArray):
+                summand = numpy.array(summand.tolist())
+                return_array = True
+            result = result + summand
+        if return_array:
+            return sympy.Array(result)
+        else:
+            return result
+
     else:
         return sympy.Add(*args)
 
@@ -218,6 +240,8 @@ _NUMPY_COMPATIBLE = {
     sympy.Add: numpy_compatible_add,
     sympy.Mul: numpy_compatible_mul
 }
+
+MANUAL_ARITHMETICS = ()
 
 
 def _float_arr_to_int_arr(float_arr):

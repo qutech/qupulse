@@ -5,6 +5,8 @@ from typing import Optional, Union, Sequence, ContextManager, Mapping, Tuple, Ge
 from numbers import Real
 
 import numpy as np
+import sympy
+from frozendict import frozendict
 
 from qupulse import ChannelID
 from qupulse.program.waveforms import Waveform
@@ -12,6 +14,7 @@ from qupulse.utils.types import MeasurementWindow, TimeType
 from qupulse.program.volatile import VolatileRepetitionCount
 from qupulse.parameter_scope import Scope
 from qupulse.expressions import sympy as sym_expr
+from qupulse.utils import sympy as sym_util
 
 from typing import Protocol, runtime_checkable
 
@@ -19,7 +22,21 @@ from typing import Protocol, runtime_checkable
 NumVal = TypeVar('NumVal', bound=Real)
 
 
-@dataclass
+def _to_numeric_scalar(val) -> Union[int, float, TimeType, type(None)]:
+    if isinstance(val, (float, int, TimeType)):
+        return val
+
+    elif isinstance(val, sympy.Integer):
+        return int(val)
+
+    elif isinstance(val, sympy.Rational):
+        return TimeType(val)
+
+    elif isinstance(val, sympy.Float):
+        return float(val)
+
+
+@dataclass(frozen=True, init=False)
 class SimpleExpression(Generic[NumVal]):
     """This is a potential hardware evaluable expression of the form
 
@@ -31,22 +48,36 @@ class SimpleExpression(Generic[NumVal]):
     """
 
     base: NumVal
-    offsets: Sequence[Tuple[str, NumVal]]
+    offsets: Mapping[str, NumVal]
+
+    def __init__(self, base: NumVal = 0, offsets: Union[Mapping[str, NumVal], Sequence[Tuple[str, NumVal]]] = ()):
+        object.__setattr__(self, 'base', base)
+        if not isinstance(offsets, Mapping):
+            sequence = offsets
+            offsets = {}
+            for name, factor in sequence:
+                offsets[name] = factor + offsets.get(name, 0)
+        object.__setattr__(self, 'offsets', frozendict(offsets))
 
     def value(self, scope: Mapping[str, NumVal]) -> NumVal:
         value = self.base
-        for name, factor in self.offsets:
+        for name, factor in self.offsets.items():
             value += scope[name] * factor
         return value
 
     def __add__(self, other):
-        if isinstance(other, (float, int, TimeType)):
-            return SimpleExpression(self.base + other, self.offsets)
+        if isinstance(other, SimpleExpression):
+            offsets = dict(self.offsets)
+            for name, factor in other.offsets.items():
+                offsets[name] = offsets.get(name, 0) + factor
+            return SimpleExpression(self.base + other.base, frozendict(offsets))
 
-        if type(other) == type(self):
-            return SimpleExpression(self.base + other.base, self.offsets + other.offsets)
-
-        return NotImplemented
+        base = self.base.__add__(other)
+        if base is NotImplemented:
+            base = other.__add__(base)
+        if base is NotImplemented:
+            return NotImplemented
+        return SimpleExpression(base, self.offsets)
 
     def __radd__(self, other):
         return self.__add__(other)
@@ -58,12 +89,13 @@ class SimpleExpression(Generic[NumVal]):
         (-self).__add__(other)
 
     def __neg__(self):
-        return SimpleExpression(-self.base, tuple((name, -value) for name, value in self.offsets))
+        return SimpleExpression(-self.base, frozendict((name, -value) for name, value in self.offsets.items()))
 
     def __mul__(self, other: NumVal):
         if isinstance(other, SimpleExpression):
             return NotImplemented
-        return SimpleExpression(self.base * other, tuple((name, value * other) for name, value in self.offsets))
+        return SimpleExpression(self.base * other, frozendict((name, value * other)
+                                                              for name, value in self.offsets.items()))
 
     def __rmul__(self, other):
         return self.__mul__(other)
@@ -72,6 +104,13 @@ class SimpleExpression(Generic[NumVal]):
         # TODO: remove. It is currently required to avoid nesting this class in an expression for the MappedScope
         # We can maybe replace is with a HardwareScope or something along those lines
         return self
+
+    def _sympy_(self):
+        return self
+
+    @property
+    def free_symbols(self):
+        return tuple(self.offsets.keys())
 
 
 RepetitionCount = Union[int, VolatileRepetitionCount, SimpleExpression[int]]
@@ -147,3 +186,4 @@ def default_program_builder() -> ProgramBuilder:
 
 # TODO: hackedy, hackedy
 sym_expr.ALLOWED_NUMERIC_SCALAR_TYPES = sym_expr.ALLOWED_NUMERIC_SCALAR_TYPES + (SimpleExpression,)
+sym_util.MANUAL_ARITHMETICS = sym_util.MANUAL_ARITHMETICS + (SimpleExpression,)
