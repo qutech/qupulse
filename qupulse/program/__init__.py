@@ -11,6 +11,7 @@ from qupulse.program.waveforms import Waveform
 from qupulse.utils.types import MeasurementWindow, TimeType
 from qupulse.program.volatile import VolatileRepetitionCount
 from qupulse.parameter_scope import Scope
+from qupulse.expressions import sympy as sym_expr
 
 from typing import Protocol, runtime_checkable
 
@@ -60,6 +61,8 @@ class SimpleExpression(Generic[NumVal]):
         return SimpleExpression(-self.base, tuple((name, -value) for name, value in self.offsets))
 
     def __mul__(self, other: NumVal):
+        if isinstance(other, SimpleExpression):
+            return NotImplemented
         return SimpleExpression(self.base * other, tuple((name, value * other) for name, value in self.offsets))
 
     def __rmul__(self, other):
@@ -140,3 +143,7 @@ class ProgramBuilder(Protocol):
 def default_program_builder() -> ProgramBuilder:
     from qupulse.program.loop import LoopBuilder
     return LoopBuilder()
+
+
+# TODO: hackedy, hackedy
+sym_expr.ALLOWED_NUMERIC_SCALAR_TYPES = sym_expr.ALLOWED_NUMERIC_SCALAR_TYPES + (SimpleExpression,)

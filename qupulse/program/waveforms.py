@@ -369,8 +369,8 @@ class TableWaveform(Waveform):
             entries = self._table
 
         for entry1, entry2 in pairwise(entries):
-            indices = slice(np.searchsorted(sample_times, entry1.t, 'left'),
-                            np.searchsorted(sample_times, entry2.t, 'right'))
+            indices = slice(sample_times.searchsorted(entry1.t, 'left'),
+                            sample_times.searchsorted(entry2.t, 'right'))
             output_array[indices] = \
                 entry2.interp((float(entry1.t), entry1.v),
                               (float(entry2.t), entry2.v),
@@ -626,7 +626,7 @@ class SequenceWaveform(Waveform):
             # indexing in numpy and their copy/reference behaviour
             end = time + subwaveform.duration
 
-            indices = slice(*np.searchsorted(sample_times, (float(time), float(end)), 'left'))
+            indices = slice(*sample_times.searchsorted((float(time), float(end)), 'left'))
             subwaveform.unsafe_sample(channel=channel,
                                       sample_times=sample_times[indices]-np.float64(time),
                                       output_array=output_array[indices])
@@ -843,7 +843,7 @@ class RepetitionWaveform(Waveform):
         time = 0
         for _ in range(self._repetition_count):
             end = time + body_duration
-            indices = slice(*np.searchsorted(sample_times, (float(time), float(end)), 'left'))
+            indices = slice(*sample_times.searchsorted((float(time), float(end)), 'left'))
             self._body.unsafe_sample(channel=channel,
                                      sample_times=sample_times[indices] - float(time),
                                      output_array=output_array[indices])
@@ -892,7 +892,7 @@ class TransformingWaveform(Waveform):
         if constant_values is None or not transformation.is_constant_invariant():
             return cls(inner_waveform, transformation)
 
-        transformed_constant_values = {key: float(value) for key, value in transformation(0., constant_values).items()}
+        transformed_constant_values = {key: value for key, value in transformation(0., constant_values).items()}
         return ConstantWaveform.from_mapping(inner_waveform.duration, transformed_constant_values)
 
     def is_constant(self) -> bool:

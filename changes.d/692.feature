@@ -1,0 +1,1 @@
+Add `__pow__` as a repetition shortcut. This means you can do `my_pulse_template ** 5` or `my_pulse_template ** 'my_repetition_count'`.
