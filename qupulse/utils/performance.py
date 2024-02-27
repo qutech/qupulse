@@ -116,7 +116,8 @@ def compress_array_LZ77(array:np.ndarray, allow_intermediates:bool=True, using_d
                 os = os[1:]
                 ds = ds[1:]
             if not allow_intermediates:
-                mask = os<=ds
+                ds = (ds//os)*os
+                mask = (os<=ds) & (ds > 0)
                 os = os[mask]
                 ds = ds[mask]
             if len(os) == 0:
@@ -132,7 +133,6 @@ def compress_array_LZ77(array:np.ndarray, allow_intermediates:bool=True, using_d
         else:
             sa = None
         compressed_stack.append((sos, sds, sa))
-
 
     return compressed_stack
 
