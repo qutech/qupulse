@@ -11,12 +11,15 @@ import warnings
 import logging
 import tqdm
 
+from qupulse.program.linspace import Command, LoopLabel, Increment, Set as _Set, Wait, LoopJmp, Play
+from qupulse.utils.performance import *
+
 GPADAT_ADDR = 0x006FC0
 SCRIPT_START_ADDRESS = 49408
 
 
 def volt_to_int(voltage, offset:float=-10.0, rng:float=20):
-	return max(min((2**16-1), int((voltage-offset)/rng * (2**16-1))), 0)
+	return np.maximum(np.minimum((2**16-1), np.floor((voltage-offset)/rng * (2**16-1))), 0)
 
 def default_ask(serial, cmd):
 	if not isinstance(cmd, bytes):
@@ -114,13 +117,210 @@ def upload_script(script:str, serial_ask) -> str:
 
 def run_script(serial_ask, label:int=1):
 
-	resp = serial_ask("X{};"%(label))
+	resp = serial_ask(f"X{label};")
 
 	return resp
 
 def stop_script(serial_ask):
 
 	return run_script(serial_ask, label=0)
+
+def LZ77_to_linspace_commands(lz77_compressed, dt=1e+5) -> List[Command]:
+	""" This function creates a list of Linspace Commands from a lz77 compressed pulse. The LZ77 compression requires allow_intermediates=False, allow_reconstructions_using_reconstructions=False. Further using_diffs=True should be helpful.
+	"""
+
+	print_intermediate_programs = False
+	print_index_calculations = False
+
+	loop_indecies = range(int(10_000_000_000_000)).__iter__()
+
+	commands = []
+	unrolled_step_index = []
+	for s, (o, d, v) in enumerate(lz77_compressed):
+		if print_intermediate_programs or print_index_calculations: print(); 
+		if print_intermediate_programs: print((o, d, v))
+		commands.append([])
+		unrolled_step_index.append((unrolled_step_index[-1]+1 if len(unrolled_step_index)>0 else 0))
+		if v is not None:
+			for i, a in enumerate(v):
+				if a != 0:
+					commands[-1].append(Increment(i, a, None))
+			commands[-1].append(Wait(dt))
+		if d != 0:
+			lx = next(loop_indecies)
+			r = d//o
+			assert r > 0
+			if print_index_calculations: 
+				print(o, len(commands))
+				print((o, d, v))
+				print(s, (o, d), r, unrolled_step_index, unrolled_step_index[-1]-o)
+			temp = np.where(np.array(unrolled_step_index) == unrolled_step_index[-1]-o)[0]
+			assert len(temp) > 0, "Something seams to be off with the indexing. Likely due to jumping somewhere into a loop and not to its start."
+			eff = temp[-1]
+			if print_index_calculations: print(eff)
+			commands[eff].insert(0, LoopLabel(lx, r))
+			commands[-2].append(LoopJmp(lx))
+			foo = unrolled_step_index[-1]
+			for _o in range(len(unrolled_step_index)):
+				if len(unrolled_step_index)-_o-1-1 < eff: break
+				if print_index_calculations: print(_o, r, _o)
+				unrolled_step_index[-_o-1] += d
+				if print_index_calculations: print(unrolled_step_index)
+		if print_index_calculations: print(unrolled_step_index)
+		if print_intermediate_programs: print("\n".join([str(c) for c in commands]))
+
+	if print_intermediate_programs or print_index_calculations: print(commands)
+
+	# flattening the commands
+	commands = [c for cc in commands for c in cc]
+
+	return commands
+
+def translate_command_list_to_ascii(commands:List[Command], channel_mapping:Union[Dict[int, int], None]=None, volt_in_dac_basis:bool=False) -> str:
+
+	boards:Union[List[int], None] = None # TODO get this list from the used channel
+	
+	if channel_mapping is None:
+		channel_mapping = {i:i for i in range(5*4)}
+
+	loops = {}
+	last_used_loop_addrs = 1
+	last_used_memory_addrs = 45056
+
+	res = ["*1:"]
+
+	if boards is None:
+		boards = [0, 1, 2, 3, 4]
+	for b in boards:
+		res.append(f"B{b};M2;")
+
+	if volt_in_dac_basis:
+		conversion_fn = lambda v: v
+	else:
+		conversion_fn = volt_to_int
+	   
+
+	# setting up the main trigger
+	"""
+	SpecialConditions:
+	;08 = Trig1 is zero
+	;09 = Trig1 is not zero
+	;0A = Trig2 is zero
+	;0B = Trig2 is not zero
+	"""
+	last_used_loop_addrs += 1
+	res.append(f"*{last_used_loop_addrs}:X{0x800+last_used_loop_addrs};")
+
+	for cmd in commands:
+		if cmd.__class__.__name__ == "LoopLabel":
+			assert cmd.idx not in loops
+			last_used_loop_addrs += 1
+			last_used_memory_addrs += 1
+			loops[cmd.idx] = {
+				"count": cmd.count, 
+				"loop_addr": last_used_loop_addrs, 
+				"counter_addr": last_used_memory_addrs
+				}
+			res.extend([
+				f"A{loops[cmd.idx]['counter_addr']};", 
+				f"P{loops[cmd.idx]['count']};", 
+				f"*{loops[cmd.idx]['loop_addr']}:"
+				])
+		elif cmd.__class__.__name__ == "LoopJmp":
+			assert cmd.idx in loops
+			res.extend([
+				f"A{loops[cmd.idx]['counter_addr']};", 
+				f"+-1;", 
+				f"X{0x500+loops[cmd.idx]['loop_addr']};"
+				])
+		elif cmd.__class__.__name__ == "Increment":
+			if volt_in_dac_basis:
+				int_delta = int(conversion_fn(cmd.value))
+			else:
+				int_delta = int(conversion_fn(cmd.value)-conversion_fn(0))
+			res.extend([
+				f"A{1545+16*(channel_mapping[cmd.channel])};", 
+				f"+{int_delta};", 
+				f"A{1538+16*(channel_mapping[cmd.channel])};", 
+				f"P3;"
+				])
+		elif cmd.__class__.__name__ == "Set":
+			value_to_set = int(conversion_fn(cmd.value))
+			res.extend([
+				f"A{1545+16*(channel_mapping[cmd.channel])};", 
+				f"P{value_to_set};", 
+				f"A{1538+16*(channel_mapping[cmd.channel])};", 
+				f"P3;"
+				])
+		elif cmd.__class__.__name__ == "Wait":
+			d_in_us = int(round(float(cmd.duration)*1e-3)) # from ns to us
+			last_used_loop_addrs += 1
+			res.extend([
+				f"${d_in_us};", 
+				f"*{last_used_loop_addrs}:", 
+				f"X{0x300+last_used_loop_addrs};"
+				])
+		else:
+			raise NotImplementedError()
+
+	res.append("X0;")
+	
+	whole_script = "".join(res)
+
+	assert last_used_loop_addrs < 255, "The program uses too many jump end points."
+	assert len(whole_script) < 7680, "The complete program is too long."
+
+	return whole_script
+
+def generate_linspace_commands_from_nparray_using_LZ77(array:np.ndarray, dt:float):
+	""" This function creates a list of Commands that represents the given array. This function is build for the DecaDAC.
+	"""
+
+	assert len(array.shape) == 2
+	assert array.shape[1] <= 20, "The last dimension should be the channel dimension. And our DecaDACs have only 20 channel."
+
+	# translate the values into DecaDAC values
+	array = volt_to_int(array).astype(int)
+
+	# calculate the LZ77 compression
+	comp = compress_array_LZ77(array=array, allow_intermediates=False, using_diffs=True, allow_reconstructions_using_reconstructions=False)
+
+	# generate the list of commands
+	comm = LZ77_to_linspace_commands(comp, dt=dt)
+
+	return comm
+
+class DecaDACRepresentation:
+
+	def __init__(self, serial_ask:Callable):
+		self.serial_ask = serial_ask
+
+	def upload_command_list(self, commands:List[Command], channel_mapping:Union[Dict[int, int], None]=None, volt_in_dac_basis:bool=False):
+		ascii_script = translate_command_list_to_ascii(commands, channel_mapping=channel_mapping, volt_in_dac_basis=volt_in_dac_basis)
+		print(ascii_script)
+		resp = upload_script(script=f"{{{ascii_script}}};", serial_ask=self.serial_ask)
+
+	def upload_numpy_pulse(self, numpy_pulse:np.ndarray, dt:float, channel_mapping:Union[Dict[int, int], None]=None, volt_in_dac_basis:bool=False):
+
+		assert not volt_in_dac_basis, "That should not be implemented."
+
+		comm = generate_linspace_commands_from_nparray_using_LZ77(numpy_pulse, dt=dt)
+
+		# translate the first Increments for each channel to Set commands.
+		updated_channels = []
+		for i, c in enumerate(comm):
+			if c.__class__.__name__ == "Increment" and c.channel not in updated_channels:
+				comm[i] = _Set(channel=c.channel, value=c.value, key=c.dependency_key)
+				updated_channels.append(c.channel)
+
+		self.upload_command_list(commands=comm, channel_mapping=channel_mapping, volt_in_dac_basis=True)
+
+
+	def arm(self):
+		run_script(serial_ask=self.serial_ask, label=1)
+
+	def reset(self):
+		stop_script(serial_ask=self.serial_ask)
 
 
 

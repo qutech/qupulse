@@ -80,8 +80,25 @@ if numba is None:
 else:
     is_monotonic = _is_monotonic_numba
 
-def compress_array_LZ77(array:np.ndarray, allow_intermediates:bool=True, using_diffs:bool=True) -> List[Tuple[int, int, np.ndarray]]:
-    """ This function applies LZ77 to compress a array.
+def compress_array_LZ77(array:np.ndarray, allow_intermediates:bool=True, using_diffs:bool=True, allow_reconstructions_using_reconstructions:bool=False) -> List[Tuple[int, int, np.ndarray]]:
+    """ This function applies LZ77 to compress a array. Works best with arrays of type int.
+
+    Parameter
+    ---------
+    array:np.ndarray
+        The numpy array that is to be compressed
+    allow_intermediates:bool=True
+        If True, then the compression algorithm is allowed to used sections that do not end at the end where it is currently working on. I.e. It jumps into the already processed region, does things, and then jumps back. This can be disabled, as not every AWG (e.g. the DecaDAC) can do these jumps easily. (should not modify the reconstructions result)
+    using_diffs:bool=True
+        If the derivative of the pulse is to be used. Processing the derivative is very much recommended. But the derivative can also be calculated outside of this function. (has an impact on the reconstructions result)
+    allow_reconstructions_using_reconstructions:bool=False
+        If True, then the compression algorithm references regions that have already been reconstructed or rolled out. This is fine if one rolls out the whole waveform, but does not work easily when compressing with the intention of using loops to replay a pulse. (should not modify the reconstructions result)
+
+    Return
+    ------
+    List[Tuple(int, int, np.ndarray)]
+        A List containing tuples. The tuples contain at the first two positions the offset to the current position from which data is to be replayed, and the duration for which data is to be replayed. The last element contains the element that is then to be appended to the reconstructed string.
+
     """
 
     assert len(array.shape) == 2
@@ -89,11 +106,20 @@ def compress_array_LZ77(array:np.ndarray, allow_intermediates:bool=True, using_d
 
     array_to_compress = array.copy() if not using_diffs else np.concatenate([array[None, 0, :], np.diff(array, axis=0)], axis=0)
     atc = array_to_compress
-    # print(f"{atc=}")
+    used_as_keypoints = np.zeros(atc.shape[0]).astype(bool) # True if that point is not compressed
+    loop_start = np.zeros(atc.shape[0]).astype(bool) # True if a loop starts at that point.
+    used_in_loop = np.zeros(atc.shape[0]).astype(bool) # True if used in a loop
+    nested = np.zeros(atc.shape[0]).astype(bool)
 
     compressed_stack = [(0, 0, array_to_compress[0, :])]
+    used_as_keypoints[0] = True
     i = 1
     while i < atc.shape[0]:
+
+        # print("-"*10)
+        # print(f"{compressed_stack=}")
+        # print(f"{nested[:i]=}, {i=}")
+
         os = [0, ]
         ds = [0, ]
         
@@ -116,27 +142,53 @@ def compress_array_LZ77(array:np.ndarray, allow_intermediates:bool=True, using_d
                 os = os[1:]
                 ds = ds[1:]
             if not allow_intermediates:
+                # make sure that only regions that go until the end of the already reconstructed region are used.
                 ds = (ds//os)*os
-                mask = (os<=ds) & (ds > 0)
+                mask = (os<=ds) & (ds > 0) & ((ds%os)==0)
+                os = os[mask]
+                ds = ds[mask]
+            if not allow_reconstructions_using_reconstructions:
+                # filtering out or restricting the options that start on reconstructed points.
+                # mask = used_as_keypoints[i-os] & ((~used_in_loop[i-os])|(used_in_loop[i-os]&loop_start[i-os]))
+                # print(used_as_keypoints[i-os], used_in_loop[i-os], loop_start[i-os])
+                mask = ~nested[i-os]
                 os = os[mask]
                 ds = ds[mask]
             if len(os) == 0:
                 os, ds = [0], [0]
             j = len(ds)-np.argmax(ds[::-1])-1
             sos, sds = os[j], ds[j]
-            i += ds[j]+1
+            ni = i+ds[j]+1
+            loop_start[i-sos] = True
+            used_in_loop[i-sos:i-sos+sds+1] = True
         else:
             sos, sds = 0, 0
-            i += 0+1
-        if i-1 < atc.shape[0]:
-            sa = atc[i-1]
+            ni = i+1
+
+        if ni-1 < atc.shape[0]:
+            sa = atc[ni-1]
+            used_as_keypoints[ni-1] = True
         else:
             sa = None
+
+        if sds > 0:
+            nested[i-sos+1: i+sds+1] = True
+
         compressed_stack.append((sos, sds, sa))
+        # print(f"{used_as_keypoints=}")
+        # print(f"{loop_start=}")
+        # print(f"{used_in_loop=}")
+        i = ni
+        # print(f"{compressed_stack=}")
+        # print(f"{nested[:i]=}, {i=}")
+        # print()
 
     return compressed_stack
 
-def uncompress_array_LZ77(compressed_array) -> np.ndarray:
+def uncompress_array_LZ77(compressed_array:List[Tuple[int, int, np.ndarray]], was_diff:bool=True) -> np.ndarray:
+    """ Takes the output of compress_array_LZ77 and reconstructs the numpy array.
+    """
+
     output = []
 
     for o, l, c in compressed_array:
@@ -146,7 +198,10 @@ def uncompress_array_LZ77(compressed_array) -> np.ndarray:
         if c is not None:
             output.append(c)
 
-    return np.array(output)
+    if was_diff:
+        return np.cumsum(np.array(output), axis=0)
+    else:
+        return np.array(output)
 
 
 
