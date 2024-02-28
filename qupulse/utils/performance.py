@@ -104,13 +104,18 @@ def compress_array_LZ77(array:np.ndarray, allow_intermediates:bool=True, using_d
     assert len(array.shape) == 2
     assert array.shape[0] > 0
 
+    # preparing the array that is to be compressed
     array_to_compress = array.copy() if not using_diffs else np.concatenate([array[None, 0, :], np.diff(array, axis=0)], axis=0)
     atc = array_to_compress
+
+    # setting up arrays for realizing modifications to the LZ77 algorithm
     used_as_keypoints = np.zeros(atc.shape[0]).astype(bool) # True if that point is not compressed
     loop_start = np.zeros(atc.shape[0]).astype(bool) # True if a loop starts at that point.
-    used_in_loop = np.zeros(atc.shape[0]).astype(bool) # True if used in a loop
     nested = np.zeros(atc.shape[0]).astype(bool)
+    nesting_level = np.zeros(atc.shape[0])
 
+
+    # Going though the array. The step size of this loop is determined by the found loops
     compressed_stack = [(0, 0, array_to_compress[0, :])]
     used_as_keypoints[0] = True
     i = 1
@@ -119,6 +124,9 @@ def compress_array_LZ77(array:np.ndarray, allow_intermediates:bool=True, using_d
         # print("-"*10)
         # print(f"{compressed_stack=}")
         # print(f"{nested[:i]=}, {i=}")
+
+        # Fining Potential Repetitions
+        # ----------------------------
 
         os = [0, ]
         ds = [0, ]
@@ -137,20 +145,21 @@ def compress_array_LZ77(array:np.ndarray, allow_intermediates:bool=True, using_d
         os = np.array(os)
         ds = np.array(ds)
 
+        # Filtering the Candidates
+        # ------------------------
+
         if os[-1] > 0:
             if os[0] == 0:
                 os = os[1:]
                 ds = ds[1:]
             if not allow_intermediates:
                 # make sure that only regions that go until the end of the already reconstructed region are used.
-                ds = (ds//os)*os
-                mask = (os<=ds) & (ds > 0) & ((ds%os)==0)
+                ds = (ds//os)*os # allow only complete loops that are at least as large as the offset, and thus are at the end of the processed sequence. This filters out intermediate loops.
+                mask = (os<=ds) & (ds > 0) & ((ds%os)==0) # (loop starts properly; this criteria is a bit redundant.) and (is a loop) and (is a complete loop)
                 os = os[mask]
                 ds = ds[mask]
             if not allow_reconstructions_using_reconstructions:
                 # filtering out or restricting the options that start on reconstructed points.
-                # mask = used_as_keypoints[i-os] & ((~used_in_loop[i-os])|(used_in_loop[i-os]&loop_start[i-os]))
-                # print(used_as_keypoints[i-os], used_in_loop[i-os], loop_start[i-os])
                 mask = ~nested[i-os]
                 os = os[mask]
                 ds = ds[mask]
@@ -159,11 +168,12 @@ def compress_array_LZ77(array:np.ndarray, allow_intermediates:bool=True, using_d
             j = len(ds)-np.argmax(ds[::-1])-1
             sos, sds = os[j], ds[j]
             ni = i+ds[j]+1
-            loop_start[i-sos] = True
-            used_in_loop[i-sos:i-sos+sds+1] = True
         else:
             sos, sds = 0, 0
             ni = i+1
+
+        # Building the Token
+        # ------------------
 
         if ni-1 < atc.shape[0]:
             sa = atc[ni-1]
@@ -172,15 +182,17 @@ def compress_array_LZ77(array:np.ndarray, allow_intermediates:bool=True, using_d
             sa = None
 
         if sds > 0:
-            nested[i-sos+1: i+sds+1] = True
+            loop_start[i-sos] = True
+            nested[i-sos+1: i+sds+1] = True # this excludes setting the flag for the first looped element, as the fist element is the entry to that loop, and thus should be usable to reuse the loop.
+            nesting_level[i-sos: i+sds+1] += 1
 
         compressed_stack.append((sos, sds, sa))
-        # print(f"{used_as_keypoints=}")
-        # print(f"{loop_start=}")
-        # print(f"{used_in_loop=}")
+
+
         i = ni
         # print(f"{compressed_stack=}")
         # print(f"{nested[:i]=}, {i=}")
+        # print(f"{nesting_level[:i]=}, {i=}")
         # print()
 
     return compressed_stack
