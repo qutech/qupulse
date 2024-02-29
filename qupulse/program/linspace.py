@@ -457,12 +457,12 @@ def reduce_looped_waits(commands:List[Command]) -> Tuple[bool, List[Command]]:
             nested_commands = []
             # select all consecutive waits
             j = i+1
-            while j < len(commands) and ((not (commands[j].__class__.__name__ == "LoopJmp") or (int(commands[j].idx) != int(commands[i].idx)))):
+            while j < len(commands) and commands[j].__class__.__name__ == "Wait" and ((not (commands[j].__class__.__name__ == "LoopJmp") or (int(commands[j].idx) != int(commands[i].idx)))):
                 nested_commands.append(commands[j])
                 j += 1
 
             # check if the loop contains only one wait
-            if len(nested_commands) == 1 and nested_commands[0].__class__.__name__ == "Wait":
+            if commands[j].__class__.__name__ == "LoopJmp" and len(nested_commands) == 1 and nested_commands[0].__class__.__name__ == "Wait":
 
                 # then create a new wait command
                 total_wait_time = nested_commands[0].duration * commands[i].count
