@@ -158,7 +158,7 @@ def LZ77_to_linspace_commands(lz77_compressed, dt=1e+5) -> List[Command]:
 			assert len(temp) > 0, "Something seams to be off with the indexing. Likely due to jumping somewhere into a loop and not to its start."
 			eff = temp[-1]
 			if print_index_calculations: print(eff)
-			commands[eff].insert(0, LoopLabel(lx, r))
+			commands[eff].insert(0, LoopLabel(lx, r+1))
 			commands[-2].append(LoopJmp(lx))
 			foo = unrolled_step_index[-1]
 			for _o in range(len(unrolled_step_index)):

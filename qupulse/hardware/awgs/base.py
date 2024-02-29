@@ -141,7 +141,7 @@ class AWG(Comparable):
     @property
     def compare_key(self) -> int:
         """Comparison and hashing is based on the id of the AWG so different devices with the same properties
-        are ot equal"""
+        are not equal"""
         return id(self)
 
     @abstractmethod

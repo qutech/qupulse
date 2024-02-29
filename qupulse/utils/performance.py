@@ -99,6 +99,10 @@ def compress_array_LZ77(array:np.ndarray, allow_intermediates:bool=True, using_d
     List[Tuple(int, int, np.ndarray)]
         A List containing tuples. The tuples contain at the first two positions the offset to the current position from which data is to be replayed, and the duration for which data is to be replayed. The last element contains the element that is then to be appended to the reconstructed string.
 
+    Notes
+    -----
+    - This modification of the LZ77 could be extended to allows for using already created loops. As if they were functions/procedures. This could be done using the nesting_level array.
+
     """
 
     assert len(array.shape) == 2
