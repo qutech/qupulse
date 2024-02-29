@@ -3,7 +3,7 @@ import contextlib
 import dataclasses
 import numpy as np
 from dataclasses import dataclass
-from typing import Mapping, Optional, Sequence, ContextManager, Iterable, Tuple, Union, Dict, List, Iterator
+from typing import Mapping, Optional, Sequence, ContextManager, Iterable, Tuple, Union, Dict, List, Iterator, Callable
 
 from qupulse import ChannelID, MeasurementWindow
 from qupulse.parameter_scope import Scope, MappedScope, FrozenDict
@@ -413,4 +413,119 @@ def to_increment_commands(linspace_nodes: Sequence[LinSpaceNode]) -> List[Comman
     state = _TranslationState()
     state.add_node(linspace_nodes)
     return state.commands
+
+
+def reduce_consecutive_waits(commands:List[Command]) -> Tuple[bool, List[Command]]:
+
+    changed_something = False
+    new_commands = []
+    i = 0
+    while i < len(commands):
+
+        if commands[i].__class__.__name__ == "Wait":
+            consec_waits = [commands[i]]
+            # select all consecutive waits
+            j = i+1
+            while j < len(commands) and commands[j].__class__.__name__ == "Wait":
+                consec_waits.append(commands[j])
+                j += 1
+
+            # if we have only one wait. append that wait to the new command list
+            if len(consec_waits) == 1:
+                new_commands.append(commands[i])
+            else:
+                total_wait_time = np.sum([c.duration for c in consec_waits])
+                new_commands.append(Wait(total_wait_time))
+                i = j-1 # i should now be the index of the last Wait that we looked at
+                assert commands[i] == consec_waits[-1]
+                changed_something = True
+        else:
+            new_commands.append(commands[i])
+
+        i += 1
+
+    return changed_something, new_commands
+
+def reduce_looped_waits(commands:List[Command]) -> Tuple[bool, List[Command]]:
+
+    changed_something = False
+    new_commands = []
+    i = 0
+    while i < len(commands):
+
+        if commands[i].__class__.__name__ == "LoopLabel":
+            nested_commands = []
+            # select all consecutive waits
+            j = i+1
+            while j < len(commands) and ((not (commands[j].__class__.__name__ == "LoopJmp") or (int(commands[j].idx) != int(commands[i].idx)))):
+                nested_commands.append(commands[j])
+                j += 1
+
+            # check if the loop contains only one wait
+            if len(nested_commands) == 1 and nested_commands[0].__class__.__name__ == "Wait":
+
+                # then create a new wait command
+                total_wait_time = nested_commands[0].duration * commands[i].count
+                new_commands.append(Wait(total_wait_time))
+                i = j # i should now point to the loop jump. The following assert does not cover it completely, but better than nothing.
+                assert commands[i].__class__.__name__ == "LoopJmp"
+                changed_something = True
+            else:
+                new_commands.append(commands[i])
+        else:
+            new_commands.append(commands[i])
+
+        i += 1
+
+    return changed_something, new_commands
+
+
+def reduce_zero_increments(commands:List[Command]) -> Tuple[bool, List[Command]]:
+
+    changed_something = False
+    new_commands = []
+    i = 0
+    while i < len(commands):
+
+        if commands[i].__class__.__name__ == "Increment":
+            if commands[i].value != 0:
+                new_commands.append(commands[i])
+            else: 
+                changed_something = True
+        else:
+            new_commands.append(commands[i])
+
+        i += 1
+
+    return changed_something, new_commands
+
+
+
+
+def reduce_commands(commands:List[Command], functions_for_reduction:Union[List[Callable], None]=None) -> List[Command]:
+    """ This function reduces commands. E.g. waits following waits will be turned into one wait. Loops over just waits, will be combined into one wait.
+    """
+
+    if functions_for_reduction is None:
+        functions_for_reduction = [
+            reduce_zero_increments,
+            reduce_consecutive_waits, 
+            reduce_looped_waits, 
+        ]
+
+    max_tries = 100_000_000
+    n_tries = 0
+    some_change = True
+    while some_change and n_tries <= max_tries:
+        # go through all the functions and reduce the program
+        change = False
+        for fn in functions_for_reduction:
+            c, commands = fn(commands)
+            change = change or c
+        n_tries += 1
+
+        some_change = change
+
+    return commands
+
 

@@ -11,7 +11,7 @@ import warnings
 import logging
 import tqdm
 
-from qupulse.program.linspace import Command, LoopLabel, Increment, Set as _Set, Wait, LoopJmp, Play
+from qupulse.program.linspace import Command, LoopLabel, Increment, Set as _Set, Wait, LoopJmp, Play, reduce_commands
 from qupulse.utils.performance import *
 
 GPADAT_ADDR = 0x006FC0
@@ -261,7 +261,7 @@ def translate_command_list_to_ascii(commands:List[Command], channel_mapping:Unio
 				f"X{0x300+last_used_loop_addrs};"
 				])
 		else:
-			raise NotImplementedError()
+			raise NotImplementedError(f"Translating {cmd} is not implemented yet.")
 
 	res.append("X0;")
 	
@@ -287,6 +287,9 @@ def generate_linspace_commands_from_nparray_using_LZ77(array:np.ndarray, dt:floa
 
 	# generate the list of commands
 	comm = LZ77_to_linspace_commands(comp, dt=dt)
+
+	# reduce unnecessary commands
+	comm = reduce_commands(comm)
 
 	return comm
 
