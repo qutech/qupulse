@@ -132,6 +132,10 @@ def LZ77_to_linspace_commands(lz77_compressed, dt=1e+5) -> List[Command]:
 	print_intermediate_programs = False
 	print_index_calculations = False
 
+	if isinstance(dt, (int, float)):
+		dt = np.ones(len(lz77_compressed))*dt
+	assert len(dt) == len(lz77_compressed)
+
 	loop_indecies = range(int(10_000_000_000_000)).__iter__()
 
 	commands = []
@@ -145,7 +149,7 @@ def LZ77_to_linspace_commands(lz77_compressed, dt=1e+5) -> List[Command]:
 			for i, a in enumerate(v):
 				if a != 0:
 					commands[-1].append(Increment(i, a, None))
-			commands[-1].append(Wait(dt))
+			commands[-1].append(Wait(dt[s]))
 		if d != 0:
 			lx = next(loop_indecies)
 			r = d//o
@@ -279,18 +283,45 @@ def generate_linspace_commands_from_nparray_using_LZ77(array:np.ndarray, dt:floa
 	assert len(array.shape) == 2
 	assert array.shape[1] <= 20, "The last dimension should be the channel dimension. And our DecaDACs have only 20 channel."
 
+	if isinstance(dt, (float, int)):
+		dt = np.ones(array.shape[0])*dt
+	assert len(dt.shape) == 1
+	assert dt.shape[0] == array.shape[0]
+	dt = dt.astype(int)
+
 	# translate the values into DecaDAC values
 	array = volt_to_int(array).astype(int)
 
+	# add a time axis
+	timed_array = np.concatenate([dt[:, None], array], axis=1)
+	timed_array = timed_array.astype(int)
+	assert len(timed_array.shape) == 2
+	assert timed_array.shape == (array.shape[0], array.shape[1]+1)
+
+	# split off the first sets:
+	first_sets = timed_array[0, 1:]
+	diff_sets = np.diff(timed_array[:, :], axis=0)
+	diff_sets[:, 0] = dt[1:]
+
 	# calculate the LZ77 compression
-	comp = compress_array_LZ77(array=array, allow_intermediates=False, using_diffs=True, allow_reconstructions_using_reconstructions=False)
+	comp = compress_array_LZ77(array=diff_sets, allow_intermediates=False, using_diffs=False, allow_reconstructions_using_reconstructions=False)
+
+	# splitting of the time axis
+	complz77 = [(o, d, (v[1:] if v is not None else None)) for o, d, v in comp]
+	compdt = [(v[0] if v is not None else 0) for o, d, v in comp]
 
 	# generate the list of commands
-	comm = LZ77_to_linspace_commands(comp, dt=dt)
+	comm = LZ77_to_linspace_commands(complz77, dt=compdt)
+
+	# adding the first Set commands and the first wait to the top of the command list
+	to_append = [
+		_Set(channel=i, value=v, key=None)
+		for i, v in enumerate(first_sets)
+	] + [Wait(dt[0])]
+	comm = to_append + comm
 
 	# reduce unnecessary commands
 	comm = reduce_commands(comm)
-
 	return comm
 
 class DecaDACRepresentation:
@@ -303,18 +334,9 @@ class DecaDACRepresentation:
 		print(ascii_script)
 		resp = upload_script(script=f"{{{ascii_script}}};", serial_ask=self.serial_ask)
 
-	def upload_numpy_pulse(self, numpy_pulse:np.ndarray, dt:float, channel_mapping:Union[Dict[int, int], None]=None, volt_in_dac_basis:bool=False):
-
-		assert not volt_in_dac_basis, "That should not be implemented."
+	def upload_numpy_pulse(self, numpy_pulse:np.ndarray, dt:float, channel_mapping:Union[Dict[int, int], None]=None):
 
 		comm = generate_linspace_commands_from_nparray_using_LZ77(numpy_pulse, dt=dt)
-
-		# translate the first Increments for each channel to Set commands.
-		updated_channels = []
-		for i, c in enumerate(comm):
-			if c.__class__.__name__ == "Increment" and c.channel not in updated_channels:
-				comm[i] = _Set(channel=c.channel, value=c.value, key=c.dependency_key)
-				updated_channels.append(c.channel)
 
 		self.upload_command_list(commands=comm, channel_mapping=channel_mapping, volt_in_dac_basis=True)
 
