@@ -30,11 +30,10 @@ except ImportError:
 import time
 
 from qupulse.utils.types import ChannelID, TimeType, time_from_float
-from qupulse._program._loop import Loop, make_compatible, roll_constant_waveforms
-from qupulse._program.seqc import HDAWGProgramManager, UserRegister, WaveformFileSystem
+from qupulse.program.loop import Loop, make_compatible
+from qupulse.program.seqc import HDAWGProgramManager, UserRegister, WaveformFileSystem
 from qupulse.hardware.awgs.base import AWG, ChannelNotFoundException, AWGAmplitudeOffsetHandling
 from qupulse.hardware.util import traced
-from qupulse.utils import replace_multiple
 from zhinst.toolkit import Session
 
 logger = logging.getLogger('qupulse.hdawg')
