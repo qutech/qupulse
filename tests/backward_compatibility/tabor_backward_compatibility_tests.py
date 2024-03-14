@@ -7,11 +7,9 @@ import sys
 import warnings
 
 try:
-    import tabor_control
-except ImportError as err:
-    raise unittest.SkipTest("tabor_control not present") from err
-
-from tests.hardware.tabor_simulator_based_tests import TaborSimulatorManager
+    from tests.hardware.tabor_simulator_based_tests import TaborSimulatorManager
+except ImportError:
+    TaborSimulatorManager = None
 from tests.hardware.dummy_devices import DummyDAC
 from tests.backward_compatibility.hardware_test_helper import LoadingAndSequencingHelper
 
@@ -102,6 +100,7 @@ class TaborLoadingAndSequencingHelper(LoadingAndSequencingHelper):
         return self.program_AB, self.program_CD
 
 
+@unittest.skipIf(tabor_control is None, "tabor_control not available")
 class CompleteIntegrationTestHelper(unittest.TestCase):
     data_folder = None
     pulse_name = None
