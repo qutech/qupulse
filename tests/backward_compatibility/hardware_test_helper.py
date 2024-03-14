@@ -55,10 +55,8 @@ class LoadingAndSequencingHelper:
         return getattr(module, function_name, None)
 
     def deserialize_pulse(self):
-        with warnings.catch_warnings():
-            warnings.simplefilter('ignore', category=DeprecationWarning)
-            serializer = Serializer(FilesystemBackend(os.path.join(self.data_folder, 'pulse_storage')))
-            self.pulse = typing.cast(PulseTemplate, serializer.deserialize(self.pulse_name))
+        serializer = Serializer(FilesystemBackend(os.path.join(self.data_folder, 'pulse_storage')))
+        self.pulse = typing.cast(PulseTemplate, serializer.deserialize(self.pulse_name))
 
     def deserialize_pulse_2018(self) -> None:
         pulse_storage = PulseStorage(FilesystemBackend(os.path.join(self.data_folder, 'pulse_storage_converted_2018')))
