@@ -2,7 +2,7 @@ import unittest
 from unittest import mock
 from collections import OrderedDict
 
-from qupulse.utils import checked_int_cast, replace_multiple, _fallback_pairwise
+from qupulse.utils import checked_int_cast, replace_multiple, _fallback_pairwise, to_next_multiple
 
 
 class PairWiseTest(unittest.TestCase):
@@ -102,3 +102,42 @@ class ReplacementTests(unittest.TestCase):
         replacements = OrderedDict(reversed(replacement_list))
         result = replace_multiple('asdf', replacements)
         self.assertEqual(result, '2')
+
+
+class ToNextMultipleTests(unittest.TestCase):
+    def test_to_next_multiple(self):
+        from qupulse.utils.types import TimeType
+        from qupulse.expressions import ExpressionScalar
+        
+        duration = TimeType.from_float(47.1415926535)
+        evaluated = to_next_multiple(sample_rate=TimeType.from_float(2.4),quantum=16)(duration)
+        expected = ExpressionScalar('160/3')
+        self.assertEqual(evaluated, expected)
+        
+        duration = TimeType.from_float(3.1415926535)
+        evaluated = to_next_multiple(sample_rate=TimeType.from_float(2.4),quantum=16,min_quanta=13)(duration)
+        expected = ExpressionScalar('260/3')
+        self.assertEqual(evaluated, expected)
+        
+        duration = 6185240.0000001
+        evaluated = to_next_multiple(sample_rate=1.0,quantum=16,min_quanta=13)(duration)
+        expected = 6185248
+        self.assertEqual(evaluated, expected)
+        
+        duration = 0.
+        evaluated = to_next_multiple(sample_rate=1.0,quantum=16,min_quanta=13)(duration)
+        expected = 0.
+        self.assertEqual(evaluated, expected)
+        
+        duration = ExpressionScalar('abc')
+        evaluated = to_next_multiple(sample_rate=1.0,quantum=16,min_quanta=13)(duration).evaluate_in_scope(dict(abc=0.))
+        expected = 0.
+        self.assertEqual(evaluated, expected)
+        
+        duration = ExpressionScalar('q')
+        evaluated = to_next_multiple(sample_rate=ExpressionScalar('w'),quantum=16,min_quanta=1)(duration).evaluate_in_scope(
+                        dict(q=3.14159,w=1.0))
+        expected = 16.
+        self.assertEqual(evaluated, expected)
+        
+        
