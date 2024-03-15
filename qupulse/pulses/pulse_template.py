@@ -27,7 +27,7 @@ from qupulse.program.waveforms import Waveform, TransformingWaveform
 from qupulse.pulses.measurement import MeasurementDefiner, MeasurementDeclaration
 from qupulse.parameter_scope import Scope, DictScope
 
-from qupulse.program import ProgramBuilder, default_program_builder
+from qupulse.program import ProgramBuilder, default_program_builder, Program
 
 __all__ = ["PulseTemplate", "AtomicPulseTemplate", "DoubleParameterNameException", "MappingTuple",
            "UnknownVolatileParameter"]
@@ -127,7 +127,7 @@ class PulseTemplate(Serializable):
                        global_transformation: Optional[Transformation]=None,
                        to_single_waveform: Set[Union[str, 'PulseTemplate']]=None,
                        volatile: Union[Set[str], str] = None,
-                       program_builder: ProgramBuilder = None) -> Optional['Loop']:
+                       program_builder: ProgramBuilder = None) -> Optional[Program]:
         """Translates this PulseTemplate into a program Loop.
 
         The returned Loop represents the PulseTemplate with all parameter values instantiated provided as dictated by
@@ -142,6 +142,8 @@ class PulseTemplate(Serializable):
             to_single_waveform: A set of pulse templates (or identifiers) which are directly translated to a
                 waveform. This might change how transformations are applied. TODO: clarify
             volatile: Everything in the final program that depends on these parameters is marked as volatile
+            program_builder: This program builder is used to build the return value. If `None` `default_program_builder`
+                is used.
         Returns:
              A Loop object corresponding to this PulseTemplate.
         """

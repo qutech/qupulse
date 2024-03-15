@@ -88,13 +88,11 @@ class Program(Protocol):
 
 
 class ProgramBuilder(Protocol):
-    """This protocol is used by PulseTemplate to build the program.
+    """This protocol is used by PulseTemplate to build the program via the visitor pattern.
 
     There is a default implementation which is the loop class.
 
-    Other hardware backends can use this protocol to implement easy translation of pulse templates.
-
-    """
+    Other hardware backends can use this protocol to implement easy translation of pulse templates."""
 
     def inner_scope(self, scope: Scope) -> Scope:
         """This function is necessary to inject program builder specific parameter implementations into the build

@@ -1,0 +1,1 @@
+Add the `ProgramBuilder` interface pattern to make the generated program of `PulseTemplate.create_program` easily customizable.
