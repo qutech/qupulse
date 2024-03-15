@@ -1,6 +1,6 @@
 from typing import Tuple, Set
 
-from .base import AWG
+from .base import AWG, ProgramOverwriteException
 
 class DummyAWG(AWG):
     def __init__(self,
@@ -34,7 +34,7 @@ class DummyAWG(AWG):
                 raise ProgramOverwriteException(name)
             else:
                 self.remove(name)
-                self.upload(name, program)
+                self.upload(name, program, channels, markers, voltage_transformation)
         else:
             self._programs[name] = (program, channels, markers, voltage_transformation)
 
