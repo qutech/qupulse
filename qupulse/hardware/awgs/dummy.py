@@ -1,17 +1,14 @@
 from .base import AWG
 
 class DummyAWG(AWG):
-    """Dummy AWG for debugging purposes."""
-
     def __init__(self,
                  sample_rate: float=10,
                  output_range: Tuple[float, float]=(-5, 5),
                  num_channels: int=1,
                  num_markers: int=1) -> None:
-        """Create a new DummyAWG instance.
+        """Dummy AWG for automated testing, debugging and usage in examples.
 
         Args:
-            memory (int): Available memory slots for waveforms. (default = 100)
             sample_rate (float): The sample rate of the dummy. (default = 10)
             output_range (float, float): A (min,max)-tuple of possible output values.
                 (default = (-5,5)).

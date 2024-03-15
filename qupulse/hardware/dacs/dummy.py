@@ -4,6 +4,8 @@ from collections import deque
 from qupulse.hardware.dacs.dac_base import DAC
 
 class DummyDAC(DAC):
+    """Dummy DAC for automated testing, debugging and usage in examples. """
+
     def __init__(self):
         self._measurement_windows = dict()
         self._operations = dict()
