@@ -7,12 +7,16 @@ import os
 try:
     import pyvisa.resources
     import tabor_control
-except ImportError as err:
-    raise unittest.SkipTest("pyvisa and/or tabor_control not present") from err
+except ImportError:
+    tabor_control = None
+    pyvisa = None
 
 import numpy as np
 
-from qupulse.hardware.awgs.tabor import TaborAWGRepresentation, TaborChannelPair
+try:
+    from qupulse.hardware.awgs.tabor import TaborAWGRepresentation, TaborChannelPair
+except ImportError:
+    pass
 from qupulse._program.tabor import TaborSegment, PlottableProgram, TaborException, TableDescription, TableEntry
 from typing import List, Tuple, Optional, Any
 
@@ -48,7 +52,7 @@ class TaborSimulatorManager:
     def simulator_full_path(self):
         return os.path.join(self.simulator_path, self.simulator_executable)
 
-    def start_simulator(self, try_connecting_to_existing_simulator=True, max_wait_time=30) -> pyvisa.resources.MessageBasedResource:
+    def start_simulator(self, try_connecting_to_existing_simulator=True, max_wait_time=30) -> 'pyvisa.resources.MessageBasedResource':
         try:
             pyvisa.ResourceManager()
         except ValueError:
@@ -95,7 +99,7 @@ class TaborSimulatorManager:
             self.simulator_process.kill()
 
 
-@unittest.skipIf(platform.system() != 'Windows', "Simulator currently only available on Windows :(")
+@unittest.skipIf(tabor_control is None or platform.system() != 'Windows', "Simulator currently only available on Windows :(")
 class TaborSimulatorBasedTest(unittest.TestCase):
     simulator_manager = None
 

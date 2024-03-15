@@ -100,7 +100,8 @@ class CompleteIntegrationTestHelper(unittest.TestCase):
         cls.test_state = HDAWGLoadingAndSequencingHelper(cls.data_folder, cls.pulse_name)
 
     def test_1_1_deserialization(self):
-        self.test_state.deserialize_pulse()
+        with self.assertWarns(DeprecationWarning):
+            self.test_state.deserialize_pulse()
 
     def test_1_2_deserialization_2018(self) -> None:
         self.test_state.deserialize_pulse_2018()
