@@ -414,7 +414,7 @@ class ParallelChannelPulseTemplateTests(unittest.TestCase):
                                       measurement_names={'M'}, waveform=DummyWaveform())
         overwritten_channels = {'Y': 'c', 'Z': 'a', 'ToNone': 'foo'}
 
-        parent_loop = object()
+        program_builder = object()
         measurement_mapping = object()
         channel_mapping = {'Y': 'O', 'Z': 'Z', 'X': 'X', 'ToNone': None}
         to_single_waveform = object()
@@ -422,7 +422,7 @@ class ParallelChannelPulseTemplateTests(unittest.TestCase):
         other_kwargs = dict(measurement_mapping=measurement_mapping,
                             channel_mapping=channel_mapping,
                             to_single_waveform=to_single_waveform,
-                            parent_loop=parent_loop)
+                            program_builder=program_builder)
         pccpt = ParallelChannelPulseTemplate(template, overwritten_channels)
 
         scope = DictScope.from_kwargs(c=1.2, a=3.4)
