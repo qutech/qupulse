@@ -6,9 +6,10 @@ from numbers import Real
 
 import numpy as np
 
-from qupulse._program.waveforms import Waveform
+from qupulse import ChannelID
+from qupulse.program.waveforms import Waveform
 from qupulse.utils.types import MeasurementWindow, TimeType
-from qupulse._program.volatile import VolatileRepetitionCount
+from qupulse.program.volatile import VolatileRepetitionCount
 from qupulse.parameter_scope import Scope
 from qupulse.expressions import sympy as sym_expr
 
@@ -98,7 +99,7 @@ class ProgramBuilder(Protocol):
         """This function is necessary to inject program builder specific parameter implementations into the build
         process."""
 
-    def hold_voltage(self, duration: HardwareTime, voltages: Mapping[str, HardwareVoltage]):
+    def hold_voltage(self, duration: HardwareTime, voltages: Mapping[ChannelID, HardwareVoltage]):
         """Supports dynamic i.e. for loop generated offsets and duration"""
 
     # further specialized commandos like play_harmoic might be added here
