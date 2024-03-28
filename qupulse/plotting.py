@@ -257,6 +257,7 @@ def plot(pulse: PulseTemplate,
         with warnings.catch_warnings():
             # do not show warnings in jupyter notebook with matplotlib inline backend
             warnings.filterwarnings(action="ignore",message=".*which is a non-GUI backend, so cannot show the figure.*")
+            warnings.filterwarnings(action="ignore",message=".*is non-interactive, and thus cannot be shown.*")
             axes.get_figure().show()
     return axes.get_figure()
 
