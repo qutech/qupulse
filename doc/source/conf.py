@@ -81,7 +81,7 @@ master_doc = 'index'
 
 # General information about the project.
 project = 'qupulse'
-copyright = '2015-2022, Quantum Technology Group, RWTH Aachen University'
+copyright = '2015-2024, Quantum Technology Group, RWTH Aachen University'
 author = 'Quantum Technology Group and Chair of Software Engineering, RWTH Aachen University'
 
 # The version info for the project you're documenting, acts as replacement for
