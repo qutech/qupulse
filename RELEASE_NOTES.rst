@@ -2,6 +2,25 @@
 
 .. towncrier release notes start
 
+qupulse 0.10 (2024-04-04)
+=========================
+
+Features
+--------
+
+- Move HDAWG driver to qupulse-hdawg-legacy to disentangle driver version from qupulse version. The new HDAWG driver will be published under qupulse-hdawg. (`#779 <https://github.com/qutech/qupulse/issues/779>`_)
+- Add the `ProgramBuilder` interface pattern to make the generated program of `PulseTemplate.create_program` easily customizable. (`#781 <https://github.com/qutech/qupulse/issues/781>`_)
+- Measurement windows can now automatically shrank in case of overlap to counteract small numeric errors. (`#791 <https://github.com/qutech/qupulse/issues/791>`_)
+
+
+Bugfixes
+--------
+
+- ``ConstantPulseTemplate``s from all versions can now be deserialized. (`#696 <https://github.com/qutech/qupulse/issues/696>`_)
+- Fixed that single segment tables where always interpreted to be constant. (`#707 <https://github.com/qutech/qupulse/issues/707>`_)
+- Add missing pulse registry support to `ArithmeticPT`. (`#775 <https://github.com/qutech/qupulse/issues/775>`_)
+
+
 qupulse 0.9 (2023-11-08)
 ========================
 

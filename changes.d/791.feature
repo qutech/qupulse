@@ -1,1 +1,0 @@
-Measurement windows can now automatically shrank in case of overlap to counteract small numeric errors.

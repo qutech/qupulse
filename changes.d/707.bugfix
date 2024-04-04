@@ -1,1 +1,0 @@
-Fixed that single segment tables where always interpreted to be constant.
