@@ -59,7 +59,15 @@ def _shrink_overlapping_windows_numba(begins, lengths) -> bool:
 
 
 class WindowOverlapWarning(RuntimeWarning):
-    pass
+    COMMENT = (" This warning is an error by default. "
+               "Call 'warnings.simplefilter(WindowOverlapWarning, \"always\")' "
+               "to demote it to a regular warning.")
+
+    def __str__(self):
+        return super().__str__() + self.COMMENT
+
+
+warnings.simplefilter(category=WindowOverlapWarning, action='error')
 
 
 def shrink_overlapping_windows(begins, lengths, use_numba: bool = numba is not None) -> Tuple[np.array, np.array]:
@@ -78,7 +86,7 @@ def shrink_overlapping_windows(begins, lengths, use_numba: bool = numba is not N
     begins = begins.copy()
     lengths = lengths.copy()
     if backend(begins, lengths):
-        warnings.warn("Found overlapping measurement windows which are automatically shrunken if possible.",
+        warnings.warn("Found overlapping measurement windows which can be automatically shrunken if possible.",
                       category=WindowOverlapWarning)
     return begins, lengths
 
