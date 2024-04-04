@@ -1,3 +1,4 @@
+import warnings
 from typing import Tuple
 import numpy as np
 
@@ -22,6 +23,76 @@ def _is_monotonic_numpy(arr: np.ndarray) -> bool:
     # A bit faster than np.all(np.diff(arr) > 0) for small arrays
     # No difference for big arrays
     return np.all(arr[1:] >= arr[:-1])
+
+
+def _shrink_overlapping_windows_numpy(begins, lengths) -> bool:
+    supported_dtypes = ('int64', 'uint64')
+    if begins.dtype.name not in supported_dtypes or lengths.dtype.name not in supported_dtypes:
+        raise NotImplementedError("This function only supports 64 bit integer types yet.")
+
+    ends = begins + lengths
+
+    overlaps = np.zeros_like(ends, dtype=np.int64)
+    np.maximum(ends[:-1].view(np.int64) - begins[1:].view(np.int64), 0, out=overlaps[1:])
+
+    if np.any(overlaps >= lengths):
+        raise ValueError("Overlap is bigger than measurement window")
+    if np.any(overlaps > 0):
+        begins += overlaps.view(begins.dtype)
+        lengths -= overlaps.view(lengths.dtype)
+        return True
+    return False
+
+
+@njit
+def _shrink_overlapping_windows_numba(begins, lengths) -> bool:
+    shrank = False
+    for idx in range(len(begins) - 1):
+        end = begins[idx] + lengths[idx]
+        next_begin = begins[idx + 1]
+
+        if end > next_begin:
+            overlap = end - next_begin
+            shrank = True
+            if lengths[idx + 1] > overlap:
+                begins[idx + 1] += overlap
+                lengths[idx + 1] -= overlap
+            else:
+                raise ValueError("Overlap is bigger than measurement window")
+    return shrank
+
+
+class WindowOverlapWarning(RuntimeWarning):
+    COMMENT = (" This warning is an error by default. "
+               "Call 'warnings.simplefilter(WindowOverlapWarning, \"always\")' "
+               "to demote it to a regular warning.")
+
+    def __str__(self):
+        return super().__str__() + self.COMMENT
+
+
+warnings.simplefilter(category=WindowOverlapWarning, action='error')
+
+
+def shrink_overlapping_windows(begins, lengths, use_numba: bool = numba is not None) -> Tuple[np.array, np.array]:
+    """Shrink windows in place if they overlap. Emits WindowOverlapWarning if a window was shrunk.
+
+    Raises:
+        ValueError: if the overlap is bigger than a window.
+
+    Warnings:
+        WindowOverlapWarning
+    """
+    if use_numba:
+        backend = _shrink_overlapping_windows_numba
+    else:
+        backend = _shrink_overlapping_windows_numpy
+    begins = begins.copy()
+    lengths = lengths.copy()
+    if backend(begins, lengths):
+        warnings.warn("Found overlapping measurement windows which can be automatically shrunken if possible.",
+                      category=WindowOverlapWarning)
+    return begins, lengths
 
 
 @njit

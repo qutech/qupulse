@@ -1,9 +1,12 @@
 import unittest
+import warnings
 
 import numpy as np
 
-from qupulse.utils.performance import (_time_windows_to_samples_numba, _time_windows_to_samples_numpy,
-                                       _average_windows_numba, _average_windows_numpy, average_windows)
+from qupulse.utils.performance import (
+    _time_windows_to_samples_numba, _time_windows_to_samples_numpy,
+    _average_windows_numba, _average_windows_numpy, average_windows,
+    shrink_overlapping_windows, WindowOverlapWarning)
 
 
 class TimeWindowsToSamplesTest(unittest.TestCase):
@@ -55,3 +58,53 @@ class WindowAverageTest(unittest.TestCase):
 
     def test_dual_channel(self):
         self.assert_implementations_equal(self.time, self.values, self.begins, self.ends)
+
+
+class TestOverlappingWindowReduction(unittest.TestCase):
+    def setUp(self):
+        self.shrank = np.array([1, 4, 8], dtype=np.uint64), np.array([3, 4, 4], dtype=np.uint64)
+        self.to_shrink = np.array([1, 4, 7], dtype=np.uint64), np.array([3, 4, 5], dtype=np.uint64)
+
+    def assert_noop(self, shrink_fn):
+        begins = np.array([1, 3, 5], dtype=np.uint64)
+        lengths = np.array([2, 1, 6], dtype=np.uint64)
+        result = shrink_fn(begins, lengths)
+        np.testing.assert_equal((begins, lengths), result)
+
+        begins = (np.arange(100) * 176.5).astype(dtype=np.uint64)
+        lengths = (np.ones(100) * 10 * np.pi).astype(dtype=np.uint64)
+        result = shrink_fn(begins, lengths)
+        np.testing.assert_equal((begins, lengths), result)
+
+        begins = np.arange(15, dtype=np.uint64)*16
+        lengths = 1+np.arange(15, dtype=np.uint64)
+        result = shrink_fn(begins, lengths)
+        np.testing.assert_equal((begins, lengths), result)
+
+    def assert_shrinks(self, shrink_fn):
+        with warnings.catch_warnings():
+            warnings.simplefilter("always", WindowOverlapWarning)
+            with self.assertWarns(WindowOverlapWarning):
+                shrank = shrink_fn(*self.to_shrink)
+        np.testing.assert_equal(self.shrank, shrank)
+
+    def assert_empty_window_error(self, shrink_fn):
+        invalid = np.array([1, 2], dtype=np.uint64), np.array([5, 1], dtype=np.uint64)
+        with self.assertRaisesRegex(ValueError, "Overlap is bigger than measurement window"):
+            shrink_fn(*invalid)
+
+    def test_shrink_overlapping_windows_numba(self):
+        def shrink_fn(begins, lengths):
+            return shrink_overlapping_windows(begins, lengths, use_numba=True)
+
+        self.assert_noop(shrink_fn)
+        self.assert_shrinks(shrink_fn)
+        self.assert_empty_window_error(shrink_fn)
+
+    def test_shrink_overlapping_windows_numpy(self):
+        def shrink_fn(begins, lengths):
+            return shrink_overlapping_windows(begins, lengths, use_numba=False)
+
+        self.assert_noop(shrink_fn)
+        self.assert_shrinks(shrink_fn)
+        self.assert_empty_window_error(shrink_fn)
