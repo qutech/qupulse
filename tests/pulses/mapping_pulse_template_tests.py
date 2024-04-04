@@ -8,7 +8,8 @@ from qupulse.pulses.mapping_pulse_template import MissingMappingException,\
     AmbiguousMappingException, MappingCollisionException
 from qupulse.pulses.parameters import ParameterConstraintViolation, ParameterConstraint, ParameterNotProvidedException
 from qupulse.expressions import Expression
-from qupulse.program.loop import Loop
+from qupulse.program import default_program_builder
+from qupulse.program.loop import Loop, LoopBuilder
 
 from tests.pulses.sequencing_dummies import DummyPulseTemplate, MeasurementWindowTestCase, DummyWaveform
 from tests.serialization_tests import SerializableTests
@@ -139,9 +140,6 @@ class MappingTemplateTests(unittest.TestCase):
                                          parameter_mapping={'foo': 2},
                                          measurement_mapping={'m1': 'n1'},
                                          channel_mapping={'c1': 'd1'})
-
-
-
 
     def test_external_params(self):
         template = DummyPulseTemplate(parameter_names={'foo', 'bar'})
@@ -315,13 +313,13 @@ class MappingPulseTemplateSequencingTest(MeasurementWindowTestCase):
         pre_measurement_mapping = {'meas2': 'meas3'}
         pre_channel_mapping = {'default': 'A'}
 
-        program = Loop()
+        program_builder = default_program_builder()
         expected_inner_args = dict(scope=st.map_scope(pre_scope),
                                    measurement_mapping=st.get_updated_measurement_mapping(pre_measurement_mapping),
                                    channel_mapping=st.get_updated_channel_mapping(pre_channel_mapping),
                                    to_single_waveform=to_single_waveform,
                                    global_transformation=global_transformation,
-                                   parent_loop=program)
+                                   program_builder=program_builder)
 
         with mock.patch.object(template, '_create_program') as inner_create_program:
             st._internal_create_program(scope=pre_scope,
@@ -329,11 +327,11 @@ class MappingPulseTemplateSequencingTest(MeasurementWindowTestCase):
                                         channel_mapping=pre_channel_mapping,
                                         to_single_waveform=to_single_waveform,
                                         global_transformation=global_transformation,
-                                        parent_loop=program)
+                                        program_builder=program_builder)
             inner_create_program.assert_called_once_with(**expected_inner_args)
 
         # as we mock the inner function there shouldnt be any changes
-        self.assertEqual(program, Loop())
+        self.assertIsNone(program_builder.to_program())
 
     def test_create_program_invalid_measurement_mapping(self) -> None:
         measurement_mapping = {'meas1': 'meas2'}
@@ -352,14 +350,14 @@ class MappingPulseTemplateSequencingTest(MeasurementWindowTestCase):
         pre_measurement_mapping = {}
         pre_channel_mapping = {'default': 'A'}
 
-        program = Loop()
+        program_builder = default_program_builder()
         with self.assertRaises(KeyError):
             st._internal_create_program(scope=pre_scope,
                                         measurement_mapping=pre_measurement_mapping,
                                         channel_mapping=pre_channel_mapping,
                                         to_single_waveform=set(),
                                         global_transformation=None,
-                                        parent_loop=program)
+                                        program_builder=program_builder)
 
     def test_create_program_parameter_constraint_violation(self) -> None:
         measurement_mapping = {'meas1': 'meas2'}
@@ -379,14 +377,14 @@ class MappingPulseTemplateSequencingTest(MeasurementWindowTestCase):
         pre_measurement_mapping = {'meas2': 'meas3'}
         pre_channel_mapping = {'default': 'A'}
 
-        program = Loop()
+        program_builder = default_program_builder()
         with self.assertRaises(ParameterConstraintViolation):
             st._internal_create_program(scope=pre_scope,
                                         measurement_mapping=pre_measurement_mapping,
                                         channel_mapping=pre_channel_mapping,
                                         to_single_waveform=set(),
                                         global_transformation=None,
-                                        parent_loop=program)
+                                        program_builder=program_builder)
 
     def test_create_program_subtemplate_none(self) -> None:
         measurement_mapping = {'meas1': 'meas2'}
@@ -406,24 +404,22 @@ class MappingPulseTemplateSequencingTest(MeasurementWindowTestCase):
         pre_measurement_mapping = {'meas2': 'meas3'}
         pre_channel_mapping = {'default': 'A'}
 
-        program = Loop()
+        program_builder = LoopBuilder()
         st._internal_create_program(scope=pre_scope,
                                     measurement_mapping=pre_measurement_mapping,
                                     channel_mapping=pre_channel_mapping,
                                     to_single_waveform=set(),
                                     global_transformation=None,
-                                    parent_loop=program)
+                                    program_builder=program_builder)
 
         self.assertEqual(1, len(template.create_program_calls))
         self.assertEqual((st.map_scope(pre_scope),
                           st.get_updated_measurement_mapping(pre_measurement_mapping),
                           st.get_updated_channel_mapping(pre_channel_mapping),
-                          program),
+                          program_builder),
                          template.create_program_calls[-1])
 
-        self.assertEqual(1, program.repetition_count)
-        self.assertEqual(0, len(program.children))
-        self.assertIsNone(program._measurements)
+        self.assertIsNone(program_builder.to_program())
 
     def test_same_channel_error(self):
 

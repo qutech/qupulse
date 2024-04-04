@@ -3,6 +3,7 @@ from . import pulses
 from . import hardware
 from . import utils
 from . import _program
+from . import program
 
 from . import comparable
 from . import expressions
@@ -16,6 +17,7 @@ __all__ = ['pulses',
            'hardware',
            'utils',
            '_program',
+           'program',
            'comparable',
            'expressions',
            'parameter_scope',

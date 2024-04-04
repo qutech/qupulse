@@ -382,7 +382,7 @@ class ArithmeticPulseTemplate(PulseTemplate):
                                  channel_mapping: Dict[ChannelID, Optional[ChannelID]],
                                  global_transformation: Optional[Transformation],
                                  to_single_waveform: Set[Union[str, 'PulseTemplate']],
-                                 parent_loop: 'Loop'):
+                                 program_builder: 'ProgramBuilder'):
         """The operation is applied by modifying the transformation the pulse template operand sees."""
         if not scope.get_volatile_parameters().keys().isdisjoint(self._scalar_operand_parameters):
             raise NotImplementedError('The scalar operand of arithmetic pulse template cannot be volatile')
@@ -398,7 +398,7 @@ class ArithmeticPulseTemplate(PulseTemplate):
                                              channel_mapping=channel_mapping,
                                              global_transformation=transformation,
                                              to_single_waveform=to_single_waveform,
-                                             parent_loop=parent_loop)
+                                             program_builder=program_builder)
 
     def build_waveform(self,
                        parameters: Dict[str, Real],

@@ -1,1 +1,1 @@
-Promote parts of the private subpackage `qupulse._program` to the public subpackage `qupulse.program`, i.e. `loop`, `volatile`, `transformation` and `waveforms`. This allows external packages/drivers to rely on stability of the `Loop` class.
+Move HDAWG driver to qupulse-hdawg-legacy to disentangle driver version from qupulse version. The new HDAWG driver will be published under qupulse-hdawg.

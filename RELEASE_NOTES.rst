@@ -2,6 +2,28 @@
 
 .. towncrier release notes start
 
+qupulse 0.9 (2023-11-08)
+========================
+
+Features
+--------
+
+- Add `__pow__` as a repetition shortcut. This means you can do `my_pulse_template ** 5` or `my_pulse_template ** 'my_repetition_count'`. (`#692 <https://github.com/qutech/qupulse/issues/692>`_)
+- Promote ``qupulse.expression`` to a subpackage and create ``qupulse.expression.protocol`` with protocol classes that define the expression interface that is supposed to be used by qupulse.
+  The ```sympy`` based implementation is moved to ``qupulse.expressions.sympy`` and imported in ``qupulse.expressions``.
+
+  The intended use is to be able to use less powerful but faster implementations of the ``Expression`` protocol where appropriate.
+  In this first iteration, qupulse still relies on internals of the ``sympy`` based implementation in many places which is to be removed in the future. (`#750 <https://github.com/qutech/qupulse/issues/750>`_)
+- Promote parts of the private subpackage `qupulse._program` to the public subpackage `qupulse.program`, i.e. `loop`, `volatile`, `transformation` and `waveforms`. This allows external packages/drivers to rely on stability of the `Loop` class. (`#779 <https://github.com/qutech/qupulse/issues/779>`_)
+- Add ``PulseTemplate.pad_to`` method to help padding to minimal lengths or multiples of given durations. (`#801 <https://github.com/qutech/qupulse/issues/801>`_)
+
+
+Misc
+----
+
+- `#771 <https://github.com/qutech/qupulse/issues/771>`_
+
+
 qupulse 0.8 (2023-03-28)
 ========================
 

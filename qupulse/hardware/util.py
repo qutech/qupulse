@@ -22,7 +22,7 @@ except ImportError:
     njit = lambda x: x
 
 try:
-    import zhinst
+    import zhinst.utils
 except ImportError:  # pragma: no cover
     zhinst = None
 
