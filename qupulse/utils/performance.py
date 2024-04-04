@@ -26,16 +26,20 @@ def _is_monotonic_numpy(arr: np.ndarray) -> bool:
 
 
 def _shrink_overlapping_windows_numpy(begins, lengths) -> bool:
+    supported_dtypes = ('int64', 'uint64')
+    if begins.dtype.name not in supported_dtypes or lengths.dtype.name not in supported_dtypes:
+        raise NotImplementedError("This function only supports 64 bit integer types yet.")
+
     ends = begins + lengths
 
-    overlaps = np.zeros_like(ends)
-    np.maximum(ends[:-1] - begins[1:], 0, out=overlaps[1:])
+    overlaps = np.zeros_like(ends, dtype=np.int64)
+    np.maximum(ends[:-1].view(np.int64) - begins[1:].view(np.int64), 0, out=overlaps[1:])
 
     if np.any(overlaps >= lengths):
         raise ValueError("Overlap is bigger than measurement window")
     if np.any(overlaps > 0):
-        begins += overlaps
-        lengths -= overlaps
+        begins += overlaps.view(begins.dtype)
+        lengths -= overlaps.view(lengths.dtype)
         return True
     return False
 

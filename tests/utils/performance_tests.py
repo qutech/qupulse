@@ -62,12 +62,22 @@ class WindowAverageTest(unittest.TestCase):
 
 class TestOverlappingWindowReduction(unittest.TestCase):
     def setUp(self):
-        self.shrank = np.array([1, 4, 8]), np.array([3, 4, 4])
-        self.to_shrink = np.array([1, 4, 7]), np.array([3, 4, 5])
+        self.shrank = np.array([1, 4, 8], dtype=np.uint64), np.array([3, 4, 4], dtype=np.uint64)
+        self.to_shrink = np.array([1, 4, 7], dtype=np.uint64), np.array([3, 4, 5], dtype=np.uint64)
 
     def assert_noop(self, shrink_fn):
-        begins = np.array([1, 3, 5])
-        lengths = np.array([2, 1, 6])
+        begins = np.array([1, 3, 5], dtype=np.uint64)
+        lengths = np.array([2, 1, 6], dtype=np.uint64)
+        result = shrink_fn(begins, lengths)
+        np.testing.assert_equal((begins, lengths), result)
+
+        begins = (np.arange(100) * 176.5).astype(dtype=np.uint64)
+        lengths = (np.ones(100) * 10 * np.pi).astype(dtype=np.uint64)
+        result = shrink_fn(begins, lengths)
+        np.testing.assert_equal((begins, lengths), result)
+
+        begins = np.arange(15, dtype=np.uint64)*16
+        lengths = 1+np.arange(15, dtype=np.uint64)
         result = shrink_fn(begins, lengths)
         np.testing.assert_equal((begins, lengths), result)
 
@@ -79,7 +89,7 @@ class TestOverlappingWindowReduction(unittest.TestCase):
         np.testing.assert_equal(self.shrank, shrank)
 
     def assert_empty_window_error(self, shrink_fn):
-        invalid = np.array([1, 2]), np.array([5, 1])
+        invalid = np.array([1, 2], dtype=np.uint64), np.array([5, 1], dtype=np.uint64)
         with self.assertRaisesRegex(ValueError, "Overlap is bigger than measurement window"):
             shrink_fn(*invalid)
 
