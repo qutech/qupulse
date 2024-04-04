@@ -31,7 +31,10 @@ class SimpleExpression(Generic[NumVal]):
     """
 
     base: NumVal
-    offsets: Dict[str, NumVal]
+    offsets: Mapping[str, NumVal]
+
+    def __post_init__(self):
+        assert isinstance(self.offsets, Mapping)
 
     def value(self, scope: Mapping[str, NumVal]) -> NumVal:
         value = self.base
