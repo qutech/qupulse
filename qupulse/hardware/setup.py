@@ -12,7 +12,7 @@ from qupulse.utils.types import ChannelID
 import numpy as np
 
 
-__all__ = ['PlaybackChannel', 'MarkerChannel', 'HardwareSetup']
+__all__ = ['PlaybackChannel', 'MarkerChannel', 'MeasurementMask', 'HardwareSetup']
 
 
 class MeasurementMask:
