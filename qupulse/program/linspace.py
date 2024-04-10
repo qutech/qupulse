@@ -160,10 +160,10 @@ class LinSpaceBuilder(ProgramBuilder):
             for rng_name, rng in ranges.items():
                 start = 0.
                 step = 0.
-                for off_name, offset in offsets:
-                    if off_name == rng_name:
-                        start += rng.start * offset
-                        step += rng.step * offset
+                offset = offsets.get(rng_name, None)
+                if offset:
+                    start += rng.start * offset
+                    step += rng.step * offset
                 base += start
                 incs.append(step)
             factors.append(tuple(incs))
