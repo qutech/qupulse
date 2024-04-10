@@ -125,7 +125,7 @@ class LinSpaceBuilder(ProgramBuilder):
         process."""
         if self._ranges:
             name, _ = self._ranges[-1]
-            return MappedScope(scope, FrozenDict({name: SimpleExpression(base=0, offsets=[(name, 1)])}))
+            return scope.overwrite({name: SimpleExpression(base=0, offsets={name: 1})})
         else:
             return scope
 

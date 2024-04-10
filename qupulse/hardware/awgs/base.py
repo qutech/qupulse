@@ -213,9 +213,6 @@ class ProgramEntry:
         self._program = program #non-normalized
         self.__loop = program
         
-        print(type(program_type))
-        print(type(_ProgramType.Linspace))
-        print(program_type is _ProgramType.Linspace)
         if program_type == _ProgramType.Linspace:
             self._transformed_commands = self._transform_linspace_commands(to_increment_commands(program))
         
