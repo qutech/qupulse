@@ -9,11 +9,15 @@ Classes:
 
 from abc import abstractmethod
 from numbers import Real
-from typing import Set, Tuple, Callable, Optional, Mapping, Sequence, List
+from typing import Set, Tuple, Callable, Optional, Mapping, Sequence, List, Union
 from collections import OrderedDict
+from enum import Enum
+# from itertools import chain
 
 from qupulse.hardware.util import get_sample_times, not_none_indices
 from qupulse.utils.types import ChannelID
+from qupulse.program.linspace import LinSpaceNode, LinSpaceArbitraryWaveform, to_increment_commands, Command, \
+    Increment, Set as LSPSet, LoopLabel, LoopJmp, Wait, Play
 from qupulse.program.loop import Loop
 from qupulse.program.waveforms import Waveform
 from qupulse.comparable import Comparable
@@ -162,17 +166,26 @@ class ProgramOverwriteException(Exception):
                " Use force to overwrite.".format(self.name)
 
 
+AllowedProgramTypes = Union[Loop,Sequence[LinSpaceNode],]
+
+class _ProgramType(Enum):
+    FSP = -1
+    Loop = 0
+    Linspace = 1
+
+
 class ProgramEntry:
     """This is a helper class for implementing awgs drivers. A driver can subclass it to help organizing sampled
     waveforms"""
-    def __init__(self, loop: Loop,
+    def __init__(self, program: AllowedProgramTypes,
                  channels: Tuple[Optional[ChannelID], ...],
                  markers: Tuple[Optional[ChannelID], ...],
                  amplitudes: Tuple[float, ...],
                  offsets: Tuple[float, ...],
                  voltage_transformations: Tuple[Optional[Callable], ...],
                  sample_rate: TimeType,
-                 waveforms: Sequence[Waveform] = None):
+                 waveforms: Sequence[Waveform] = None,
+                 program_type: _ProgramType = _ProgramType.Loop):
         """
 
         Args:
@@ -195,17 +208,44 @@ class ProgramEntry:
         self._voltage_transformations = tuple(voltage_transformations)
 
         self._sample_rate = sample_rate
-
-        self._loop = loop
-
+        
+        self._program_type = program_type
+        self._program = program #non-normalized
+        self.__loop = program
+        
+        print(type(program_type))
+        print(type(_ProgramType.Linspace))
+        print(program_type is _ProgramType.Linspace)
+        if program_type == _ProgramType.Linspace:
+            self._transformed_commands = self._transform_linspace_commands(to_increment_commands(program))
+        
         if waveforms is None:
-            waveforms = OrderedDict((node.waveform, None)
-                                    for node in loop.get_depth_first_iterator() if node.is_leaf()).keys()
+            if program_type is _ProgramType.Loop:
+                    waveforms = OrderedDict((node.waveform, None)
+                                        for node in program.get_depth_first_iterator() if node.is_leaf()).keys()
+            elif program_type is _ProgramType.Linspace:
+                    #not so clean
+                    #TODO: also marker handling not optimal
+                    waveforms = OrderedDict((command.waveform, None)
+                                        for command in self._transformed_commands if isinstance(command,Play)).keys()
+            else:
+                raise NotImplementedError()
+                    
         if waveforms:
             self._waveforms = OrderedDict(zip(waveforms, self._sample_waveforms(waveforms)))
         else:
             self._waveforms = OrderedDict()
-
+    
+    @property
+    def _loop(self,) -> _ProgramType:
+        if self._program_type is not _ProgramType.Loop and self._program_type is not _ProgramType.FSP:
+            raise DeprecationWarning()
+        return self.__loop
+    
+    @_loop.setter
+    def _loop(self,program:_ProgramType):
+        self.__loop = program
+    
     def _sample_empty_channel(self, time: numpy.ndarray) -> Optional[numpy.ndarray]:
         """Override this in derived class to change how empty channels are handled"""
         return None
@@ -213,7 +253,31 @@ class ProgramEntry:
     def _sample_empty_marker(self, time: numpy.ndarray) -> Optional[numpy.ndarray]:
         """Override this in derived class to change how empty channels are handled"""
         return None
-
+    
+    def _transform_linspace_commands(self, command_list: List[Command]) -> List[Command]:
+        
+        # all commands = Union[Increment, Set, LoopLabel, LoopJmp, Wait, Play]
+        if any(self._voltage_transformations):
+            raise NotImplementedError('how to handle this?')
+        
+        _channelname_to_idx = {name: idx for idx, name in enumerate(self._channels)}
+        trafos_by_channel_idx = {ch: (v,a,o) for ch,v,a,o in zip(_channelname_to_idx.values(),self._voltage_transformations,self._amplitudes,self._offsets)}
+        #the channels are now in idx in the commands.
+        
+        print(trafos_by_channel_idx)
+        
+        for command in command_list:
+            if isinstance(command,Union[LoopLabel, LoopJmp, Play, Wait]):
+                continue
+            elif isinstance(command,Increment):
+                command.value = command.value / trafos_by_channel_idx[command.channel][1]
+            elif isinstance(command,LSPSet):
+                command.value = (command.value - trafos_by_channel_idx[command.channel][2]) / trafos_by_channel_idx[command.channel][1]
+            else:        
+                raise NotImplementedError()
+        
+        return command_list
+    
     def _sample_waveforms(self, waveforms: Sequence[Waveform]) -> List[Tuple[Tuple[numpy.ndarray, ...],
                                                                              Tuple[numpy.ndarray, ...]]]:
         sampled_waveforms = []

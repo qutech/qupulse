@@ -1,8 +1,9 @@
 import abc
 import contextlib
 import dataclasses
+import numpy as np
 from dataclasses import dataclass
-from typing import Mapping, Optional, Sequence, ContextManager, Iterable, Tuple, Union, Dict, List
+from typing import Mapping, Optional, Sequence, ContextManager, Iterable, Tuple, Union, Dict, List, Iterator
 
 from qupulse import ChannelID, MeasurementWindow
 from qupulse.parameter_scope import Scope, MappedScope, FrozenDict
@@ -124,7 +125,7 @@ class LinSpaceBuilder(ProgramBuilder):
         process."""
         if self._ranges:
             name, _ = self._ranges[-1]
-            return scope.overwrite({name: SimpleExpression(base=0, offsets={name: 1})})
+            return MappedScope(scope, FrozenDict({name: SimpleExpression(base=0, offsets=[(name, 1)])}))
         else:
             return scope
 
@@ -143,16 +144,26 @@ class LinSpaceBuilder(ProgramBuilder):
                 bases.append(value)
                 factors.append(None)
                 continue
+            #there mightbe a bug in some waveform.constant_value, where an array of float instead of float is returned
+            #(goes against the typehints)
+            if isinstance(value, np.ndarray):
+                try:
+                    value = float(value)
+                    bases.append(value)
+                    factors.append(None)
+                except:
+                    raise RuntimeError('hack doesnt work')
+                continue
             offsets = value.offsets
             base = value.base
             incs = []
             for rng_name, rng in ranges.items():
                 start = 0.
                 step = 0.
-                offset = offsets.get(rng_name, None)
-                if offset:
-                    start += rng.start * offset
-                    step += rng.step * offset
+                for off_name, offset in offsets:
+                    if off_name == rng_name:
+                        start += rng.start * offset
+                        step += rng.step * offset
                 base += start
                 incs.append(step)
             factors.append(tuple(incs))
@@ -406,3 +417,4 @@ def to_increment_commands(linspace_nodes: Sequence[LinSpaceNode]) -> List[Comman
     state = _TranslationState()
     state.add_node(linspace_nodes)
     return state.commands
+
