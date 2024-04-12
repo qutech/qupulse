@@ -398,6 +398,9 @@ class ConstantWaveform(Waveform):
     def __init__(self, duration: Real, amplitude: Any, channel: ChannelID):
         """ Create a qupulse waveform corresponding to a ConstantPulseTemplate """
         super().__init__(duration=_to_time_type(duration))
+        if hasattr(amplitude, 'shape'):
+            amplitude = amplitude[()]
+            hash(amplitude)
         self._amplitude = amplitude
         self._channel = channel
 
