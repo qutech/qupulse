@@ -92,7 +92,20 @@ class HardwareSetup:
 
     def register_program(self, name: str,
                          program: Loop,
-                         run_callback=lambda: None, update=False) -> None:
+                         run_callback=lambda: None,
+                         update: bool = False,
+                         measurements: Mapping[str, Tuple[np.ndarray, np.ndarray]] = None) -> None:
+        """Register a program under a given name at the hardware setup. The program will be uploaded to the
+        participating AWGs and DACs. The run callback is used for triggering the program after arming.
+
+        Args:
+            name: Name of the program.
+            program: Output of :py:meth:`~PulseTemplate.create_program`
+            run_callback: Used to trigger the program after arming
+            update: Must be set if the program is already known.
+            measurements: Will be used as measurements if provided. Otherwise, the measurements are extracted from the program.
+
+        """
         if not callable(run_callback):
             raise TypeError('The provided run_callback is not callable')
 
@@ -101,8 +114,11 @@ class HardwareSetup:
             raise KeyError('The following channels are unknown to the HardwareSetup: {}'.format(
                 channels - set(self._channel_map.keys())))
 
+        if measurements is None:
+            measurements = program.get_measurement_windows(drop=True)
+
         temp_measurement_windows = defaultdict(list)
-        for mw_name, begins_lengths in program.get_measurement_windows(drop=True).items():
+        for mw_name, begins_lengths in measurements.items():
             temp_measurement_windows[mw_name].append(begins_lengths)
 
         if set(temp_measurement_windows.keys()) - set(self._measurement_map.keys()):
