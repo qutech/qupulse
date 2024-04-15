@@ -144,16 +144,6 @@ class LinSpaceBuilder(ProgramBuilder):
                 bases.append(value)
                 factors.append(None)
                 continue
-            #there mightbe a bug in some waveform.constant_value, where an array of float instead of float is returned
-            #(goes against the typehints)
-            if isinstance(value, np.ndarray):
-                try:
-                    value = float(value)
-                    bases.append(value)
-                    factors.append(None)
-                except:
-                    raise RuntimeError('hack doesnt work')
-                continue
             offsets = value.offsets
             base = value.base
             incs = []
