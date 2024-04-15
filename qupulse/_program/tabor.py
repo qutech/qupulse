@@ -408,7 +408,7 @@ class TaborProgram(ProgramEntry):
             else:
                 mode = TaborSequencing.SINGLE
 
-        super().__init__(loop=program,
+        super().__init__(program=program,
                          channels=channels,
                          markers=markers,
                          amplitudes=amplitudes,
