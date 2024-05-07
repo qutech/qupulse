@@ -1,0 +1,74 @@
+{
+    "creators": [
+        {
+            "orcid": "0000-0002-9399-1055",
+            "affiliation": "RWTH Aachen University",
+            "name": "Humpohl, Simon"
+        },
+        {
+            "orcid": "0000-0001-8678-961X",
+            "affiliation": "RWTH Aachen University",
+            "name": "Prediger, Lukas"
+        },
+        {
+            "orcid": "0000-0002-8227-4018",
+            "affiliation": "RWTH Aachen University",
+            "name": "Cerfontaine, Pascal"
+        },
+        {
+            "affiliation": "Forschungszentrum Jülich",
+            "name": "Papajewski, Benjamin"
+        },
+        {
+            "orcid": "0000-0001-9927-3102",
+            "affiliation": "RWTH Aachen University",
+            "name": "Bethke, Patrick"
+        },
+        {
+            "orcid": "0000-0003-2057-9913",
+            "affiliation": "Forschungszentrum Jülich",
+            "name": "Lankes, Lukas"
+        },
+        {
+            "orcid": "0009-0006-9702-2979",
+            "affiliation": "Forschungszentrum Jülich",
+            "name": "Willmes, Alexander"
+        },
+        {
+            "orcid": "0009-0000-3779-4711",
+            "affiliation": "Forschungszentrum Jülich",
+            "name": "Kammerloher, Eugen"
+        }
+    ],
+
+    "contributors": [
+        {
+            "orcid": "0000-0001-7018-1124",
+            "affiliation": "Netherlands Organisation for Applied Scientific Research TNO",
+            "name": "Eendebak, Pieter Thijs"
+        },
+        {
+            "name": "Kreutz, Maike",
+            "affiliation": "RWTH Aachen University"
+        },
+        {
+            "name": "Xue, Ran",
+            "affiliation": "RWTH Aachen University",
+            "orcid": "0000-0002-2009-6279"
+        }
+    ],
+
+    "related_identifiers": [
+        {
+            "identifier": "2128/24264",
+            "relation": "isDocumentedBy",
+            "resource_type": "publication-thesis"
+        }
+    ],
+
+    "license": "GPL-3.0-or-later",
+
+    "title": "qupulse: A Quantum compUting PULse parametrization and SEquencing framework",
+
+    "keywords": ["quantum computing", "control pulse"]
+}
