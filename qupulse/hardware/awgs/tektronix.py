@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2014-2024 Quantum Technology Group and Chair of Software Engineering, RWTH Aachen University
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 from typing import Tuple, Callable, Optional, Sequence, Union, Dict, Mapping, Set
 from types import MappingProxyType
 import numpy as np

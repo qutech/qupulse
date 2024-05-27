@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2014-2024 Quantum Technology Group and Chair of Software Engineering, RWTH Aachen University
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """This module contains the function :py:``make_wrappers`` to define wrapper classes for expression protocol implementations
 which only implements methods of the protocol.
 It is used for finding code that relies on expression implementation details."""

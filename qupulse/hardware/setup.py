@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2014-2024 Quantum Technology Group and Chair of Software Engineering, RWTH Aachen University
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 from typing import NamedTuple, Set, Callable, Dict, Tuple, Union, Iterable, Any, Mapping
 from collections import defaultdict
 import warnings
