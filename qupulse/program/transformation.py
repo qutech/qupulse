@@ -175,8 +175,9 @@ class LinearTransformation(Transformation):
 
         transformed_data = self._matrix @ data_in
 
-        for idx, out_channel in enumerate(self._output_channels):
-            data_out[out_channel] = transformed_data[idx, ...]
+        assert transformed_data.shape[0] == len(self._output_channels)
+        for out_channel, transformed_channel_data in zip(self._output_channels, transformed_data):
+            data_out[out_channel] = transformed_channel_data
 
         return data_out
 

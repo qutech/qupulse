@@ -122,9 +122,9 @@ def _render_loop(loop: Loop,
     return waveform, measurements
 
 
-def plot(pulse: PulseTemplate,
-         parameters: Dict[str, Real]=None,
-         sample_rate: Optional[Real]=10,
+def plot(pulse: Union[PulseTemplate, Loop],
+         parameters: Optional[Dict[str, Real]] = None,
+         sample_rate: Optional[Real] = 10,
          axes: Any=None,
          show: bool=True,
          plot_channels: Optional[Set[ChannelID]]=None,
@@ -162,14 +162,14 @@ def plot(pulse: PulseTemplate,
     """
     from matplotlib import pyplot as plt
 
-    channels = pulse.defined_channels
-
-    if parameters is None:
-        parameters = dict()
+    try:
+        program = pulse.create_program(parameters=parameters)
+    except AttributeError:
+        program = pulse
 
     if sample_rate is None:
         if time_slice is None:
-            duration = pulse.duration
+            duration = program.duration
         else:
             duration = time_slice[1]-time_slice[0]
         if duration == 0:
@@ -177,10 +177,6 @@ def plot(pulse: PulseTemplate,
         else:
             duration_per_sample = float(duration) / 1000
             sample_rate = 1 / duration_per_sample
-            
-    program = pulse.create_program(parameters=parameters,
-                                   channel_mapping={ch: ch for ch in channels},
-                                   measurement_mapping={w: w for w in pulse.measurement_names})
 
     if program is not None:
         times, voltages, measurements = render(program,
