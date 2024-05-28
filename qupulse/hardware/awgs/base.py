@@ -261,7 +261,7 @@ class ProgramEntry:
         trafos_by_channel_idx = {ch: (v,a,o) for ch,v,a,o in zip(_channelname_to_idx.values(),self._voltage_transformations,self._amplitudes,self._offsets)}
         #the channels are now in idx in the commands.
         
-        print(trafos_by_channel_idx)
+        # print(trafos_by_channel_idx)
         
         for command in command_list:
             if isinstance(command,Union[LoopLabel, LoopJmp, Play, Wait]):
