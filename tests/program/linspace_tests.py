@@ -5,6 +5,7 @@ from unittest import TestCase
 from qupulse.pulses import *
 from qupulse.program.linspace import *
 from qupulse.program.transformation import *
+from qupulse.program import Program
 
 class SingleRampTest(TestCase):
     def setUp(self):
@@ -40,6 +41,9 @@ class SingleRampTest(TestCase):
     def test_commands(self):
         commands = to_increment_commands([self.program])
         self.assertEqual(self.commands, commands)
+        
+    def return_program(self) -> Tuple[Program,int,int]:
+        return self.pulse_template.create_program(program_builder=LinSpaceBuilder(('a',))), ('a',), tuple()
 
 
 class PlainCSDTest(TestCase):
@@ -94,7 +98,10 @@ class PlainCSDTest(TestCase):
     def test_increment_commands(self):
         commands = to_increment_commands([self.program])
         self.assertEqual(self.commands, commands)
-
+        
+    def return_program(self) -> Tuple[Program,int,int]:
+        return self.pulse_template.create_program(program_builder=LinSpaceBuilder(('a','b'))), ('a','b'), tuple()
+        
 
 class TiltedCSDTest(TestCase):
     def setUp(self):
@@ -167,6 +174,9 @@ class TiltedCSDTest(TestCase):
         commands = to_increment_commands([self.repeated_program])
         self.assertEqual(self.repeated_commands, commands)
 
+    def return_program(self) -> Tuple[Program,int,int]:
+        return self.repeated_pt.create_program(program_builder=LinSpaceBuilder(('a','b'))), ('a','b'), tuple()
+    
 
 class SingletLoadProcessing(TestCase):
     def setUp(self):
@@ -256,6 +266,9 @@ class SingletLoadProcessing(TestCase):
         commands = to_increment_commands([self.program])
         self.assertEqual(self.commands, commands)
 
+    def return_program(self) -> Tuple[Program,int,int]:
+        return self.pulse_template.create_program(program_builder=LinSpaceBuilder(('a','b'))), ('a','b'), tuple()
+
 
 class TransformedRampTest(TestCase):
     def setUp(self):
@@ -287,3 +300,9 @@ class TransformedRampTest(TestCase):
                                                          global_transformation=self.transformation,
                                                          to_single_waveform={self.pulse_template})
             self.assertEqual([self.program], program)
+            
+    def return_program(self) -> Tuple[Program,int,int]:
+        return self.pulse_template.create_program(program_builder=LinSpaceBuilder(('a',)),
+                                                  global_transformation=self.transformation),\
+                ('a',), tuple()
+            
