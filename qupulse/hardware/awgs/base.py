@@ -9,7 +9,7 @@ Classes:
 
 from abc import abstractmethod
 from numbers import Real
-from typing import Set, Tuple, Callable, Optional, Mapping, Sequence, List, Union
+from typing import Set, Tuple, Callable, Optional, Mapping, Sequence, List, Union, NamedTuple
 from collections import OrderedDict
 from enum import Enum
 # from itertools import chain
@@ -174,6 +174,12 @@ class _ProgramType(Enum):
     Linspace = 1
 
 
+class ChannelTransformation(NamedTuple):
+    amplitude: float
+    offset: float
+    voltage_transformation: Optional[callable]
+
+
 class ProgramEntry:
     """This is a helper class for implementing awgs drivers. A driver can subclass it to help organizing sampled
     waveforms"""
@@ -250,28 +256,35 @@ class ProgramEntry:
     def _sample_empty_marker(self, time: numpy.ndarray) -> Optional[numpy.ndarray]:
         """Override this in derived class to change how empty channels are handled"""
         return None
+
+    def _channel_transformations(self) -> Mapping[ChannelID, ChannelTransformation]:
+        return {ch: ChannelTransformation(amplitude, offset, trafo)
+                for ch, amplitude, offset, trafo in zip(self._channels,
+                                                        self._voltage_transformations,
+                                                        self._amplitudes,
+                                                        self._offsets)}
     
     def _transform_linspace_commands(self, command_list: List[Command]) -> List[Command]:
-        
         # all commands = Union[Increment, Set, LoopLabel, LoopJmp, Wait, Play]
-        if any(self._voltage_transformations):
-            raise NotImplementedError('how to handle this?')
-        
-        _channelname_to_idx = {name: idx for idx, name in enumerate(self._channels)}
-        trafos_by_channel_idx = {ch: (v,a,o) for ch,v,a,o in zip(_channelname_to_idx.values(),self._voltage_transformations,self._amplitudes,self._offsets)}
-        #the channels are now in idx in the commands.
-        
-        # print(trafos_by_channel_idx)
-        
+        trafos_by_channel_idx = list(self._channel_transformations().values())
+
         for command in command_list:
-            if isinstance(command,Union[LoopLabel, LoopJmp, Play, Wait]):
+            if isinstance(command, (LoopLabel, LoopJmp, Play, Wait)):
+                # play is handled by transforming the sampled waveform
                 continue
-            elif isinstance(command,Increment):
-                command.value = command.value / trafos_by_channel_idx[command.channel][1]
-            elif isinstance(command,LSPSet):
-                command.value = (command.value - trafos_by_channel_idx[command.channel][2]) / trafos_by_channel_idx[command.channel][1]
+            elif isinstance(command, Increment):
+                ch_trafo = trafos_by_channel_idx[command.channel]
+                if ch_trafo.voltage_transformation:
+                    raise RuntimeError("Cannot apply a voltage transformation to a linspace increment command")
+                command.value /= ch_trafo.amplitude
+            elif isinstance(command, LSPSet):
+                ch_trafo = trafos_by_channel_idx[command.channel]
+                if ch_trafo.voltage_transformation:
+                    command.value = float(ch_trafo.voltage_transformation(command.value))
+                command.value -= ch_trafo.offset
+                command.value /= ch_trafo.amplitude
             else:        
-                raise NotImplementedError()
+                raise NotImplementedError(command)
         
         return command_list
     
