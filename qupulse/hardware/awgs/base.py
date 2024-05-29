@@ -216,8 +216,7 @@ class ProgramEntry:
         self._sample_rate = sample_rate
         
         self._program_type = program_type
-        self._program = program #non-normalized
-        self.__loop = program
+        self._program = program
         
         if program_type == _ProgramType.Linspace:
             self._transformed_commands = self._transform_linspace_commands(to_increment_commands(program))
@@ -240,14 +239,16 @@ class ProgramEntry:
             self._waveforms = OrderedDict()
     
     @property
-    def _loop(self,) -> _ProgramType:
-        if self._program_type is not _ProgramType.Loop and self._program_type is not _ProgramType.FSP:
-            raise DeprecationWarning()
-        return self.__loop
+    def _loop(self,) -> Loop:
+        if self._program_type not in (_ProgramType.Loop, _ProgramType.FSP):
+            raise AttributeError("The _loop attribute can only be get on loop-like program entries.")
+        return self._program
     
     @_loop.setter
-    def _loop(self,program:_ProgramType):
-        self.__loop = program
+    def _loop(self, program: Loop):
+        if self._program_type not in (_ProgramType.Loop, _ProgramType.FSP):
+            raise AttributeError("The _loop attribute can only be set on loop-like program entries.")
+        self._program = program
     
     def _sample_empty_channel(self, time: numpy.ndarray) -> Optional[numpy.ndarray]:
         """Override this in derived class to change how empty channels are handled"""
