@@ -328,7 +328,8 @@ class ParallelChannelTransformation(Transformation):
 
     def _instantiated_values(self, time):
         scope = {'t': time}
-        return {channel: value.evaluate_in_scope(scope) if hasattr(value, 'evaluate_in_scope') else np.full_like(time, fill_value=value, dtype=float)
+        array_or_float = lambda x: np.full_like(time, fill_value=x, dtype=float) if hasattr(time, '__len__') and len(time)>1 else x
+        return {channel: value.evaluate_in_scope(scope) if hasattr(value, 'evaluate_in_scope') else array_or_float(value)
                 for channel, value in self._channels.items()}
 
     @property
