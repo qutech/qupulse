@@ -259,7 +259,7 @@ class ProgramEntry:
 
     def _channel_transformations(self) -> Mapping[ChannelID, ChannelTransformation]:
         return {ch: ChannelTransformation(amplitude, offset, trafo)
-                for ch, amplitude, offset, trafo in zip(self._channels,
+                for ch, trafo, amplitude, offset in zip(self._channels,
                                                         self._voltage_transformations,
                                                         self._amplitudes,
                                                         self._offsets)}
