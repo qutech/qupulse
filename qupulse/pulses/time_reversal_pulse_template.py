@@ -1,8 +1,8 @@
 from typing import Optional, Set, Dict, Union
 
 from qupulse import ChannelID
-from qupulse._program._loop import Loop
-from qupulse._program.waveforms import Waveform
+from qupulse.program.loop import Loop
+from qupulse.program.waveforms import Waveform
 from qupulse.serialization import PulseRegistryType
 from qupulse.expressions import ExpressionScalar
 

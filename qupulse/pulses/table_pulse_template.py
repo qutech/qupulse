@@ -23,7 +23,7 @@ from qupulse.pulses.parameters import ParameterNotProvidedException, ParameterCo
 from qupulse.pulses.pulse_template import AtomicPulseTemplate, MeasurementDeclaration
 from qupulse.pulses.interpolation import InterpolationStrategy, LinearInterpolationStrategy, \
     HoldInterpolationStrategy, JumpInterpolationStrategy
-from qupulse._program.waveforms import TableWaveform, TableWaveformEntry
+from qupulse.program.waveforms import TableWaveform, TableWaveformEntry
 from qupulse.expressions import ExpressionScalar, Expression
 from qupulse.pulses.multi_channel_pulse_template import MultiChannelWaveform
 
@@ -259,6 +259,9 @@ class TablePulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
 
         duration = max(instantiated[-1].t for instantiated in instantiated_entries.values())
 
+        if duration == 0:
+            return {}
+
         # ensure that all channels have equal duration
         for channel, instantiated in instantiated_entries.items():
             final_entry = instantiated[-1]
@@ -319,9 +322,6 @@ class TablePulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
                         if channel_mapping[channel] is not None]
 
         if not instantiated:
-            return None
-
-        if self.duration.evaluate_numeric(**parameters) == 0:
             return None
 
         waveforms = [TableWaveform.from_table(*ch_instantiated)

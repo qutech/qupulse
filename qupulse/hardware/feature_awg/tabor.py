@@ -11,7 +11,7 @@ from collections import OrderedDict
 import numpy as np
 
 from qupulse import ChannelID
-from qupulse._program._loop import Loop, make_compatible
+from qupulse.program.loop import Loop, make_compatible
 
 from qupulse.hardware.feature_awg.channel_tuple_wrapper import ChannelTupleAdapter
 from qupulse.hardware.feature_awg.features import ChannelSynchronization, AmplitudeOffsetHandling, VoltageRange, \

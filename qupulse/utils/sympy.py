@@ -22,7 +22,7 @@ try:
 except ImportError:
     _special_functions = {fname: numpy.vectorize(fobject)
                           for fname, fobject in math.__dict__.items()
-                          if not fname.startswith('_') and fname not in numpy.__dict__}
+                          if callable(fobject) and not fname.startswith('_') and fname not in numpy.__dict__}
     warnings.warn('scipy is not installed. This reduces the set of available functions to those present in numpy + '
                   'manually vectorized functions in math.')
 
@@ -363,7 +363,7 @@ def recursive_substitution(expression: sympy.Expr,
     return _recursive_substitution(expression, substitutions)
 
 
-_base_environment = {'builtins': builtins, '__builtins__':  builtins}
+_base_environment = {'builtins': builtins, '__builtins__':  builtins, 'math': math}
 _math_environment = {**_base_environment, **math.__dict__}
 _numpy_environment = {**_base_environment, **numpy.__dict__}
 _sympy_environment = {**_base_environment, **sympy.__dict__}

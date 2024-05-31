@@ -7,10 +7,10 @@ import numpy as np
 from qupulse.utils.types import TimeType
 from qupulse.pulses.interpolation import HoldInterpolationStrategy, LinearInterpolationStrategy,\
     JumpInterpolationStrategy
-from qupulse._program.waveforms import MultiChannelWaveform, RepetitionWaveform, SequenceWaveform,\
+from qupulse.program.waveforms import MultiChannelWaveform, RepetitionWaveform, SequenceWaveform,\
     TableWaveformEntry, TableWaveform, TransformingWaveform, SubsetWaveform, ArithmeticWaveform, ConstantWaveform,\
     Waveform, FunctorWaveform, FunctionWaveform, ReversedWaveform
-from qupulse._program.transformation import LinearTransformation
+from qupulse.program.transformation import LinearTransformation
 from qupulse.expressions import ExpressionScalar, Expression
 
 from tests.pulses.sequencing_dummies import DummyWaveform, DummyInterpolationStrategy

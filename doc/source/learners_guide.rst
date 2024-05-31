@@ -91,7 +91,7 @@ This section is incomplete.
 
 **Learning Task 1:**
 
-Read :ref:`program` and :ref:`awgs`.
+Read :ref:`program` and :ref:`hardware`.
 
 
 Setup an experiment

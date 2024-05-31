@@ -1,6 +1,7 @@
 import unittest
 import itertools
 import numpy as np
+from copy import deepcopy
 from qupulse.utils.types import FrozenDict
 from unittest import mock
 
@@ -15,9 +16,10 @@ try:
 except ImportError:
     pytabor = None
 
-from qupulse._program.tabor import TaborException, TaborProgram, \
+from qupulse._program.tabor import TaborException, TaborProgram, find_place_for_segments_in_memory,\
     TaborSegment, TaborSequencing, PlottableProgram, TableDescription, make_combined_wave, TableEntry
-from qupulse._program._loop import Loop
+from qupulse.program.loop import Loop
+from qupulse.program.waveforms import ConstantWaveform, SubsetWaveform
 from qupulse._program.volatile import VolatileRepetitionCount
 from qupulse.hardware.util import voltage_to_uint16
 from qupulse.utils.types import TimeType
@@ -231,8 +233,8 @@ class TaborProgramTests(unittest.TestCase):
         self.assertEqual(t_program.get_advanced_sequencer_table(), [TableDescription(1, 1, 0)])
 
     def test_depth_1_single_sequence(self):
-        program = Loop(children=[Loop(waveform=DummyWaveform(defined_channels={'A'}, duration=1), repetition_count=3),
-                                 Loop(waveform=DummyWaveform(defined_channels={'A'}, duration=1), repetition_count=4)],
+        program = Loop(children=[Loop(waveform=DummyWaveform(sample_output={'A': 0.1}, duration=1), repetition_count=3),
+                                 Loop(waveform=DummyWaveform(sample_output={'A': 0.2}, duration=1), repetition_count=4)],
                        repetition_count=1)
 
         t_program = TaborProgram(program, channels=(None, 'A'), markers=(None, None),
@@ -246,8 +248,8 @@ class TaborProgramTests(unittest.TestCase):
 
     def test_depth_1_single_sequence_2(self):
         """Use the same wf twice"""
-        wf_1 = DummyWaveform(defined_channels={'A'}, duration=1)
-        wf_2 = DummyWaveform(defined_channels={'A'}, duration=1)
+        wf_1 = DummyWaveform(sample_output={'A': 0.1}, duration=1)
+        wf_2 = DummyWaveform(sample_output={'A': 0.2}, duration=1)
 
         program = Loop(children=[Loop(waveform=wf_1, repetition_count=3),
                                  Loop(waveform=wf_2, repetition_count=4),
@@ -265,8 +267,8 @@ class TaborProgramTests(unittest.TestCase):
         self.assertEqual(t_program.get_advanced_sequencer_table(), [TableDescription(1, 1, 0)])
 
     def test_depth_1_advanced_sequence_unroll(self):
-        wf_1 = DummyWaveform(defined_channels={'A'}, duration=1)
-        wf_2 = DummyWaveform(defined_channels={'A'}, duration=1)
+        wf_1 = DummyWaveform(sample_output={'A': 0.1}, duration=1)
+        wf_2 = DummyWaveform(sample_output={'A': 0.2}, duration=1)
 
         program = Loop(children=[Loop(waveform=wf_1, repetition_count=3),
                                  Loop(waveform=wf_2, repetition_count=4)],
@@ -284,8 +286,8 @@ class TaborProgramTests(unittest.TestCase):
         self.assertEqual(t_program.get_advanced_sequencer_table(), [TableEntry(5, 1, 0)])
 
     def test_depth_1_advanced_sequence(self):
-        wf_1 = DummyWaveform(defined_channels={'A'}, duration=1)
-        wf_2 = DummyWaveform(defined_channels={'A'}, duration=1)
+        wf_1 = DummyWaveform(sample_output={'A': 0.1}, duration=1)
+        wf_2 = DummyWaveform(sample_output={'A': 0.2}, duration=1)
 
         program = Loop(children=[Loop(waveform=wf_1, repetition_count=3),
                                  Loop(waveform=wf_2, repetition_count=4),
@@ -379,13 +381,31 @@ class TaborProgramTests(unittest.TestCase):
             np.testing.assert_equal(sampled_seg.ch_a, data[0])
             np.testing.assert_equal(sampled_seg.ch_b, data[1])
 
+    def test_calc_sampled_segments_deduplication(self):
+        wf1 = ConstantWaveform(duration=2, amplitude=0.1, channel='A')
+        wf2 = SubsetWaveform(
+            ConstantWaveform.from_mapping(duration=2, constant_values={'A': 0.1, 'B': 0.2}),
+            {'A'}
+        )
+        wf3 = ConstantWaveform(duration=1, amplitude=0.2, channel='A')
+
+        loop = Loop(children=[
+            Loop(waveform=wf1),
+            Loop(waveform=wf2),
+            Loop(waveform=wf3),
+        ])
+        prog = TaborProgram(loop, self.instr_props, ('A', None), (None, None), **self.program_entry_kwargs)
+        sampled, sampled_length = prog.get_sampled_segments()
+        self.assertEqual(len(sampled), 2)
+        self.assertEqual([192 * 2, 192], list(sampled_length))
+
     def test_update_volatile_parameters_with_depth1(self):
         parameters = {'s': 10, 'not': 13}
         s = VolatileRepetitionCount(expression=ExpressionScalar('s'), scope=DictScope(values=FrozenDict(s=3),
                                                                                       volatile=set('s')))
 
-        wf_1 = DummyWaveform(defined_channels={'A'}, duration=1)
-        wf_2 = DummyWaveform(defined_channels={'A'}, duration=1)
+        wf_1 = DummyWaveform(sample_output={'A': 0.1}, duration=1)
+        wf_2 = DummyWaveform(sample_output={'A': 0.2}, duration=1)
 
         program = Loop(children=[Loop(waveform=wf_1, repetition_count=s),
                                  Loop(waveform=wf_2, repetition_count=4),
@@ -418,8 +438,8 @@ class TaborProgramTests(unittest.TestCase):
         a = VolatileRepetitionCount(expression=ExpressionScalar('a'),
                                     scope=DictScope(values=FrozenDict(a=5), volatile=set('a')))
 
-        wf_1 = DummyWaveform(defined_channels={'A'}, duration=1)
-        wf_2 = DummyWaveform(defined_channels={'A'}, duration=1)
+        wf_1 = DummyWaveform(sample_output={'A': 0.1}, duration=1)
+        wf_2 = DummyWaveform(sample_output={'A': 0.2}, duration=1)
 
         program = Loop(children=[Loop(children=[Loop(waveform=wf_1, repetition_count=s),
                                                 Loop(waveform=wf_2, repetition_count=4),
@@ -704,3 +724,89 @@ class TaborMakeCombinedPyTaborCompareTest(TaborMakeCombinedTest):
 
         with self.assertRaises(ValueError):
             make_combined_wave(tabor_segments, destination_array=np.ones(16))
+
+
+class TaborMemoryManagementTests(unittest.TestCase):
+    def test_find_place_for_segments_in_memory(self):
+        # empty
+        kwargs = dict(
+            total_capacity=2**20,
+            current_segment_capacities=np.asarray([], dtype=np.uint32),
+            current_segment_hashes=np.asarray([], dtype=np.int64),
+            current_segment_references=np.asarray([], dtype=np.int32),
+        )
+        prev_kwargs = deepcopy(kwargs)
+
+        segments = np.asarray([-5, -6, -7, -8, -9])
+        segment_lengths = 192 + np.asarray([32, 16, 64, 32, 16])
+
+        w2s, ta, ti = find_place_for_segments_in_memory(
+            **kwargs,
+            new_segment_hashes=segments, new_segment_lengths=segment_lengths)
+        self.assertEqual(w2s.tolist(), [-1, -1, -1, -1, -1])
+        self.assertEqual(ta.tolist(), [True, True, True, True, True])
+        self.assertEqual(ti.tolist(), [-1, -1, -1, -1, -1])
+        np.testing.assert_equal(kwargs, prev_kwargs)
+
+        # all new segments
+        kwargs['current_segment_capacities'] = 192 + np.asarray([0, 16, 32, 16, 0], dtype=np.uint32)
+        kwargs['current_segment_hashes'] = np.asarray([1, 2, 3, 4, 5], dtype=np.int64)
+        kwargs['current_segment_references'] = np.asarray([1, 1, 1, 2, 1], dtype=np.int32)
+        prev_kwargs = deepcopy(kwargs)
+
+        w2s, ta, ti = find_place_for_segments_in_memory(new_segment_hashes=segments, new_segment_lengths=segment_lengths, **kwargs)
+        self.assertEqual(w2s.tolist(), [-1, -1, -1, -1, -1])
+        self.assertEqual(ta.tolist(), [True, True, True, True, True])
+        self.assertEqual(ti.tolist(), [-1, -1, -1, -1, -1])
+        np.testing.assert_equal(kwargs, prev_kwargs)
+
+        # some known segments
+        kwargs['current_segment_capacities'] = 192 + np.asarray([0, 16, 32, 64, 0, 16], dtype=np.uint32)
+        kwargs['current_segment_hashes'] = np.asarray([1, 2, 3, -7, 5, -9], dtype=np.int64)
+        kwargs['current_segment_references'] = np.asarray([1, 1, 1, 2, 1, 3], dtype=np.int32)
+        prev_kwargs = deepcopy(kwargs)
+
+        w2s, ta, ti = find_place_for_segments_in_memory(new_segment_hashes=segments, new_segment_lengths=segment_lengths, **kwargs)
+        self.assertEqual(w2s.tolist(), [-1, -1, 3, -1, 5])
+        self.assertEqual(ta.tolist(), [True, True, False, True, False])
+        self.assertEqual(ti.tolist(), [-1, -1, -1, -1, -1])
+        np.testing.assert_equal(kwargs, prev_kwargs)
+
+        # insert some segments with same length
+        kwargs['current_segment_capacities'] = 192 + np.asarray([0, 16, 32, 64, 0, 16], dtype=np.uint32)
+        kwargs['current_segment_hashes'] = np.asarray([1, 2, 3, 4, 5, 6], dtype=np.int64)
+        kwargs['current_segment_references'] = np.asarray([1, 0, 1, 0, 1, 3], dtype=np.int32)
+        prev_kwargs = deepcopy(kwargs)
+
+        w2s, ta, ti = find_place_for_segments_in_memory(new_segment_hashes=segments, new_segment_lengths=segment_lengths, **kwargs)
+        self.assertEqual(w2s.tolist(), [-1, -1, -1, -1, -1])
+        self.assertEqual(ta.tolist(), [True, False, False, True, True])
+        self.assertEqual(ti.tolist(), [-1, 1, 3, -1, -1])
+        np.testing.assert_equal(kwargs, prev_kwargs)
+
+        # insert some segments with smaller length
+        kwargs['current_segment_capacities'] = 192 + np.asarray([0, 80, 32, 64, 96, 16], dtype=np.uint32)
+        kwargs['current_segment_hashes'] = np.asarray([1, 2, 3, 4, 5, 6], dtype=np.int64)
+        kwargs['current_segment_references'] = np.asarray([1, 0, 1, 1, 0, 3], dtype=np.int32)
+        prev_kwargs = deepcopy(kwargs)
+
+        w2s, ta, ti = find_place_for_segments_in_memory(new_segment_hashes=segments, new_segment_lengths=segment_lengths, **kwargs)
+        self.assertEqual(w2s.tolist(), [-1, -1, -1, -1, -1])
+        self.assertEqual(ta.tolist(), [True, True, False, False, True])
+        self.assertEqual(ti.tolist(), [-1, -1, 4, 1, -1])
+        np.testing.assert_equal(kwargs, prev_kwargs)
+
+        # mix everything
+        segments = np.asarray([-5, -6, -7, -8, -9, -10, -11])
+        segment_lengths = 192 + np.asarray([32, 16, 64, 32, 16, 0, 0])
+
+        kwargs['current_segment_capacities'] = 192 + np.asarray([0, 80, 32, 64, 32, 16], dtype=np.uint32)
+        kwargs['current_segment_hashes'] = np.asarray([1, 2, 3, 4, -8, 6], dtype=np.int64)
+        kwargs['current_segment_references'] = np.asarray([1, 0, 1, 0, 1, 0], dtype=np.int32)
+        prev_kwargs = deepcopy(kwargs)
+
+        w2s, ta, ti = find_place_for_segments_in_memory(new_segment_hashes=segments, new_segment_lengths=segment_lengths, **kwargs)
+        self.assertEqual(w2s.tolist(), [-1,    -1,   -1,    4,     -1,     -1, -1])
+        self.assertEqual(ta.tolist(),  [False, True, False, False, True, True, True])
+        self.assertEqual(ti.tolist(),  [1,     -1,   3,     -1,    -1,   -1,   -1])
+        np.testing.assert_equal(kwargs, prev_kwargs)

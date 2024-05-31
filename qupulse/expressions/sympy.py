@@ -18,7 +18,9 @@ from qupulse.utils.sympy import sympify, to_numpy, recursive_substitution, evalu
     get_most_simple_representation, get_variables, evaluate_lamdified_exact_rational
 from qupulse.utils.types import TimeType
 
-__all__ = ["Expression", "ExpressionVariableMissingException", "ExpressionScalar", "ExpressionVector", "ExpressionLike"]
+import qupulse.expressions
+
+__all__ = ["Expression", "ExpressionScalar", "ExpressionVector"]
 
 
 _ExpressionType = TypeVar('_ExpressionType', bound='Expression')
@@ -60,9 +62,9 @@ def _parse_evaluate_numeric_vector(vector_result: numpy.ndarray) -> numpy.ndarra
     if not issubclass(vector_result.dtype.type, allowed_scalar):
         obj_types = set(map(type, vector_result.flat))
         if all(issubclass(obj_type, sympy.Integer) for obj_type in obj_types):
-            result = vector_result.astype(numpy.int64)
+            vector_result = vector_result.astype(numpy.int64)
         elif all(issubclass(obj_type, (sympy.Integer, sympy.Float)) for obj_type in obj_types):
-            result = vector_result.astype(float)
+            vector_result = vector_result.astype(float)
         else:
             raise ValueError("Could not parse vector result", vector_result)
     return vector_result
@@ -98,7 +100,7 @@ class Expression(AnonymousSerializable, metaclass=_ExpressionMeta):
                 # we forward qupulse errors, I down like this
                 raise
             else:
-                raise ExpressionVariableMissingException(key_error.args[0], self) from key_error
+                raise qupulse.expressions.ExpressionVariableMissingException(key_error.args[0], self) from key_error
 
     def evaluate_in_scope(self, scope: Mapping) -> Union[Number, numpy.ndarray]:
         """Evaluate the expression by taking the variables from the given scope (typically of type Scope but it can be
@@ -129,7 +131,7 @@ class Expression(AnonymousSerializable, metaclass=_ExpressionMeta):
     def _evaluate_to_time_dependent(self, scope: Mapping) -> Union['Expression', Number, numpy.ndarray]:
         try:
             return self.evaluate_numeric(**scope, t=sympy.symbols('t'))
-        except NonNumericEvaluation as non_num:
+        except qupulse.expressions.NonNumericEvaluation as non_num:
             return ExpressionScalar(non_num.non_numeric_result)
         except TypeError:
             return self.evaluate_symbolic(scope)
@@ -212,7 +214,7 @@ class ExpressionVector(Expression):
         try:
             return _parse_evaluate_numeric_vector(result)
         except ValueError as err:
-            raise NonNumericEvaluation(self, result, scope) from err
+            raise qupulse.expressions.NonNumericEvaluation(self, result, scope) from err
 
     def get_serialization_data(self) -> Sequence[str]:
         serialized_items = list(map(get_most_simple_representation, self._expression_items))
@@ -399,6 +401,12 @@ class ExpressionScalar(Expression):
     def __rtruediv__(self, other: Union['ExpressionScalar', Number, sympy.Expr]) -> 'ExpressionScalar':
         return self.make(self._sympified_expression.__rtruediv__(self._extract_sympified(other)))
 
+    def __floordiv__(self, other: Union['ExpressionScalar', Number, sympy.Expr]) -> 'ExpressionScalar':
+        return self.make(self._sympified_expression.__floordiv__(self._extract_sympified(other)))
+
+    def __rfloordiv__(self, other: Union['ExpressionScalar', Number, sympy.Expr]) -> 'ExpressionScalar':
+        return self.make(self._sympified_expression.__rfloordiv__(self._extract_sympified(other)))
+
     def __neg__(self) -> 'ExpressionScalar':
         return self.make(self._sympified_expression.__neg__())
 
@@ -444,7 +452,7 @@ class ExpressionScalar(Expression):
         try:
             return _parse_evaluate_numeric(result)
         except ValueError as err:
-            raise NonNumericEvaluation(self, result, scope) from err
+            raise qupulse.expressions.NonNumericEvaluation(self, result, scope) from err
 
     def evaluate_in_scope(self, scope: Mapping) -> Union[Number, numpy.ndarray]:
         parsed_kwargs = self._parse_evaluate_numeric_arguments(scope)
@@ -453,50 +461,4 @@ class ExpressionScalar(Expression):
         try:
             return _parse_evaluate_numeric(result)
         except ValueError as err:
-            raise NonNumericEvaluation(self, result, scope) from err
-
-
-class ExpressionVariableMissingException(Exception):
-    """An exception indicating that a variable value was not provided during expression evaluation.
-
-    See also:
-         qupulse.expressions.Expression
-    """
-
-    def __init__(self, variable: str, expression: Expression) -> None:
-        super().__init__()
-        self.variable = variable
-        self.expression = expression
-
-    def __str__(self) -> str:
-        return "Could not evaluate <{}>: A value for variable <{}> is missing!".format(
-            str(self.expression), self.variable)
-
-
-class NonNumericEvaluation(Exception):
-    """An exception that is raised if the result of evaluate_numeric is not a number.
-
-    See also:
-        qupulse.expressions.Expression.evaluate_numeric
-    """
-
-    def __init__(self, expression: Expression, non_numeric_result: Any, call_arguments: Mapping):
-        self.expression = expression
-        self.non_numeric_result = non_numeric_result
-        self.call_arguments = call_arguments
-
-    def __str__(self) -> str:
-        if isinstance(self.non_numeric_result, numpy.ndarray):
-            dtype = self.non_numeric_result.dtype
-
-            if dtype == numpy.dtype('O'):
-                dtypes = set(map(type, self.non_numeric_result.flat))
-                "The result of evaluate_numeric is an array with the types {} " \
-                "which is not purely numeric".format(dtypes)
-        else:
-            dtype = type(self.non_numeric_result)
-        return "The result of evaluate_numeric is of type {} " \
-               "which is not a number".format(dtype)
-
-
-ExpressionLike = TypeVar('ExpressionLike', str, Number, sympy.Expr, ExpressionScalar)
+            raise qupulse.expressions.NonNumericEvaluation(self, result, scope) from err

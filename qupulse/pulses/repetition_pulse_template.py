@@ -8,7 +8,8 @@ from warnings import warn
 import numpy as np
 
 from qupulse.serialization import Serializer, PulseRegistryType
-from qupulse._program._loop import Loop, VolatileRepetitionCount
+from qupulse.program.volatile import VolatileRepetitionCount
+from qupulse.program import ProgramBuilder
 from qupulse.parameter_scope import Scope
 
 from qupulse.utils.types import ChannelID
@@ -118,13 +119,11 @@ class RepetitionPulseTemplate(LoopPulseTemplate, ParameterConstrainer, Measureme
                                  channel_mapping: Dict[ChannelID, Optional[ChannelID]],
                                  global_transformation: Optional['Transformation'],
                                  to_single_waveform: AbstractSet[Union[str, 'PulseTemplate']],
-                                 parent_loop: Loop) -> None:
+                                 program_builder: ProgramBuilder) -> None:
         self.validate_scope(scope)
 
         repetition_count = max(0, self.get_repetition_count_value(scope))
 
-        # todo (2018-07-19): could in some circumstances possibly just multiply subprogram repetition count?
-        # could be tricky if any repetition count is volatile ? check later and optimize if necessary
         if repetition_count > 0:
             if scope.get_volatile_parameters().keys() & self.repetition_count.variables:
                 repetition_definition = VolatileRepetitionCount(self.repetition_count, scope)
@@ -132,19 +131,16 @@ class RepetitionPulseTemplate(LoopPulseTemplate, ParameterConstrainer, Measureme
             else:
                 repetition_definition = repetition_count
 
-            repj_loop = Loop(repetition_count=repetition_definition)
-            self.body._create_program(scope=scope,
-                                      measurement_mapping=measurement_mapping,
-                                      channel_mapping=channel_mapping,
-                                      global_transformation=global_transformation,
-                                      to_single_waveform=to_single_waveform,
-                                      parent_loop=repj_loop)
-            if repj_loop.waveform is not None or len(repj_loop.children) > 0:
-                measurements = self.get_measurement_windows(scope, measurement_mapping)
-                if measurements:
-                    parent_loop.add_measurements(measurements)
+            measurements = self.get_measurement_windows(scope, measurement_mapping)
 
-                parent_loop.append_child(loop=repj_loop)
+            for repetition_program_builder in program_builder.with_repetition(repetition_definition,
+                                                                              measurements=measurements):
+                self.body._create_program(scope=repetition_program_builder.inner_scope(scope),
+                                          measurement_mapping=measurement_mapping,
+                                          channel_mapping=channel_mapping,
+                                          global_transformation=global_transformation,
+                                          to_single_waveform=to_single_waveform,
+                                          program_builder=repetition_program_builder)
 
     def get_serialization_data(self, serializer: Optional[Serializer]=None) -> Dict[str, Any]:
         data = super().get_serialization_data(serializer)

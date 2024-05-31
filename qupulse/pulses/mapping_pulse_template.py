@@ -1,4 +1,4 @@
-from typing import Optional, Set, Dict, Union, List, Any, Tuple
+from typing import Optional, Set, Dict, Union, List, Any, Tuple, Mapping
 import itertools
 import numbers
 import collections
@@ -8,8 +8,8 @@ from qupulse.expressions import Expression, ExpressionScalar
 from qupulse.parameter_scope import Scope, MappedScope
 from qupulse.pulses.pulse_template import PulseTemplate, MappingTuple
 from qupulse.pulses.parameters import ParameterNotProvidedException, ParameterConstrainer
-from qupulse._program.waveforms import Waveform
-from qupulse._program._loop import Loop
+from qupulse.program.waveforms import Waveform
+from qupulse.program import ProgramBuilder
 from qupulse.serialization import Serializer, PulseRegistryType
 
 __all__ = [
@@ -113,7 +113,7 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
             template = template.template
 
         self.__template: PulseTemplate = template
-        self.__parameter_mapping = FrozenDict(parameter_mapping)
+        self.__parameter_mapping: Mapping[str, Expression] = FrozenDict(parameter_mapping)
         self.__external_parameters = set(itertools.chain(*(expr.variables for expr in self.__parameter_mapping.values())))
         self.__external_parameters |= self.constrained_parameters
         self.__measurement_mapping = measurement_mapping
@@ -260,7 +260,7 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
             A new dictionary with mapped numeric values.
         """
         self._validate_parameters(parameters=parameters, volatile=volatile)
-        return {parameter: mapping_function.evaluate_numeric(**parameters)
+        return {parameter: mapping_function.evaluate_in_scope(parameters)
                 for parameter, mapping_function in self.__parameter_mapping.items()}
 
     def map_scope(self, scope: Scope) -> MappedScope:
@@ -301,7 +301,7 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
                                  channel_mapping: Dict[ChannelID, Optional[ChannelID]],
                                  global_transformation: Optional['Transformation'],
                                  to_single_waveform: Set[Union[str, 'PulseTemplate']],
-                                 parent_loop: Loop) -> None:
+                                 program_builder: ProgramBuilder) -> None:
         self.validate_scope(scope)
 
         # parameters are validated in map_parameters() call, no need to do it here again explicitly
@@ -310,7 +310,7 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
                                       channel_mapping=self.get_updated_channel_mapping(channel_mapping),
                                       global_transformation=global_transformation,
                                       to_single_waveform=to_single_waveform,
-                                      parent_loop=parent_loop)
+                                      program_builder=program_builder)
 
     def build_waveform(self,
                        parameters: Dict[str, numbers.Real],

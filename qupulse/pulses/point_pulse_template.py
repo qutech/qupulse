@@ -9,7 +9,7 @@ import numpy as np
 from qupulse.utils.sympy import IndexedBroadcast
 from qupulse.utils.types import ChannelID
 from qupulse.expressions import Expression, ExpressionScalar
-from qupulse._program.waveforms import TableWaveform, TableWaveformEntry
+from qupulse.program.waveforms import TableWaveform, TableWaveformEntry
 from qupulse.pulses.parameters import ParameterConstraint, ParameterConstrainer
 from qupulse.pulses.pulse_template import AtomicPulseTemplate, MeasurementDeclaration
 from qupulse.pulses.table_pulse_template import TableEntry, EntryInInit
@@ -26,8 +26,8 @@ PointWaveformEntry = TableWaveformEntry
 
 class PointPulseEntry(TableEntry):
     def instantiate(self, parameters: Dict[str, numbers.Real], num_channels: int) -> Sequence[PointWaveformEntry]:
-        t = self.t.evaluate_numeric(**parameters)
-        vs = self.v.evaluate_numeric(**parameters)
+        t = self.t.evaluate_in_scope(parameters)
+        vs = self.v.evaluate_in_scope(parameters)
 
         if isinstance(vs, numbers.Number):
             vs = (vs,) * num_channels
@@ -71,7 +71,7 @@ class PointPulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
                for channel in self.defined_channels):
             return None
 
-        if self.duration.evaluate_numeric(**parameters) == 0:
+        if self.duration.evaluate_in_scope(parameters) == 0:
             return None
 
         mapped_channels = tuple(channel_mapping[c] for c in self._channels)

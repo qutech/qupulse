@@ -2,6 +2,69 @@
 
 .. towncrier release notes start
 
+qupulse 0.10 (2024-04-04)
+=========================
+
+Features
+--------
+
+- Move HDAWG driver to qupulse-hdawg-legacy to disentangle driver version from qupulse version. The new HDAWG driver will be published under qupulse-hdawg. (`#779 <https://github.com/qutech/qupulse/issues/779>`_)
+- Add the `ProgramBuilder` interface pattern to make the generated program of `PulseTemplate.create_program` easily customizable. (`#781 <https://github.com/qutech/qupulse/issues/781>`_)
+- Measurement windows can now automatically shrank in case of overlap to counteract small numeric errors. (`#791 <https://github.com/qutech/qupulse/issues/791>`_)
+
+
+Bugfixes
+--------
+
+- ``ConstantPulseTemplate``s from all versions can now be deserialized. (`#696 <https://github.com/qutech/qupulse/issues/696>`_)
+- Fixed that single segment tables where always interpreted to be constant. (`#707 <https://github.com/qutech/qupulse/issues/707>`_)
+- Add missing pulse registry support to `ArithmeticPT`. (`#775 <https://github.com/qutech/qupulse/issues/775>`_)
+
+
+qupulse 0.9 (2023-11-08)
+========================
+
+Features
+--------
+
+- Add `__pow__` as a repetition shortcut. This means you can do `my_pulse_template ** 5` or `my_pulse_template ** 'my_repetition_count'`. (`#692 <https://github.com/qutech/qupulse/issues/692>`_)
+- Promote ``qupulse.expression`` to a subpackage and create ``qupulse.expression.protocol`` with protocol classes that define the expression interface that is supposed to be used by qupulse.
+  The ```sympy`` based implementation is moved to ``qupulse.expressions.sympy`` and imported in ``qupulse.expressions``.
+
+  The intended use is to be able to use less powerful but faster implementations of the ``Expression`` protocol where appropriate.
+  In this first iteration, qupulse still relies on internals of the ``sympy`` based implementation in many places which is to be removed in the future. (`#750 <https://github.com/qutech/qupulse/issues/750>`_)
+- Promote parts of the private subpackage `qupulse._program` to the public subpackage `qupulse.program`, i.e. `loop`, `volatile`, `transformation` and `waveforms`. This allows external packages/drivers to rely on stability of the `Loop` class. (`#779 <https://github.com/qutech/qupulse/issues/779>`_)
+- Add ``PulseTemplate.pad_to`` method to help padding to minimal lengths or multiples of given durations. (`#801 <https://github.com/qutech/qupulse/issues/801>`_)
+
+
+Misc
+----
+
+- `#771 <https://github.com/qutech/qupulse/issues/771>`_
+
+
+qupulse 0.8 (2023-03-28)
+========================
+
+Features
+--------
+
+- New two dimensional plotting function ``qupulse.pulses.plotting.plot_2d``. (`#703 <https://github.com/qutech/qupulse/issues/703>`_)
+- Add support for time dependent expressions for arithmetics with atomic pulse templates i.e. ``ParallelChannelPT`` and
+  ``ArithmeticPT`` support time dependent expressions if used with atomic pulse templates.
+  Rename ``ParallelConstantChannelPT`` to ``ParallelChannelPT`` to reflect this change. (`#709 <https://github.com/qutech/qupulse/issues/709>`_)
+- Add ``with_`` family of helper methods to ``PulseTemplate`` to allow convinient and easily discoverable pulse template
+  combination. (`#710 <https://github.com/qutech/qupulse/issues/710>`_)
+- The plotting module is now located at `qupulse.plotting`. There is a legacy alias at `qupulse.pulses.plotting`. (`#735 <https://github.com/qutech/qupulse/issues/735>`_)
+
+
+Deprecations and Removals
+-------------------------
+
+- Remove the ``Parameter``, ``MappedParameter`` and ``ConstantParameter`` classes that where deprecated in version 0.5. (`#512 <https://github.com/qutech/qupulse/issues/512>`_)
+- Drop support for python version 3.7. (`#760 <https://github.com/qutech/qupulse/issues/760>`_)
+
+
 qupulse 0.7 (2022-10-05)
 ========================
 

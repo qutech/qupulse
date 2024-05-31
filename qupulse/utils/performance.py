@@ -1,3 +1,4 @@
+import warnings
 from typing import Tuple
 import numpy as np
 
@@ -22,6 +23,76 @@ def _is_monotonic_numpy(arr: np.ndarray) -> bool:
     # A bit faster than np.all(np.diff(arr) > 0) for small arrays
     # No difference for big arrays
     return np.all(arr[1:] >= arr[:-1])
+
+
+def _shrink_overlapping_windows_numpy(begins, lengths) -> bool:
+    supported_dtypes = ('int64', 'uint64')
+    if begins.dtype.name not in supported_dtypes or lengths.dtype.name not in supported_dtypes:
+        raise NotImplementedError("This function only supports 64 bit integer types yet.")
+
+    ends = begins + lengths
+
+    overlaps = np.zeros_like(ends, dtype=np.int64)
+    np.maximum(ends[:-1].view(np.int64) - begins[1:].view(np.int64), 0, out=overlaps[1:])
+
+    if np.any(overlaps >= lengths):
+        raise ValueError("Overlap is bigger than measurement window")
+    if np.any(overlaps > 0):
+        begins += overlaps.view(begins.dtype)
+        lengths -= overlaps.view(lengths.dtype)
+        return True
+    return False
+
+
+@njit
+def _shrink_overlapping_windows_numba(begins, lengths) -> bool:
+    shrank = False
+    for idx in range(len(begins) - 1):
+        end = begins[idx] + lengths[idx]
+        next_begin = begins[idx + 1]
+
+        if end > next_begin:
+            overlap = end - next_begin
+            shrank = True
+            if lengths[idx + 1] > overlap:
+                begins[idx + 1] += overlap
+                lengths[idx + 1] -= overlap
+            else:
+                raise ValueError("Overlap is bigger than measurement window")
+    return shrank
+
+
+class WindowOverlapWarning(RuntimeWarning):
+    COMMENT = (" This warning is an error by default. "
+               "Call 'warnings.simplefilter(WindowOverlapWarning, \"always\")' "
+               "to demote it to a regular warning.")
+
+    def __str__(self):
+        return super().__str__() + self.COMMENT
+
+
+warnings.simplefilter(category=WindowOverlapWarning, action='error')
+
+
+def shrink_overlapping_windows(begins, lengths, use_numba: bool = numba is not None) -> Tuple[np.array, np.array]:
+    """Shrink windows in place if they overlap. Emits WindowOverlapWarning if a window was shrunk.
+
+    Raises:
+        ValueError: if the overlap is bigger than a window.
+
+    Warnings:
+        WindowOverlapWarning
+    """
+    if use_numba:
+        backend = _shrink_overlapping_windows_numba
+    else:
+        backend = _shrink_overlapping_windows_numpy
+    begins = begins.copy()
+    lengths = lengths.copy()
+    if backend(begins, lengths):
+        warnings.warn("Found overlapping measurement windows which can be automatically shrunken if possible.",
+                      category=WindowOverlapWarning)
+    return begins, lengths
 
 
 @njit
@@ -81,4 +152,94 @@ else:
     is_monotonic = _is_monotonic_numba
 
 
+@njit
+def _average_windows_numba(time: np.ndarray, values: np.ndarray,
+                           begins: np.ndarray, ends: np.ndarray) -> np.ndarray:
+    n_samples, = time.shape
+    n_windows, = begins.shape
 
+    assert len(begins) == len(ends)
+    assert values.shape[0] == n_samples
+
+    result = np.zeros(begins.shape + values.shape[1:], dtype=float)
+    count = np.zeros(n_windows, dtype=np.uint64)
+
+    start = 0
+    for i in range(n_samples):
+        t = time[i]
+        v = values[i, ...]
+
+        while start < n_windows and ends[start] <= t:
+            n = count[start]
+            if n == 0:
+                result[start] = np.nan
+            else:
+                result[start] /= n
+            start += 1
+
+        idx = start
+        while idx < n_windows and begins[idx] <= t:
+            result[idx] += v
+            count[idx] += 1
+            idx += 1
+
+    for idx in range(start, n_windows):
+        n = count[idx]
+        if n == 0:
+            result[idx] = np.nan
+        else:
+            result[idx] /= count[idx]
+
+    return result
+
+
+def _average_windows_numpy(time: np.ndarray, values: np.ndarray,
+                           begins: np.ndarray, ends: np.ndarray) -> np.ndarray:
+    start = np.searchsorted(time, begins)
+    end = np.searchsorted(time, ends)
+
+    val_shape = values.shape[1:]
+
+    count = end - start
+    val_mask = result_mask = start < end
+
+    result = np.zeros(begins.shape + val_shape, dtype=float)
+    while np.any(val_mask):
+        result[val_mask, ...] += values[start[val_mask], ...]
+        start[val_mask] += 1
+        val_mask = start < end
+
+    result[~result_mask, ...] = np.nan
+    if result.ndim == 1:
+        result[result_mask, ...] /= count[result_mask]
+    else:
+        result[result_mask, ...] /= count[result_mask, None]
+
+    return result
+
+
+def average_windows(time: np.ndarray, values: np.ndarray, begins: np.ndarray, ends: np.ndarray):
+    """This function calculates the average over all windows that are defined by begins and ends.
+    The function assumes that the given time array is monotonically increasing and might produce
+    nonsensical results if not.
+
+    Args:
+        time: Time associated with the values of shape (n_samples,)
+        values: Values to average of shape (n_samples,) or (n_samples, n_channels)
+        begins: Beginning time stamps of the windows of shape (n_windows,)
+        ends: Ending time stamps of the windows of shape (n_windows,)
+
+    Returns:
+        Averaged values for each window of shape (n_windows,) or (n_windows, n_channels).
+        Windows without samples are NaN.
+    """
+    n_samples, = time.shape
+    n_windows, = begins.shape
+
+    assert n_windows == len(ends)
+    assert values.shape[0] == n_samples
+
+    if numba is None:
+        return _average_windows_numpy(time, values, begins, ends)
+    else:
+        return _average_windows_numba(time, values, begins, ends)

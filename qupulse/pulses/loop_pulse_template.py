@@ -1,5 +1,6 @@
 """This module defines LoopPulseTemplate, a higher-order hierarchical pulse template that loops
 another PulseTemplate based on a condition."""
+import dataclasses
 import functools
 import itertools
 from abc import ABC
@@ -13,13 +14,13 @@ from qupulse.serialization import Serializer, PulseRegistryType
 from qupulse.parameter_scope import Scope, MappedScope, DictScope
 from qupulse.utils.types import FrozenDict, FrozenMapping
 
-from qupulse._program._loop import Loop
+from qupulse.program import ProgramBuilder
 
 from qupulse.expressions import ExpressionScalar, ExpressionVariableMissingException, Expression
 from qupulse.utils import checked_int_cast, cached_property
 from qupulse.pulses.parameters import InvalidParameterNameException, ParameterConstrainer, ParameterNotProvidedException
 from qupulse.pulses.pulse_template import PulseTemplate, ChannelID, AtomicPulseTemplate
-from qupulse._program.waveforms import SequenceWaveform as ForLoopWaveform
+from qupulse.program.waveforms import SequenceWaveform as ForLoopWaveform
 from qupulse.pulses.measurement import MeasurementDefiner, MeasurementDeclaration
 from qupulse.pulses.range import ParametrizedRange, RangeScope
 
@@ -149,26 +150,22 @@ class ForLoopPulseTemplate(LoopPulseTemplate, MeasurementDefiner, ParameterConst
                                  channel_mapping: Dict[ChannelID, Optional[ChannelID]],
                                  global_transformation: Optional['Transformation'],
                                  to_single_waveform: Set[Union[str, 'PulseTemplate']],
-                                 parent_loop: Loop) -> None:
+                                 program_builder: ProgramBuilder) -> None:
         self.validate_scope(scope=scope)
 
-        try:
-            duration = self.duration.evaluate_in_scope(scope)
-        except ExpressionVariableMissingException as err:
-            raise ParameterNotProvidedException(err.variable) from err
+        loop_range = self._loop_range.to_range(scope)
+        loop_index_name = self._loop_index
 
-        if duration > 0:
-            measurements = self.get_measurement_windows(scope, measurement_mapping)
-            if measurements:
-                parent_loop.add_measurements(measurements)
+        measurements = self.get_measurement_windows(scope, measurement_mapping)
 
-            for local_scope in self._body_scope_generator(scope, forward=True):
-                self.body._create_program(scope=local_scope,
-                                          measurement_mapping=measurement_mapping,
-                                          channel_mapping=channel_mapping,
-                                          global_transformation=global_transformation,
-                                          to_single_waveform=to_single_waveform,
-                                          parent_loop=parent_loop)
+        for iteration_program_builder in program_builder.with_iteration(loop_index_name, loop_range,
+                                                                        measurements=measurements):
+            self.body._create_program(scope=iteration_program_builder.inner_scope(scope),
+                                      measurement_mapping=measurement_mapping,
+                                      channel_mapping=channel_mapping,
+                                      global_transformation=global_transformation,
+                                      to_single_waveform=to_single_waveform,
+                                      program_builder=iteration_program_builder)
 
     def build_waveform(self, parameter_scope: Scope) -> ForLoopWaveform:
         return ForLoopWaveform([self.body.build_waveform(local_scope)
@@ -255,3 +252,9 @@ class LoopIndexNotUsedException(Exception):
 
 
 _ForLoopScope = RangeScope
+
+
+@dataclasses.dataclass
+class _ForLoopIndexValue:
+    name: str
+    rng: range

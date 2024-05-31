@@ -8,14 +8,14 @@ import functools
 import warnings
 
 from qupulse.serialization import Serializer, PulseRegistryType
-from qupulse._program._loop import Loop
+from qupulse.program import ProgramBuilder
 from qupulse.parameter_scope import Scope
 from qupulse.utils import cached_property
 from qupulse.utils.types import MeasurementWindow, ChannelID, TimeType
 from qupulse.pulses.pulse_template import PulseTemplate, AtomicPulseTemplate
 from qupulse.pulses.parameters import ConstraintLike, ParameterConstrainer
 from qupulse.pulses.mapping_pulse_template import MappingPulseTemplate, MappingTuple
-from qupulse._program.waveforms import SequenceWaveform
+from qupulse.program.waveforms import SequenceWaveform
 from qupulse.pulses.measurement import MeasurementDeclaration, MeasurementDefiner
 from qupulse.expressions import Expression, ExpressionScalar
 
@@ -133,21 +133,18 @@ class SequencePulseTemplate(PulseTemplate, ParameterConstrainer, MeasurementDefi
                                  channel_mapping: Dict[ChannelID, Optional[ChannelID]],
                                  global_transformation: Optional['Transformation'],
                                  to_single_waveform: Set[Union[str, 'PulseTemplate']],
-                                 parent_loop: Loop) -> None:
+                                 program_builder: ProgramBuilder) -> None:
         self.validate_scope(scope)
 
-        if self.duration.evaluate_in_scope(scope) > 0:
-            measurements = self.get_measurement_windows(scope, measurement_mapping)
-            if measurements:
-                parent_loop.add_measurements(measurements)
-
+        measurements = self.get_measurement_windows(scope, measurement_mapping)
+        with program_builder.with_sequence(measurements=measurements) as sequence_program_builder:
             for subtemplate in self.subtemplates:
                 subtemplate._create_program(scope=scope,
                                             measurement_mapping=measurement_mapping,
                                             channel_mapping=channel_mapping,
                                             global_transformation=global_transformation,
                                             to_single_waveform=to_single_waveform,
-                                            parent_loop=parent_loop)
+                                            program_builder=sequence_program_builder)
 
     def get_serialization_data(self, serializer: Optional[Serializer]=None) -> Dict[str, Any]:
         data = super().get_serialization_data(serializer)

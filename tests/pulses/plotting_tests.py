@@ -9,9 +9,15 @@ from qupulse.pulses import ConstantPT
 from qupulse.plotting import PlottingNotPossibleException, render, plot
 from qupulse.pulses.table_pulse_template import TablePulseTemplate
 from qupulse.pulses.sequence_pulse_template import SequencePulseTemplate
-from qupulse._program._loop import Loop
+from qupulse.program.loop import Loop
 
 from tests.pulses.sequencing_dummies import DummyWaveform, DummyPulseTemplate
+
+
+def use_svg_backend():
+    import matplotlib.pyplot
+    matplotlib.pyplot.close('all')
+    matplotlib.use('svg')
 
 
 class PlotterTests(unittest.TestCase):
@@ -87,17 +93,18 @@ class PlotterTests(unittest.TestCase):
         self.assertEqual(expected_voltages, voltages)
 
     def test_plot_empty_pulse(self) -> None:
-        import matplotlib
-        matplotlib.use('svg') # use non-interactive backend so that test does not fail on travis
+        # use non-interactive backend so that test does not fail on travis
+        use_svg_backend()
 
         pt = DummyPulseTemplate()
         with self.assertWarnsRegex(UserWarning, "empty", msg="plot() did not issue a warning for an empty pulse"):
             plot(pt, dict(), show=False)
 
     def test_plot_pulse_automatic_sample_rate(self) -> None:
-        import matplotlib
-        matplotlib.use('svg') # use non-interactive backend so that test does not fail on travis
-        pt=ConstantPT(100, {'a': 1})
+        # use non-interactive backend so that test does not fail on travis
+        use_svg_backend()
+
+        pt = ConstantPT(100, {'a': 1})
         plot(pt, sample_rate=None)
 
     def test_bug_447(self):
@@ -132,8 +139,8 @@ class PlottingNotPossibleExceptionTests(unittest.TestCase):
 class PlottingIsinstanceTests(unittest.TestCase):
     @unittest.skip("Breaks other tests")
     def test_bug_422(self):
-        import matplotlib
-        matplotlib.use('svg')  # use non-interactive backend so that test does not fail on travis
+        # use non-interactive backend so that test does not fail on travis
+        use_svg_backend()
 
         to_reload = ['qupulse._program._loop',
                      'qupulse.pulses.pulse_template',

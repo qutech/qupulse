@@ -16,11 +16,18 @@ import operator
 import itertools
 import functools
 
-from qupulse._program import waveforms
+try:
+    from matplotlib import colormaps
+    get_cmap = colormaps.get_cmap
+except (ImportError, AttributeError):  # pragma: no cover
+    # was deprecated in matplotlib 3.7, but we keep it around to allow this code to work with older versions
+    get_cmap = plt.get_cmap
+
+from qupulse.program import waveforms
 from qupulse.utils.types import ChannelID, MeasurementWindow, has_type_interface
 from qupulse.pulses.pulse_template import PulseTemplate
-from qupulse._program.waveforms import Waveform
-from qupulse._program._loop import Loop, to_waveform
+from qupulse.program.waveforms import Waveform
+from qupulse.program.loop import Loop, to_waveform
 
 
 __all__ = ["render", "plot", "PlottingNotPossibleException"]
@@ -115,9 +122,9 @@ def _render_loop(loop: Loop,
     return waveform, measurements
 
 
-def plot(pulse: PulseTemplate,
-         parameters: Dict[str, Real]=None,
-         sample_rate: Optional[Real]=10,
+def plot(pulse: Union[PulseTemplate, Loop],
+         parameters: Optional[Dict[str, Real]] = None,
+         sample_rate: Optional[Real] = 10,
          axes: Any=None,
          show: bool=True,
          plot_channels: Optional[Set[ChannelID]]=None,
@@ -155,14 +162,14 @@ def plot(pulse: PulseTemplate,
     """
     from matplotlib import pyplot as plt
 
-    channels = pulse.defined_channels
-
-    if parameters is None:
-        parameters = dict()
+    try:
+        program = pulse.create_program(parameters=parameters)
+    except AttributeError:
+        program = pulse
 
     if sample_rate is None:
         if time_slice is None:
-            duration = pulse.duration
+            duration = program.duration
         else:
             duration = time_slice[1]-time_slice[0]
         if duration == 0:
@@ -170,10 +177,6 @@ def plot(pulse: PulseTemplate,
         else:
             duration_per_sample = float(duration) / 1000
             sample_rate = 1 / duration_per_sample
-            
-    program = pulse.create_program(parameters=parameters,
-                                   channel_mapping={ch: ch for ch in channels},
-                                   measurement_mapping={w: w for w in pulse.measurement_names})
 
     if program is not None:
         times, voltages, measurements = render(program,
@@ -222,7 +225,7 @@ def plot(pulse: PulseTemplate,
             if name in plot_measurements:
                 measurement_dict.setdefault(name, []).append((begin, begin+length))
 
-        color_map = plt.cm.get_cmap('plasma')
+        color_map = get_cmap('plasma')
         meas_colors = {name: color_map(i/len(measurement_dict))
                        for i, name in enumerate(measurement_dict.keys())}
         for name, begin_end_list in measurement_dict.items():
@@ -250,6 +253,7 @@ def plot(pulse: PulseTemplate,
         with warnings.catch_warnings():
             # do not show warnings in jupyter notebook with matplotlib inline backend
             warnings.filterwarnings(action="ignore",message=".*which is a non-GUI backend, so cannot show the figure.*")
+            warnings.filterwarnings(action="ignore",message=".*is non-interactive, and thus cannot be shown.*")
             axes.get_figure().show()
     return axes.get_figure()
 

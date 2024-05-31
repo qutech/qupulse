@@ -1,7 +1,7 @@
 from typing import Tuple, Optional, Callable, Set
 
 from qupulse import ChannelID
-from qupulse._program._loop import Loop
+from qupulse.program.loop import Loop
 from qupulse.hardware.feature_awg.base import AWGChannelTuple
 from qupulse.hardware.feature_awg.features import ProgramManagement, VolatileParameters
 from qupulse.hardware.awgs.base import AWG

@@ -5,7 +5,7 @@ from collections import OrderedDict
 import numpy as np
 
 from qupulse.utils.types import TimeType
-from qupulse._program._loop import Loop
+from qupulse.program.loop import Loop
 from qupulse.hardware.awgs.base import ProgramEntry
 
 from tests.pulses.sequencing_dummies import DummyWaveform
@@ -43,7 +43,7 @@ class ProgramEntryTests(unittest.TestCase):
         expected_waveforms = OrderedDict(zip(self.waveforms, sampled))
 
         with mock.patch.object(ProgramEntry, '_sample_waveforms', return_value=sampled) as sample_waveforms:
-            entry = ProgramEntry(loop=self.loop,
+            entry = ProgramEntry(program=self.loop,
                                  channels=self.channels,
                                  markers=self.marker,
                                  amplitudes=self.amplitudes,
@@ -56,7 +56,7 @@ class ProgramEntryTests(unittest.TestCase):
             sample_waveforms.assert_not_called()
 
         with mock.patch.object(ProgramEntry, '_sample_waveforms', return_value=sampled) as sample_waveforms:
-            entry = ProgramEntry(loop=self.loop,
+            entry = ProgramEntry(program=self.loop,
                                  channels=self.channels,
                                  markers=self.marker,
                                  amplitudes=self.amplitudes,
@@ -68,7 +68,7 @@ class ProgramEntryTests(unittest.TestCase):
             sample_waveforms.assert_called_once_with(expected_default)
 
         with mock.patch.object(ProgramEntry, '_sample_waveforms', return_value=sampled[:1]) as sample_waveforms:
-            entry = ProgramEntry(loop=self.loop,
+            entry = ProgramEntry(program=self.loop,
                                  channels=self.channels,
                                  markers=self.marker,
                                  amplitudes=self.amplitudes,
@@ -89,7 +89,7 @@ class ProgramEntryTests(unittest.TestCase):
             ((self.sampled[1]['A'], empty_ch, 2.*(self.sampled[1]['C'] - 0.1)), (empty_m, self.sampled[1]['M'] != 0))
         ]
 
-        entry = ProgramEntry(loop=self.loop,
+        entry = ProgramEntry(program=self.loop,
                              channels=self.channels,
                              markers=self.marker,
                              amplitudes=self.amplitudes,

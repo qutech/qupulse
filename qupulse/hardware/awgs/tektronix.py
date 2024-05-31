@@ -11,8 +11,8 @@ import tek_awg
 
 from qupulse.hardware.awgs.base import AWG, AWGAmplitudeOffsetHandling, ProgramOverwriteException
 from qupulse import ChannelID
-from qupulse._program._loop import Loop, make_compatible
-from qupulse._program.waveforms import Waveform as QuPulseWaveform
+from qupulse.program.loop import Loop, make_compatible
+from qupulse.program.waveforms import Waveform as QuPulseWaveform
 from qupulse.utils.types import TimeType
 from qupulse.hardware.util import voltage_to_uint16, get_sample_times, traced
 from qupulse.utils import pairwise

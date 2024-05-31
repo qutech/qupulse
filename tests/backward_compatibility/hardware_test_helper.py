@@ -4,6 +4,7 @@ import json
 import typing
 import importlib.util
 import sys
+import warnings
 
 from qupulse.serialization import Serializer, FilesystemBackend, PulseStorage
 from qupulse.pulses.pulse_template import PulseTemplate

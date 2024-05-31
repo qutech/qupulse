@@ -14,8 +14,8 @@ from qupulse.utils import cached_property
 from qupulse.utils.types import ChannelID
 from qupulse.pulses.measurement import MeasurementWindow
 from qupulse.pulses.pulse_template import AtomicPulseTemplate, PulseTemplate
-from qupulse._program.waveforms import Waveform, ArithmeticWaveform, TransformingWaveform
-from qupulse._program.transformation import Transformation, ScalingTransformation, OffsetTransformation,\
+from qupulse.program.waveforms import Waveform, ArithmeticWaveform, TransformingWaveform
+from qupulse.program.transformation import Transformation, ScalingTransformation, OffsetTransformation,\
     IdentityTransformation
 
 
@@ -197,7 +197,8 @@ class ArithmeticPulseTemplate(PulseTemplate):
                  arithmetic_operator: str,
                  rhs: Union[PulseTemplate, ExpressionLike, Mapping[ChannelID, ExpressionLike]],
                  *,
-                 identifier: Optional[str] = None):
+                 identifier: Optional[str] = None,
+                 registry: PulseRegistryType = None):
         """Implements the arithmetics between an aribrary pulse template and scalar values. The values can be the same
         for all channels, channel specific or only for a subset of the inner pulse templates defined channels.
         The expression may be time dependent if the pulse template is atomic.
@@ -262,6 +263,8 @@ class ArithmeticPulseTemplate(PulseTemplate):
         if self._pulse_template._is_atomic():
             # this is a hack so we can use the AtomicPulseTemplate.integral default implementation
             self._AS_EXPRESSION_TIME = AtomicPulseTemplate._AS_EXPRESSION_TIME
+
+        self._register(registry=registry)
 
     @staticmethod
     def _parse_operand(operand: Union[ExpressionLike, Mapping[ChannelID, ExpressionLike]],
@@ -379,7 +382,7 @@ class ArithmeticPulseTemplate(PulseTemplate):
                                  channel_mapping: Dict[ChannelID, Optional[ChannelID]],
                                  global_transformation: Optional[Transformation],
                                  to_single_waveform: Set[Union[str, 'PulseTemplate']],
-                                 parent_loop: 'Loop'):
+                                 program_builder: 'ProgramBuilder'):
         """The operation is applied by modifying the transformation the pulse template operand sees."""
         if not scope.get_volatile_parameters().keys().isdisjoint(self._scalar_operand_parameters):
             raise NotImplementedError('The scalar operand of arithmetic pulse template cannot be volatile')
@@ -395,7 +398,7 @@ class ArithmeticPulseTemplate(PulseTemplate):
                                              channel_mapping=channel_mapping,
                                              global_transformation=transformation,
                                              to_single_waveform=to_single_waveform,
-                                             parent_loop=parent_loop)
+                                             program_builder=program_builder)
 
     def build_waveform(self,
                        parameters: Dict[str, Real],
