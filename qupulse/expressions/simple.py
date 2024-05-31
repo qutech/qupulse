@@ -1,6 +1,6 @@
 import numpy as np
 from numbers import Real, Number
-from typing import Optional, Union, Sequence, ContextManager, Mapping, Tuple, Generic, TypeVar, Iterable, Dict
+from typing import Optional, Union, Sequence, ContextManager, Mapping, Tuple, Generic, TypeVar, Iterable, Dict, List
 from dataclasses import dataclass
 
 from functools import total_ordering
@@ -55,20 +55,24 @@ class SimpleExpression(Generic[NumVal]):
         return NotImplemented
     
     def __gt__(self, other):
+        return all([b for b in self._return_greater_comparison_bools(other)])
+    
+    def __lt__(self, other):
+        return all([not b for b in self._return_greater_comparison_bools(other)])
+    
+    def _return_greater_comparison_bools(self, other) -> List[bool]:
         #there is no good way to compare it without having a value,
         #but cannot require more parameters in magic method?
         #so have this weird full equality for now which doesn logically make sense
         #in most cases to catch unintended consequences
-        
         if isinstance(other, (float, int, TimeType)):
-            return self.base>other and all([o>other for o in self.offsets.values()])
+            return [self.base>other] + [o>other for o in self.offsets.values()]
 
         if type(other) == type(self):
-            if len(self.offsets)!=len(other.offsets): return False
-            return self.base>other.base and all([o1>o2 for o1,o2 in zip(self.offsets.values(),other.offsets.values())])
+            if len(self.offsets)!=len(other.offsets): return [False]
+            return [self.base>other.base] + [o1>o2 for o1,o2 in zip(self.offsets.values(),other.offsets.values())]
 
         return NotImplemented
-    
     
     def __add__(self, other):
         if isinstance(other, (float, int, TimeType)):
