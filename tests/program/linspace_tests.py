@@ -302,8 +302,9 @@ class TimeSweepTest(TestCase):
         self.pulse_template = singlet_scan
     
         
-    def test_singlet_scan_program(self):
+    def test_time_sweep_program(self):
         program_builder = LinSpaceBuilder(('a', 'b'))
         program = self.pulse_template.create_program(program_builder=program_builder)
+        commands = to_increment_commands(program)
         # so far just a test to see if the program creation works at all.
         # self.assertEqual([self.program], program)
