@@ -7,8 +7,8 @@ from typing import Mapping, Optional, Sequence, ContextManager, Iterable, Tuple,
 
 from qupulse import ChannelID, MeasurementWindow
 from qupulse.parameter_scope import Scope, MappedScope, FrozenDict
-from qupulse.program import (ProgramBuilder, HardwareTime, HardwareVoltage, Waveform, RepetitionCount, TimeType,
-                             SimpleExpression)
+from qupulse.program import ProgramBuilder, HardwareTime, HardwareVoltage, Waveform, RepetitionCount, TimeType
+from qupulse.expressions.simple import SimpleExpression
 from qupulse.program.waveforms import MultiChannelWaveform
 
 # this resolution is used to unify increments

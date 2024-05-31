@@ -18,15 +18,13 @@ import numpy as np
 
 from qupulse import ChannelID
 from qupulse.program.transformation import Transformation
-from qupulse.utils import checked_int_cast, isclose
-from qupulse.utils.types import TimeType, time_from_float
 from qupulse.utils.performance import is_monotonic
 from qupulse.comparable import Comparable
 from qupulse.expressions import ExpressionScalar
+from qupulse.expressions.simple import SimpleExpression
 from qupulse.pulses.interpolation import InterpolationStrategy
 from qupulse.utils import checked_int_cast, isclose
-from qupulse.utils.types import TimeType, time_from_float, FrozenDict
-from qupulse.program.transformation import Transformation
+from qupulse.utils.types import TimeType, time_from_float
 from qupulse.utils import pairwise
 
 class ConstantFunctionPulseTemplateWarning(UserWarning):
@@ -51,6 +49,13 @@ def _to_time_type(duration: Real) -> TimeType:
     else:
         return time_from_float(float(duration), absolute_error=PULSE_TO_WAVEFORM_ERROR)
 
+def _to_hardware_time(duration: Union[Real, SimpleExpression]) -> Union[TimeType, SimpleExpression[TimeType]]:
+    if isinstance(duration, SimpleExpression):
+        return SimpleExpression[TimeType](_to_time_type(duration.base),
+                                          {name:_to_time_type(value) for name,value in duration.offsets.items()})
+    else:
+        return _to_time_type(duration)
+    
 
 class Waveform(Comparable, metaclass=ABCMeta):
     """Represents an instantiated PulseTemplate which can be sampled to retrieve arrays of voltage
@@ -215,7 +220,16 @@ class Waveform(Comparable, metaclass=ABCMeta):
         """Returns a reversed version of this waveform."""
         # We don't check for constness here because const waveforms are supposed to override this method
         return ReversedWaveform(self)
-
+    
+    @abstractmethod
+    def _compare_subset_key(self, channel_subset: Set[ChannelID]) -> Hashable:
+        """key for hashing *without* channel reference
+        """
+    
+    def _hash_only_subset(self, channel_subset: Set[ChannelID]) -> int:
+        """Return a hash value of this Comparable object."""
+        return hash(self.get_subset_for_channels(channel_subset)._compare_subset_key(channel_subset))
+    
 
 class TableWaveformEntry(NamedTuple('TableWaveformEntry', [('t', Real),
                                                            ('v', float),
@@ -248,7 +262,7 @@ class TableWaveform(Waveform):
                           category=DeprecationWarning)
             waveform_table = self._validate_input(waveform_table)
 
-        super().__init__(duration=_to_time_type(waveform_table[-1].t))
+        super().__init__(duration=_to_hardware_time(waveform_table[-1].t))
 
         self._table = waveform_table
         self._channel_id = channel
@@ -353,7 +367,11 @@ class TableWaveform(Waveform):
     @property
     def compare_key(self) -> Any:
         return self._channel_id, self._table
-
+    
+    def _compare_subset_key(self, channel_subset: Set[ChannelID]) -> Any:
+        assert self.defined_channels == channel_subset
+        return self._table
+    
     def unsafe_sample(self,
                       channel: ChannelID,
                       sample_times: np.ndarray,
@@ -397,10 +415,7 @@ class ConstantWaveform(Waveform):
 
     def __init__(self, duration: Real, amplitude: Any, channel: ChannelID):
         """ Create a qupulse waveform corresponding to a ConstantPulseTemplate """
-        super().__init__(duration=_to_time_type(duration))
-        if hasattr(amplitude, 'shape'):
-            amplitude = amplitude[()]
-            hash(amplitude)
+        super().__init__(duration=_to_hardware_time(duration))
         self._amplitude = amplitude
         self._channel = channel
 
@@ -409,7 +424,7 @@ class ConstantWaveform(Waveform):
                                                                                                'MultiChannelWaveform']:
         """Construct a ConstantWaveform or a MultiChannelWaveform of ConstantWaveforms with given duration and values"""
         assert constant_values
-        duration = _to_time_type(duration)
+        duration = _to_hardware_time(duration)
         if len(constant_values) == 1:
             (channel, amplitude), = constant_values.items()
             return cls(duration, amplitude=amplitude, channel=channel)
@@ -437,7 +452,11 @@ class ConstantWaveform(Waveform):
     @property
     def compare_key(self) -> Tuple[Any, ...]:
         return self._duration, self._amplitude, self._channel
-
+    
+    def _compare_subset_key(self, channel_subset: Set[ChannelID]) -> Tuple[Any, ...]:
+        assert self.defined_channels == channel_subset
+        return self._duration, self._amplitude
+    
     def unsafe_sample(self,
                       channel: ChannelID,
                       sample_times: np.ndarray,
@@ -483,7 +502,7 @@ class FunctionWaveform(Waveform):
         elif not expression.variables:
             warnings.warn("Constant FunctionWaveform is not recommended as the constant propagation will be suboptimal",
                           category=ConstantFunctionPulseTemplateWarning)
-        super().__init__(duration=_to_time_type(duration))
+        super().__init__(duration=_to_hardware_time(duration))
         self._expression = expression
         self._channel_id = channel
 
@@ -509,7 +528,11 @@ class FunctionWaveform(Waveform):
     @property
     def compare_key(self) -> Any:
         return self._channel_id, self._expression, self._duration
-
+    
+    def _compare_subset_key(self, channel_subset: Set[ChannelID]) -> Any:
+        assert self.defined_channels == channel_subset
+        return self._expression, self._duration
+    
     @property
     def duration(self) -> TimeType:
         return self._duration
@@ -639,7 +662,10 @@ class SequenceWaveform(Waveform):
     @property
     def compare_key(self) -> Tuple[Waveform]:
         return self._sequenced_waveforms
-
+    
+    def _compare_subset_key(self, channel_subset: Set[ChannelID]) -> Tuple[Any]:
+        return tuple(wf._compare_subset_key(channel_subset) for wf in self._sequenced_waveforms)
+    
     @property
     def duration(self) -> TimeType:
         return self._duration
@@ -788,7 +814,15 @@ class MultiChannelWaveform(Waveform):
     def compare_key(self) -> Any:
         # sort with channels
         return self._sub_waveforms
-
+    
+    def _compare_subset_key(self, channel_subset: Set[ChannelID]) -> Any:
+        if len(channel_subset) == 0: return
+        if channel_subset != self.defined_channels: #also catches channel_subset >= self.defined_channels
+            # print(self.defined_channels)
+            # print(channel_subset)
+            return self.get_subset_for_channels(channel_subset)._compare_subset_key(channel_subset)
+        return tuple(self[channel]._compare_subset_key({channel}) for channel in channel_subset)
+    
     def unsafe_sample(self,
                       channel: ChannelID,
                       sample_times: np.ndarray,
@@ -856,7 +890,10 @@ class RepetitionWaveform(Waveform):
     @property
     def compare_key(self) -> Tuple[Any, int]:
         return self._body.compare_key, self._repetition_count
-
+    
+    def _compare_subset_key(self, channel_subset: Set[ChannelID]) -> Tuple[Any, int]:
+        return self._body._compare_subset_key(channel_subset), self._repetition_count
+    
     def unsafe_get_subset_for_channels(self, channels: AbstractSet[ChannelID]) -> Waveform:
         return RepetitionWaveform.from_repetition_count(
             body=self._body.unsafe_get_subset_for_channels(channels),
@@ -931,7 +968,11 @@ class TransformingWaveform(Waveform):
     @property
     def compare_key(self) -> Tuple[Waveform, Transformation]:
         return self.inner_waveform, self.transformation
-
+    
+    def _compare_subset_key(self, channel_subset: Set[ChannelID]) -> Tuple[Any, Transformation]:
+        remaining_channels = self.transformation.get_input_channels(channel_subset)
+        return self.inner_waveform._compare_subset_key(remaining_channels), self.transformation
+    
     def unsafe_get_subset_for_channels(self, channels: Set[ChannelID]) -> 'SubsetWaveform':
         return SubsetWaveform(self, channel_subset=channels)
 
@@ -980,7 +1021,12 @@ class SubsetWaveform(Waveform):
     @property
     def compare_key(self) -> Tuple[frozenset, Waveform]:
         return self.defined_channels, self.inner_waveform
-
+    
+    def _compare_subset_key(self, channel_subset: Set[ChannelID]) -> Any:
+        #creating another subset from inner_waveform may run into recursive loops?
+        #so pipe through until MultiChannelWF is reached basically?
+        return self._inner_waveform._compare_subset_key(channel_subset)
+    
     def unsafe_get_subset_for_channels(self, channels: Set[ChannelID]) -> Waveform:
         return self.inner_waveform.get_subset_for_channels(channels)
 
@@ -1131,7 +1177,10 @@ class ArithmeticWaveform(Waveform):
     @property
     def compare_key(self) -> Tuple[str, Waveform, Waveform]:
         return self._arithmetic_operator, self._lhs, self._rhs
-
+    
+    def _compare_subset_key(self, channel_subset: Set[ChannelID]) -> Tuple[str, Any, Any]:
+        return self._arithmetic_operator, self._lhs._compare_subset_key(channel_subset), self._rhs._compare_subset_key(channel_subset)
+    
 
 class FunctorWaveform(Waveform):
     # TODO: Use Protocol to enforce that it accepts second argument has the keyword out
@@ -1191,7 +1240,10 @@ class FunctorWaveform(Waveform):
     @property
     def compare_key(self) -> Tuple[Waveform, FrozenSet]:
         return self._inner_waveform, frozenset(self._functor.items())
-
+    
+    def _compare_subset_key(self, channel_subset: Set[ChannelID]) -> Tuple[Any, FrozenSet]:
+        return self._inner_waveform._compare_subset_key(channel_subset), frozenset(self._functor.items())
+    
 
 class ReversedWaveform(Waveform):
     """Reverses the inner waveform in time."""
@@ -1232,6 +1284,9 @@ class ReversedWaveform(Waveform):
     @property
     def compare_key(self) -> Hashable:
         return self._inner.compare_key
+    
+    def _compare_subset_key(self, channel_subset: Set[ChannelID]) -> Any:
+        return self._inner._compare_subset_key(channel_subset)
 
     def reversed(self) -> 'Waveform':
         return self._inner

@@ -7,14 +7,15 @@ import numbers
 from collections import OrderedDict
 from frozendict import frozendict
 from qupulse.expressions import ExpressionScalar, ExpressionLike
+from qupulse.expressions.simple import SimpleExpression
 
 import numpy
 
 try:
-    from math import isclose
+    from math import isclose as math_isclose
 except ImportError:
     # py version < 3.5
-    isclose = None
+    math_isclose = None
 
 try:
     from functools import cached_property
@@ -51,8 +52,17 @@ def _fallback_is_close(a, b, *, rel_tol=1e-09, abs_tol=0.0):
     return abs(a-b) <= max(rel_tol * max(abs(a), abs(b)), abs_tol)  # pragma: no cover
 
 
-if not isclose:
-    isclose = _fallback_is_close
+if not math_isclose:
+    math_isclose = _fallback_is_close
+    
+    
+def checked_is_close(a, b, *, rel_tol=1e-09, abs_tol=0.0):
+    if isinstance(a,SimpleExpression) or isinstance(b,SimpleExpression):
+        return _fallback_is_close(a, b, rel_tol=rel_tol, abs_tol=abs_tol)
+    return math_isclose(a,b,rel_tol=rel_tol,abs_tol=abs_tol)
+        
+        
+isclose = checked_is_close
 
 
 def _fallback_pairwise(iterable: Iterable[_T]) -> Iterator[Tuple[_T, _T]]:
@@ -149,4 +159,3 @@ def to_next_multiple(sample_rate: ExpressionLike, quantum: int,
     else:
         #still return 0 if duration==0
         return lambda duration: ExpressionScalar(f'{quantum}/({sample_rate})*Max({min_quanta},-(-{duration}*{sample_rate}//{quantum}))*Max(0, sign({duration}))')
-   
