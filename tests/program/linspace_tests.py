@@ -287,3 +287,23 @@ class TransformedRampTest(TestCase):
                                                          global_transformation=self.transformation,
                                                          to_single_waveform={self.pulse_template})
             self.assertEqual([self.program], program)
+
+
+class TimeSweepTest(TestCase):
+    def setUp(self,base_time=1e2,rep_factor=2):
+        wait = ConstantPT(f'64*{base_time}*1e1*(1+idx_t)', {'a': '-1. + idx_a * 0.01', 'b': '-.5 + idx_b * 0.02'})
+    
+        random_constant = ConstantPT(10 ** 5, {'a': -.4, 'b': -.3})
+        meas = ConstantPT(64*base_time, {'a': 0.05, 'b': 0.06})
+    
+        singlet_scan = (random_constant @ wait @ meas).with_iteration('idx_a', rep_factor*10*2)\
+                                                      .with_iteration('idx_b', rep_factor*10)\
+                                                      .with_iteration('idx_t', 10)
+        self.pulse_template = singlet_scan
+    
+        
+    def test_singlet_scan_program(self):
+        program_builder = LinSpaceBuilder(('a', 'b'))
+        program = self.pulse_template.create_program(program_builder=program_builder)
+        # so far just a test to see if the program creation works at all.
+        # self.assertEqual([self.program], program)
