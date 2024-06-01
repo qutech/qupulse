@@ -40,7 +40,8 @@ class SequencePulseTemplate(PulseTemplate, ParameterConstrainer, MeasurementDefi
                  identifier: Optional[str]=None,
                  parameter_constraints: Optional[Iterable[ConstraintLike]]=None,
                  measurements: Optional[List[MeasurementDeclaration]]=None,
-                 registry: PulseRegistryType=None) -> None:
+                 registry: PulseRegistryType=None,
+                 allow_subtemplate_concatenation: bool = True) -> None:
         """Create a new SequencePulseTemplate instance.
 
         Requires a (correctly ordered) list of subtemplates in the form
@@ -75,6 +76,7 @@ class SequencePulseTemplate(PulseTemplate, ParameterConstrainer, MeasurementDefi
                                  + f' defined {defined_channels} vs. subtemplate {subtemplate.defined_channels}')
 
         self._register(registry=registry)
+        self._allow_subtemplate_concatenation = allow_subtemplate_concatenation
 
     @classmethod
     def concatenate(cls, *pulse_templates: Union[PulseTemplate, MappingTuple], **kwargs) -> 'SequencePulseTemplate':
@@ -89,10 +91,11 @@ class SequencePulseTemplate(PulseTemplate, ParameterConstrainer, MeasurementDefi
         """
         parsed = []
         for pt in pulse_templates:
-            if (isinstance(pt, SequencePulseTemplate) and type(pt) is cls
+            if (isinstance(pt, SequencePulseTemplate)
                     and pt.identifier is None
                     and not pt.measurement_declarations
-                    and not pt.parameter_constraints):
+                    and not pt.parameter_constraints
+                    and pt._allow_subtemplate_concatenation):
                 parsed.extend(pt.subtemplates)
             else:
                 parsed.append(pt)

@@ -27,6 +27,37 @@ class TimeExtensionPulseTemplate(SequencePT):
     @property
     def parameter_names(self) -> Set[str]:
         return self._extend_inner.parameter_names | set(self._extend_stop.variables) | set(self._extend_start.variables)
+
+    def __init__(self, inner: PulseTemplate, start: ExpressionLike, stop: ExpressionLike,
+                 *,
+                 parameter_constraints: Optional[Iterable[ConstraintLike]]=None,
+                 measurements: Optional[List[MeasurementDeclaration]]=None,
+                 identifier: Optional[str] = None,
+                 registry: PulseRegistryType = None):
+                
+        self._extend_inner = inner
+        self._extend_start = ExpressionScalar(start)
+        self._extend_stop = ExpressionScalar(stop)
+        
+        id_base = identifier if identifier is not None else ""
+        
+        start_pt = ConstantPT(self._extend_start,self._extend_inner.initial_values,identifier=id_base+f"__prepend_{id(self)}")
+        stop_pt = ConstantPT(self._extend_stop,self._extend_inner.final_values,identifier=id_base+f"__postpend_{id(self)}")
+        
+        super().__init__(start_pt,self._extend_inner,stop_pt,identifier=identifier,
+                         parameter_constraints=parameter_constraints,
+                         measurements=measurements,
+                         registry=registry)
+
+
+class SingleWFTimeExtensionPulseTemplate(SequencePT):
+    """Extend the given pulse template with a constant(?) prefix and/or suffix.
+    Both start and stop are defined as positive quantities.
+    """
+    
+    @property
+    def parameter_names(self) -> Set[str]:
+        return self._extend_inner.parameter_names | set(self._extend_stop.variables) | set(self._extend_start.variables)
     
     def _create_program(self, *,
                         scope: Scope,
@@ -48,8 +79,7 @@ class TimeExtensionPulseTemplate(SequencePT):
                  parameter_constraints: Optional[Iterable[ConstraintLike]]=None,
                  measurements: Optional[List[MeasurementDeclaration]]=None,
                  identifier: Optional[str] = None,
-                 registry: PulseRegistryType = None
-                 ):
+                 registry: PulseRegistryType = None):
                 
         self._extend_inner = inner
         self._extend_start = ExpressionScalar(start)
@@ -61,6 +91,9 @@ class TimeExtensionPulseTemplate(SequencePT):
         stop_pt = ConstantPT(self._extend_stop,self._extend_inner.final_values,identifier=id_base+f"__postpend_{id(self)}")
         
         super().__init__(start_pt,self._extend_inner,stop_pt,identifier=identifier,
-                       parameter_constraints=parameter_constraints,
-                       measurements=measurements,
-                       registry=registry)
+                         parameter_constraints=parameter_constraints,
+                         measurements=measurements,
+                         registry=registry,
+                         allow_subtemplate_concatenation=False)
+        
+        
