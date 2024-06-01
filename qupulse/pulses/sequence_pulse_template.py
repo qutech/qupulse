@@ -89,7 +89,7 @@ class SequencePulseTemplate(PulseTemplate, ParameterConstrainer, MeasurementDefi
         """
         parsed = []
         for pt in pulse_templates:
-            if (isinstance(pt, SequencePulseTemplate)
+            if (isinstance(pt, SequencePulseTemplate) and type(pt) is cls
                     and pt.identifier is None
                     and not pt.measurement_declarations
                     and not pt.parameter_constraints):

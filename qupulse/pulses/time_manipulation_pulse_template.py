@@ -54,9 +54,11 @@ class TimeExtensionPulseTemplate(SequencePT):
         self._extend_inner = inner
         self._extend_start = ExpressionScalar(start)
         self._extend_stop = ExpressionScalar(stop)
-                
-        start_pt = ConstantPT(self._extend_start,self._extend_inner.initial_values)
-        stop_pt = ConstantPT(self._extend_stop,self._extend_inner.final_values)
+        
+        id_base = identifier if identifier is not None else ""
+        
+        start_pt = ConstantPT(self._extend_start,self._extend_inner.initial_values,identifier=id_base+f"__prepend_{id(self)}")
+        stop_pt = ConstantPT(self._extend_stop,self._extend_inner.final_values,identifier=id_base+f"__postpend_{id(self)}")
         
         super().__init__(start_pt,self._extend_inner,stop_pt,identifier=identifier,
                        parameter_constraints=parameter_constraints,
