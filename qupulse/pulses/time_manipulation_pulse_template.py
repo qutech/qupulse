@@ -26,7 +26,7 @@ class TimeExtensionPulseTemplate(SequencePT):
     
     @property
     def parameter_names(self) -> Set[str]:
-        return self._extend_inner.parameter_names | set(self._stop.variables) | set(self._start.variables)
+        return self._extend_inner.parameter_names | set(self._extend_stop.variables) | set(self._extend_start.variables)
     
     def _create_program(self, *,
                         scope: Scope,

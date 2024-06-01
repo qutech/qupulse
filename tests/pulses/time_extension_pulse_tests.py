@@ -20,10 +20,10 @@ class TimeExtensionPulseTemplateTests(unittest.TestCase):
     
     def test_loopbuilder(self):
         self.single_program = self.extend_both.create_program(program_builder=LoopBuilder(),
-                                                   parameters=self.parameters)
+                                                              parameters=self.parameters)
         
         self.sequenced_program = self.sequenced_pt.create_program(program_builder=LoopBuilder(),
-                                                   parameters=self.parameters)
+                                                                  parameters=self.parameters)
         
     def test_quantities(self):
         
