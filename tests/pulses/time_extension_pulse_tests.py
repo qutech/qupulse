@@ -19,7 +19,10 @@ class TimeExtensionPulseTemplateTests(unittest.TestCase):
         self.sequenced_pt = self.extend_prior @ self.extend_posterior @ self.extend_both
     
     def test_loopbuilder(self):
-        self.program = self.sequenced_pt.create_program(program_builder=LoopBuilder(),
+        self.single_program = self.extend_both.create_program(program_builder=LoopBuilder(),
+                                                   parameters=self.parameters)
+        
+        self.sequenced_program = self.sequenced_pt.create_program(program_builder=LoopBuilder(),
                                                    parameters=self.parameters)
         
     def test_quantities(self):
@@ -42,5 +45,5 @@ class TimeExtensionPulseTemplateTests(unittest.TestCase):
             + self.parameters['t_prior'] + self.parameters['t_posterior']
         self.assertEqual(duration_extended, duration_summed)
         
-# unittest.main()
+unittest.main()
         

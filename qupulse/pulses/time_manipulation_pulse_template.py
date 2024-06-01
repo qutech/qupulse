@@ -27,20 +27,21 @@ class TimeExtensionPulseTemplate(SequencePT):
     @property
     def parameter_names(self) -> Set[str]:
         return self._extend_inner.parameter_names | set(self._stop.variables) | set(self._start.variables)
+    
+    def _create_program(self, *,
+                        scope: Scope,
+                        measurement_mapping: Dict[str, Optional[str]],
+                        channel_mapping: Dict[ChannelID, Optional[ChannelID]],
+                        global_transformation: Optional[Transformation],
+                        to_single_waveform: Set[Union[str, 'PulseTemplate']],
+                        program_builder: ProgramBuilder):
         
-    def _internal_create_program(self, *, scope: Scope, measurement_mapping: Dict[str, Optional[str]],
-                                 channel_mapping: Dict[ChannelID, Optional[ChannelID]],
-                                 global_transformation: Optional[Transformation],
-                                 to_single_waveform: Set[Union[str, 'PulseTemplate']],
-                                 program_builder: ProgramBuilder) -> None:
-        
-        super()._internal_create_program(scope=scope,
+        super()._create_program(scope=scope,
                                          measurement_mapping=measurement_mapping,
                                          channel_mapping=channel_mapping,
                                          global_transformation=global_transformation,
                                          to_single_waveform=to_single_waveform | {self},
                                          program_builder=program_builder)
-
 
     def __init__(self, inner: PulseTemplate, start: ExpressionLike, stop: ExpressionLike,
                  *,
