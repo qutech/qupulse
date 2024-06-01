@@ -400,7 +400,7 @@ class PulseTemplate(Serializable):
             A pulse template that has the duration given by ``to_new_duration``. It can be ``self`` if the duration is
             already as required. It is never ``self`` if ``pt_kwargs`` is non-empty.
         """
-        from qupulse.pulses import ConstantPT, SequencePT, SingleWFTimeExtensionPT
+        from qupulse.pulses import SingleWFTimeExtensionPT, TimeExtensionPT
         current_duration = self.duration
         if callable(to_new_duration):
             new_duration = to_new_duration(current_duration)
@@ -410,12 +410,8 @@ class PulseTemplate(Serializable):
         if not pt_kwargs and pad_duration == 0:
             return self
         if as_single_wf:
-            return SingleWFTimeExtensionPT(self,0.,pad_duration)
-        pad_pt = ConstantPT(pad_duration, self.final_values)
-        if pt_kwargs:
-            return SequencePT(self, pad_pt, **pt_kwargs)
-        else:
-            return self @ pad_pt
+            return SingleWFTimeExtensionPT(self,0.,pad_duration,**pt_kwargs if pt_kwargs is not None else {})
+        return TimeExtensionPT(self,0.,pad_duration,**pt_kwargs if pt_kwargs is not None else {})
 
     def __format__(self, format_spec: str):
         if format_spec == '':

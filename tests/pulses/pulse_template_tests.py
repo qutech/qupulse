@@ -36,6 +36,7 @@ class PulseTemplateStub(PulseTemplate):
                  parameter_names=None,
                  measurement_names=None,
                  final_values=None,
+                 initial_values=None,
                  registry=None):
         super().__init__(identifier=identifier)
 
@@ -44,6 +45,7 @@ class PulseTemplateStub(PulseTemplate):
         self._parameter_names = parameter_names
         self._measurement_names = set() if measurement_names is None else measurement_names
         self._final_values = final_values
+        self._initial_values = initial_values
         self.internal_create_program_args = []
         self._register(registry=registry)
 
@@ -93,7 +95,10 @@ class PulseTemplateStub(PulseTemplate):
 
     @property
     def initial_values(self) -> Dict[ChannelID, ExpressionScalar]:
-        raise NotImplementedError()
+        if self._initial_values is None:
+            raise NotImplementedError()
+        else:
+            return self._initial_values
 
     @property
     def final_values(self) -> Dict[ChannelID, ExpressionScalar]:
@@ -372,72 +377,79 @@ class PulseTemplateTest(unittest.TestCase):
         _internal_create_program.assert_called_once_with(**expected_internal_kwargs, program_builder=program_builder)
 
     def test_pad_to(self):
-        from qupulse.pulses import SequencePT
-
+        from qupulse.pulses import TimeExtensionPT, SingleWFTimeExtensionPT
+    
         def to_multiple_of_192(x: Expression) -> Expression:
             return (x + 191) // 192 * 192
-
+    
         final_values = frozendict.frozendict({'A': ExpressionScalar(0.1), 'B': ExpressionScalar('a')})
+        initial_values = frozendict.frozendict({'A': ExpressionScalar(-0.1), 'B': ExpressionScalar('a')})
         measurements = [('M', 0, 'y')]
-
+    
         pt = PulseTemplateStub(duration=ExpressionScalar(10))
         padded = pt.pad_to(10)
         self.assertIs(pt, padded)
-
+    
         pt = PulseTemplateStub(duration=ExpressionScalar('duration'))
         padded = pt.pad_to('duration')
         self.assertIs(pt, padded)
-
-        # padding with numeric durations
-
-        pt = PulseTemplateStub(duration=ExpressionScalar(10),
-                               final_values=final_values,
-                               defined_channels=final_values.keys())
-        padded = pt.pad_to(20)
-        self.assertEqual(padded.duration, 20)
-        self.assertEqual(padded.final_values, final_values)
-        self.assertIsInstance(padded, SequencePT)
-        self.assertIs(padded.subtemplates[0], pt)
-
-        padded = pt.pad_to(20, pt_kwargs=dict(measurements=measurements))
-        self.assertEqual(padded.duration, 20)
-        self.assertEqual(padded.final_values, final_values)
-        self.assertIsInstance(padded, SequencePT)
-        self.assertIs(padded.subtemplates[0], pt)
-        self.assertEqual(measurements, padded.measurement_declarations)
-
-        padded = pt.pad_to(10, pt_kwargs=dict(measurements=measurements))
-        self.assertEqual(padded.duration, 10)
-        self.assertEqual(padded.final_values, final_values)
-        self.assertIsInstance(padded, SequencePT)
-        self.assertIs(padded.subtemplates[0], pt)
-        self.assertEqual(measurements, padded.measurement_declarations)
-
-        # padding with numeric duation and callable
-        padded = pt.pad_to(to_multiple_of_192)
-        self.assertEqual(padded.duration, 192)
-        self.assertEqual(padded.final_values, final_values)
-        self.assertIsInstance(padded, SequencePT)
-        self.assertIs(padded.subtemplates[0], pt)
-
-        # padding with symbolic durations
-
-        pt = PulseTemplateStub(duration=ExpressionScalar('duration'),
-                               final_values=final_values,
-                               defined_channels=final_values.keys())
-        padded = pt.pad_to('new_duration')
-        self.assertEqual(padded.duration, 'new_duration')
-        self.assertEqual(padded.final_values, final_values)
-        self.assertIsInstance(padded, SequencePT)
-        self.assertIs(padded.subtemplates[0], pt)
-
-        # padding symbolic durations with callable
-
-        padded = pt.pad_to(to_multiple_of_192)
-        self.assertEqual(padded.duration, '(duration + 191) // 192 * 192')
-        self.assertEqual(padded.final_values, final_values)
-        self.assertIsInstance(padded, SequencePT)
-        self.assertIs(padded.subtemplates[0], pt)
+    
+        
+        for swf_bool, class_type in zip([False,True],[TimeExtensionPT, SingleWFTimeExtensionPT]):
+            
+            # padding with numeric durations
+            
+            pt = PulseTemplateStub(duration=ExpressionScalar(10),
+                                   final_values=final_values,
+                                   initial_values=initial_values,
+                                   defined_channels=final_values.keys())
+            
+            padded = pt.pad_to(20,as_single_wf=swf_bool)
+            self.assertEqual(padded.duration, 20)
+            self.assertEqual(padded.final_values, final_values)
+            self.assertIsInstance(padded, class_type)
+            self.assertIs(padded.subtemplates[1], pt)
+    
+            padded = pt.pad_to(20,as_single_wf=swf_bool, pt_kwargs=dict(measurements=measurements))
+            self.assertEqual(padded.duration, 20)
+            self.assertEqual(padded.final_values, final_values)
+            self.assertIsInstance(padded, class_type)
+            self.assertIs(padded.subtemplates[1], pt)
+            self.assertEqual(measurements, padded.measurement_declarations)
+    
+            padded = pt.pad_to(10,as_single_wf=swf_bool, pt_kwargs=dict(measurements=measurements))
+            self.assertEqual(padded.duration, 10)
+            self.assertEqual(padded.final_values, final_values)
+            self.assertIsInstance(padded, class_type)
+            self.assertIs(padded.subtemplates[1], pt)
+            self.assertEqual(measurements, padded.measurement_declarations)
+    
+            # padding with numeric duation and callable
+            padded = pt.pad_to(to_multiple_of_192,as_single_wf=swf_bool)
+            self.assertEqual(padded.duration, 192)
+            self.assertEqual(padded.final_values, final_values)
+            self.assertIsInstance(padded, class_type)
+            self.assertIs(padded.subtemplates[1], pt)
+    
+            # padding with symbolic durations
+    
+            pt = PulseTemplateStub(duration=ExpressionScalar('duration'),
+                                   final_values=final_values,
+                                   initial_values=initial_values,
+                                   defined_channels=final_values.keys())
+            padded = pt.pad_to('new_duration',as_single_wf=swf_bool)
+            self.assertEqual(padded.duration, 'new_duration')
+            self.assertEqual(padded.final_values, final_values)
+            self.assertIsInstance(padded, class_type)
+            self.assertIs(padded.subtemplates[1], pt)
+    
+            # padding symbolic durations with callable
+    
+            padded = pt.pad_to(to_multiple_of_192,as_single_wf=swf_bool)
+            self.assertEqual(padded.duration, '(duration + 191) // 192 * 192')
+            self.assertEqual(padded.final_values, final_values)
+            self.assertIsInstance(padded, class_type)
+            self.assertIs(padded.subtemplates[1], pt)
 
     @mock.patch('qupulse.pulses.pulse_template.default_program_builder')
     def test_create_program_none(self, pb_mock) -> None:
