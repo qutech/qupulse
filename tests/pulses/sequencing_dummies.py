@@ -59,7 +59,24 @@ class DummyWaveform(Waveform):
             )
         else:
             return id(self)
-
+        
+    @property
+    def _compare_subset_key(self, channel_subset) -> Any:
+        assert self.channels==channel_subset
+        if self.sample_output is not None:
+            try:
+                if isinstance(self.sample_output,dict):
+                    return hash(self.sample_output.values().tobytes())
+                return hash(self.sample_output.tobytes())
+            except AttributeError:
+                pass
+            return hash(
+                tuple(sorted((getattr(output, 'tobytes', lambda: output)(),)
+                             for output in self.sample_output.values()))
+            )
+        else:
+            return id(self)
+        
     @property
     def measurement_windows(self):
         return []
