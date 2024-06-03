@@ -60,7 +60,6 @@ class DummyWaveform(Waveform):
         else:
             return id(self)
         
-    @property
     def _compare_subset_key(self, channel_subset) -> Any:
         assert self.channels==channel_subset
         if self.sample_output is not None:
