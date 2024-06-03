@@ -223,7 +223,8 @@ class Waveform(Comparable, metaclass=ABCMeta):
     
     @abstractmethod
     def _compare_subset_key(self, channel_subset: Set[ChannelID]) -> Hashable:
-        """key for hashing *without* channel reference
+        """key for hashing *without* channel reference. Don't call directly,
+        only via _hash_only_subset.
         """
     
     def _hash_only_subset(self, channel_subset: Set[ChannelID]) -> int:

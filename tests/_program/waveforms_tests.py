@@ -13,8 +13,8 @@ from qupulse.program.waveforms import MultiChannelWaveform, RepetitionWaveform, 
 from qupulse.program.transformation import LinearTransformation
 from qupulse.expressions import ExpressionScalar, Expression
 
-from tests.pulses.sequencing_dummies import DummyWaveform, DummyInterpolationStrategy
-from tests._program.transformation_tests import TransformationStub
+# from tests.pulses.sequencing_dummies import DummyWaveform, DummyInterpolationStrategy
+# from tests._program.transformation_tests import TransformationStub
 
 
 def assert_constant_consistent(test_case: unittest.TestCase, wf: Waveform):
@@ -521,7 +521,8 @@ class SequenceWaveformTest(unittest.TestCase):
     def test_compare_subset(self):
         body_wf = DummyWaveform(defined_channels={'a'})
         wf = SequenceWaveform([body_wf, body_wf])
-        self.assertEqual(wf._compare_subset_key({'a',}), tuple(2*[body_wf._compare_subset_key({'a',}),]))
+        self.assertEqual(wf.get_subset_for_channels({'a'})._compare_subset_key({'a',}),
+                         tuple(2*[body_wf.get_subset_for_channels({'a'})._compare_subset_key({'a',}),]))
 
 
 class ConstantWaveformTests(unittest.TestCase):
@@ -695,7 +696,7 @@ class TableWaveformTests(unittest.TestCase):
 
     def test_hash_subset(self):
         
-        interp = 'jump'
+        interp = HoldInterpolationStrategy()
         entries = (TableWaveformEntry(0, 0, interp),
                    TableWaveformEntry(2.1, -33.2, interp),
                    TableWaveformEntry(5.7, 123.4, interp))
@@ -908,8 +909,8 @@ class SubsetWaveformTest(unittest.TestCase):
         inner_wf = DummyWaveform(duration=1.5, defined_channels={'a', 'b', 'c'})
         subset_wf = SubsetWaveform(inner_wf, {'a', 'c'})
         
-        self.assertEqual(subset_wf._compare_subset_key({'a', 'c'}),
-                         inner_wf._compare_subset_key({'a', 'c'}),)
+        self.assertEqual(subset_wf._compare_subset_key({'a', 'b', 'c'}),
+                         inner_wf._compare_subset_key({'a', 'b', 'c'}),)
 
 
 class ArithmeticWaveformTest(unittest.TestCase):
@@ -966,10 +967,22 @@ class ArithmeticWaveformTest(unittest.TestCase):
         self.assertIs(rhs, arith.rhs)
         self.assertEqual('-', arith.arithmetic_operator)
         self.assertEqual(lhs.duration, arith.duration)
-
+        
+    def test_compare_subset(self):
+        lhs_1 = DummyWaveform(duration=1.5, defined_channels={'a',})
+        lhs_2 = DummyWaveform(duration=1.5, defined_channels={'b',})
+        lhs_3 = DummyWaveform(duration=1.5, defined_channels={'c'})
+        rhs_1 = DummyWaveform(duration=1.5, defined_channels={'a',})
+        rhs_2 = DummyWaveform(duration=1.5, defined_channels={'b',})
+        rhs_3 = DummyWaveform(duration=1.5, defined_channels={'d'})
+        
+        lhs = MultiChannelWaveform([lhs_1,lhs_2,lhs_3])
+        rhs = MultiChannelWaveform([rhs_1,rhs_2,rhs_3])
+        arith = ArithmeticWaveform(lhs, '-', rhs)
+        
         self.assertEqual(('-', lhs, rhs), arith.compare_key)
-        self.assertEqual(('-', lhs._compare_subset_key({'a','b'}), rhs._compare_subset_key({'a','b'})),
-                         arith._compare_subset_key({'a','b'}))
+        self.assertEqual(('-', lhs._compare_subset_key({'a','b',}),rhs._compare_subset_key({'a','b',})),
+                         arith._compare_subset_key({'a','b',}))
 
     def test_unsafe_get_subset_for_channels(self):
         lhs = DummyWaveform(duration=1.5, defined_channels={'a', 'b', 'c'})
@@ -1166,8 +1179,9 @@ class FunctorWaveformTests(unittest.TestCase):
         
         wf11 = FunctorWaveform(inner_wf_1, functors_1)
 
-        self.assertEqual((inner_wf_1._compare_subset_key({'A',}), frozenset(functors_1.items())),
-                         wf11._compare_subset_key({'A',}))
+        self.assertEqual((inner_wf_1._compare_subset_key({'A', 'B'}),
+                          frozenset(functors_1.items())),
+                         wf11._compare_subset_key({'A', 'B'}))
 
 
 class ReversedWaveformTest(unittest.TestCase):
@@ -1178,7 +1192,8 @@ class ReversedWaveformTest(unittest.TestCase):
         self.assertEqual(dummy_wf.duration, reversed_wf.duration)
         self.assertEqual(dummy_wf.defined_channels, reversed_wf.defined_channels)
         self.assertEqual(dummy_wf.compare_key, reversed_wf.compare_key)
-        self.assertEqual(reversed_wf._compare_subset_key({'A',}), (dummy_wf._compare_subset_key({'A',}),'-'))
+        self.assertEqual(reversed_wf._compare_subset_key({'A','B'}),
+                         (dummy_wf._compare_subset_key({'A','B'}),'-'))
         self.assertNotEqual(reversed_wf, dummy_wf)
 
     def test_reversed_sample(self):

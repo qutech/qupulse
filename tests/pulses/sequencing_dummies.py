@@ -43,7 +43,7 @@ class DummyWaveform(Waveform):
                 defined_channels = set(sample_output.keys())
             else:
                 defined_channels = {'A'}
-        self.defined_channels_ = defined_channels
+        self.defined_channels_ = self.channels = defined_channels
         self.sample_calls = []
 
     @property
