@@ -1286,7 +1286,7 @@ class ReversedWaveform(Waveform):
         return self._inner.compare_key
     
     def _compare_subset_key(self, channel_subset: Set[ChannelID]) -> Any:
-        return self._inner._compare_subset_key(channel_subset)
+        return (self._inner._compare_subset_key(channel_subset),'-')
 
     def reversed(self) -> 'Waveform':
         return self._inner

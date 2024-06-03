@@ -50,7 +50,11 @@ class WaveformStub(Waveform):
     def compare_key(self):
         raise NotImplementedError()
 
-
+    @property
+    def _compare_subset_key(self, channel_subset):
+        raise NotImplementedError()
+        
+    
 class WaveformTest(unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -292,8 +296,25 @@ class MultiChannelWaveformTest(unittest.TestCase):
         self.assertIsNone(wf_non_const.constant_value_dict())
         self.assertIsNone(wf_mixed.constant_value_dict())
         self.assertEqual(wf_mixed.constant_value('C'), 2.2)
-
-
+        
+    def test_hash_subset(self):
+        dwf_a = DummyWaveform(duration=246.2, defined_channels={'A'}, sample_output={'A': 1*np.ones(3)})
+        dwf_b = DummyWaveform(duration=246.2, defined_channels={'B'}, sample_output={'B': 2*np.ones(3)})
+        dwf_c = DummyWaveform(duration=246.2, defined_channels={'C'}, sample_output={'C': 3*np.ones(3)})
+        waveform_a1 = MultiChannelWaveform([dwf_a, dwf_b, dwf_c])
+        waveform_a2 = MultiChannelWaveform([dwf_a, dwf_b])
+        waveform_a3 = MultiChannelWaveform([dwf_a, dwf_c])
+        
+        self.assertEqual(waveform_a1._hash_only_subset({'A','B'}),
+                         waveform_a2._hash_only_subset({'A','B'}))
+        self.assertEqual(waveform_a1._hash_only_subset({'A','C'}),
+                         waveform_a3._hash_only_subset({'A','C'}))
+        self.assertNotEqual(waveform_a1._hash_only_subset({'A','B'}), 
+                            waveform_a3._hash_only_subset({'A','C'}))
+        
+        self.assertRaises(KeyError, lambda: waveform_a1._hash_only_subset({'A','B','C','D'}))
+        
+    
 class RepetitionWaveformTest(unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -335,6 +356,11 @@ class RepetitionWaveformTest(unittest.TestCase):
         wf = RepetitionWaveform(body_wf, 2)
         self.assertEqual(wf.compare_key, (body_wf.compare_key, 2))
 
+    def test_compare_subset(self):
+        body_wf = DummyWaveform(defined_channels={'a'})
+        wf = RepetitionWaveform(body_wf, 2)
+        self.assertEqual(wf._compare_subset_key({'a',}), (body_wf._compare_subset_key({'a',}), 2))
+        
     def test_unsafe_get_subset_for_channels(self):
         body_wf = DummyWaveform(defined_channels={'a', 'b'})
 
@@ -492,6 +518,11 @@ class SequenceWaveformTest(unittest.TestCase):
         r = repr(swf)
         self.assertEqual(swf, eval(r))
 
+    def test_compare_subset(self):
+        body_wf = DummyWaveform(defined_channels={'a'})
+        wf = SequenceWaveform([body_wf, body_wf])
+        self.assertEqual(wf._compare_subset_key({'a',}), tuple(2*[body_wf._compare_subset_key({'a',}),]))
+
 
 class ConstantWaveformTests(unittest.TestCase):
     def test_waveform_duration(self):
@@ -520,6 +551,14 @@ class ConstantWaveformTests(unittest.TestCase):
         waveform = ConstantWaveform(10, .1, 'P1')
         self.assertTrue(waveform.is_constant())
         assert_constant_consistent(self, waveform)
+
+    def test_hash_subset(self):
+        wf_1 = ConstantWaveform(10, 1., 'A')
+        wf_2 = ConstantWaveform(10, 1., 'B')
+        wf_3 = ConstantWaveform(10, 2., 'A')
+        
+        self.assertEqual(wf_1._hash_only_subset({'A',}), wf_2._hash_only_subset({'B',}))
+        self.assertNotEqual(wf_1._hash_only_subset({'A',}), wf_3._hash_only_subset({'A',}))
 
 
 class TableWaveformTests(unittest.TestCase):
@@ -653,6 +692,25 @@ class TableWaveformTests(unittest.TestCase):
 
         evaled = eval(repr(waveform))
         self.assertEqual(evaled, waveform)
+
+    def test_hash_subset(self):
+        
+        interp = 'jump'
+        entries = (TableWaveformEntry(0, 0, interp),
+                   TableWaveformEntry(2.1, -33.2, interp),
+                   TableWaveformEntry(5.7, 123.4, interp))
+        wf_1 = TableWaveform('A', entries)
+        entries = (TableWaveformEntry(0, 0, interp),
+                   TableWaveformEntry(2.1, -33.2, interp),
+                   TableWaveformEntry(5.7, 123.4, interp))
+        wf_2 = TableWaveform('B', entries)
+        entries = (TableWaveformEntry(0.5, 0, interp),
+                   TableWaveformEntry(2.1, -33.2, interp),
+                   TableWaveformEntry(5.7, 123.4, interp))
+        wf_3 = TableWaveform('A', entries)
+
+        self.assertEqual(wf_1._hash_only_subset({'A',}), wf_2._hash_only_subset({'B',}))
+        self.assertNotEqual(wf_1._hash_only_subset({'A',}), wf_3._hash_only_subset({'A',}))
 
 
 class WaveformEntryTest(unittest.TestCase):
@@ -796,6 +854,16 @@ class TransformingWaveformTest(unittest.TestCase):
                 with mock.patch.object(inner_wf, 'constant_value', side_effect=inner_const_values.values()) as constant_value:
                     self.assertIsNone(trafo_wf.constant_value('C'))
 
+    def test_compare_subset(self):
+        output_channels = {'c', 'd', 'e'}
+        input_channels = {'a', 'b'}
+        trafo = TransformationDummy(output_channels=output_channels,input_channels=input_channels)
+        inner_wf = DummyWaveform(duration=1.5, defined_channels=input_channels)
+        trafo_wf = TransformingWaveform(inner_waveform=inner_wf, transformation=trafo)
+        
+        self.assertEqual(trafo_wf._compare_subset_key(output_channels),
+                         (inner_wf._compare_subset_key(input_channels), trafo))
+
 
 class SubsetWaveformTest(unittest.TestCase):
     def test_simple_properties(self):
@@ -835,6 +903,13 @@ class SubsetWaveformTest(unittest.TestCase):
             actual_data = subset_wf.unsafe_sample('g', time, output)
             self.assertIs(expected_data, actual_data)
             unsafe_sample.assert_called_once_with('g', time, output)
+
+    def test_compare_subset(self):
+        inner_wf = DummyWaveform(duration=1.5, defined_channels={'a', 'b', 'c'})
+        subset_wf = SubsetWaveform(inner_wf, {'a', 'c'})
+        
+        self.assertEqual(subset_wf._compare_subset_key({'a', 'c'}),
+                         inner_wf._compare_subset_key({'a', 'c'}),)
 
 
 class ArithmeticWaveformTest(unittest.TestCase):
@@ -893,6 +968,8 @@ class ArithmeticWaveformTest(unittest.TestCase):
         self.assertEqual(lhs.duration, arith.duration)
 
         self.assertEqual(('-', lhs, rhs), arith.compare_key)
+        self.assertEqual(('-', lhs._compare_subset_key({'a','b'}), rhs._compare_subset_key({'a','b'})),
+                         arith._compare_subset_key({'a','b'}))
 
     def test_unsafe_get_subset_for_channels(self):
         lhs = DummyWaveform(duration=1.5, defined_channels={'a', 'b', 'c'})
@@ -1007,6 +1084,14 @@ class FunctionWaveformTest(unittest.TestCase):
         r = repr(wf)
         self.assertEqual(wf, eval(r))
 
+    def test_compare_subset(self):
+        wf1a = FunctionWaveform(ExpressionScalar('1+2*t'), 3, channel='A')
+        wf1b = FunctionWaveform(ExpressionScalar('t*2+1'), 3, channel='A')
+        
+        self.assertEqual(wf1a._compare_subset_key({'A',}), (wf1a._expression,wf1a._duration))
+        self.assertEqual(wf1a._compare_subset_key({'A',}),
+                         wf1b._compare_subset_key({'A',}),)
+
 
 class FunctorWaveformTests(unittest.TestCase):
     def test_duration(self):
@@ -1075,6 +1160,15 @@ class FunctorWaveformTests(unittest.TestCase):
         self.assertNotEqual(wf11, wf21)
         self.assertNotEqual(wf11, wf22)
 
+    def test_compare_subset(self):
+        inner_wf_1 = DummyWaveform(defined_channels={'A', 'B'})
+        functors_1 = dict(A=np.positive, B=np.negative)
+        
+        wf11 = FunctorWaveform(inner_wf_1, functors_1)
+
+        self.assertEqual((inner_wf_1._compare_subset_key({'A',}), frozenset(functors_1.items())),
+                         wf11._compare_subset_key({'A',}))
+
 
 class ReversedWaveformTest(unittest.TestCase):
     def test_simple_properties(self):
@@ -1084,6 +1178,7 @@ class ReversedWaveformTest(unittest.TestCase):
         self.assertEqual(dummy_wf.duration, reversed_wf.duration)
         self.assertEqual(dummy_wf.defined_channels, reversed_wf.defined_channels)
         self.assertEqual(dummy_wf.compare_key, reversed_wf.compare_key)
+        self.assertEqual(reversed_wf._compare_subset_key({'A',}), (dummy_wf._compare_subset_key({'A',}),'-'))
         self.assertNotEqual(reversed_wf, dummy_wf)
 
     def test_reversed_sample(self):
