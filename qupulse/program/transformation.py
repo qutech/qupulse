@@ -79,7 +79,7 @@ class IdentityTransformation(Transformation, metaclass=SingletonABCMeta):
         return 0x1234991
 
     def __eq__(self, other):
-        return isinstance(other, IdentityTransformation)
+        return self is other
 
     def get_input_channels(self, output_channels: AbstractSet[ChannelID]) -> AbstractSet[ChannelID]:
         return output_channels
@@ -134,7 +134,9 @@ class ChainedTransformation(Transformation):
         return hash(self._transformations)
 
     def __eq__(self, other):
-        return self._transformations == getattr(other, '_transformations', None)
+        if isinstance(other, ChainedTransformation):
+            return self._transformations == other._transformations
+        return NotImplemented
 
     def chain(self, next_transformation) -> Transformation:
         return chain_transformations(*self.transformations, next_transformation)
@@ -223,11 +225,11 @@ class LinearTransformation(Transformation):
         return hash((self._input_channels, self._output_channels, self._matrix.tobytes()))
 
     def __eq__(self, other):
-        if isinstance(other, type(self)):
+        if isinstance(other, LinearTransformation):
             return (self._input_channels == other._input_channels and
                     self._output_channels == other._output_channels and
                     np.array_equal(self._matrix, other._matrix))
-        return False
+        return NotImplemented
 
     @property
     def compare_key(self) -> Tuple[Tuple[ChannelID], Tuple[ChannelID], bytes]:
@@ -278,7 +280,9 @@ class OffsetTransformation(Transformation):
         return input_channels
 
     def __eq__(self, other):
-        return isinstance(other, OffsetTransformation) and self._offsets == other._offsets
+        if isinstance(other, OffsetTransformation):
+            return self._offsets == other._offsets
+        return NotImplemented
 
     def __hash__(self):
         return hash(self._offsets)
@@ -320,7 +324,9 @@ class ScalingTransformation(Transformation):
         return input_channels
 
     def __eq__(self, other):
-        return isinstance(other, ScalingTransformation) and self._factors == other._factors
+        if isinstance(other, ScalingTransformation):
+            return self._factors == other._factors
+        return NotImplemented
 
     def __hash__(self):
         return hash(self._factors)
@@ -393,7 +399,9 @@ class ParallelChannelTransformation(Transformation):
         return hash(self._channels)
 
     def __eq__(self, other):
-        return isinstance(other, ParallelChannelTransformation) and self._channels == other._channels
+        if isinstance(other, ParallelChannelTransformation):
+            return self._channels == other._channels
+        return NotImplemented
 
     @property
     def compare_key(self) -> Hashable:
