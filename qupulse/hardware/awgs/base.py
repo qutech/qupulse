@@ -143,6 +143,7 @@ class AWG:
         are ot equal"""
         warnings.warn("AWG.compare_key is deprecated since 0.11 and will be removed in 0.12",
                       DeprecationWarning, stacklevel=2)
+        return id(self)
 
     def __eq__(self, other):
         return self is other
