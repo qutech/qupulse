@@ -12,7 +12,7 @@ from numbers import Real
 from typing import Set, Tuple, Callable, Optional, Mapping, Sequence, List, Union, NamedTuple
 from collections import OrderedDict
 from enum import Enum
-# from itertools import chain
+import warnings
 
 from qupulse.hardware.util import get_sample_times, not_none_indices
 from qupulse.utils.types import ChannelID
@@ -20,7 +20,6 @@ from qupulse.program.linspace import LinSpaceNode, LinSpaceArbitraryWaveform, to
     Increment, Set as LSPSet, LoopLabel, LoopJmp, Wait, Play
 from qupulse.program.loop import Loop
 from qupulse.program.waveforms import Waveform
-from qupulse.comparable import Comparable
 from qupulse.utils.types import TimeType
 
 import numpy
@@ -39,7 +38,7 @@ class AWGAmplitudeOffsetHandling:
     _valid = [IGNORE_OFFSET, CONSIDER_OFFSET]
 
 
-class AWG(Comparable):
+class AWG:
     """An arbitrary waveform generator abstraction class.
 
     It represents a set of channels that have to have(hardware enforced) the same:
@@ -142,6 +141,13 @@ class AWG(Comparable):
     def compare_key(self) -> int:
         """Comparison and hashing is based on the id of the AWG so different devices with the same properties
         are ot equal"""
+        warnings.warn("AWG.compare_key is deprecated since 0.11 and will be removed in 0.12",
+                      DeprecationWarning, stacklevel=2)
+
+    def __eq__(self, other):
+        return self is other
+
+    def __hash__(self):
         return id(self)
 
     @abstractmethod

@@ -1,7 +1,10 @@
 import unittest
 from typing import Any
+import warnings
 
-from qupulse.comparable import Comparable
+with warnings.catch_warnings():
+    warnings.simplefilter(action='ignore', category=DeprecationWarning)
+    from qupulse.comparable import Comparable
 
 class DummyComparable(Comparable):
 

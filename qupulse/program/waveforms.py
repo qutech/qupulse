@@ -17,17 +17,14 @@ from weakref import WeakValueDictionary, ref
 import numpy as np
 
 from qupulse import ChannelID
-from qupulse.program.transformation import Transformation
-from qupulse.utils import checked_int_cast, isclose
-from qupulse.utils.types import TimeType, time_from_float
 from qupulse.utils.performance import is_monotonic
-from qupulse.comparable import Comparable
 from qupulse.expressions import ExpressionScalar
 from qupulse.pulses.interpolation import InterpolationStrategy
 from qupulse.utils import checked_int_cast, isclose
-from qupulse.utils.types import TimeType, time_from_float, FrozenDict
+from qupulse.utils.types import TimeType, time_from_float
 from qupulse.program.transformation import Transformation
 from qupulse.utils import pairwise
+
 
 class ConstantFunctionPulseTemplateWarning(UserWarning):
     """  This warning indicates a constant waveform is constructed from a FunctionPulseTemplate """

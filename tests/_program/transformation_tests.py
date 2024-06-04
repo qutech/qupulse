@@ -64,10 +64,12 @@ class LinearTransformationTests(unittest.TestCase):
         matrix_2 = np.array([[1, 1, 1], [1, 0, -1]])
         trafo_2 = LinearTransformation(matrix_2, in_chs_2, out_chs_2)
 
-        self.assertEqual(trafo.compare_key, trafo_2.compare_key)
+        with self.assertWarns(DeprecationWarning):
+            self.assertEqual(trafo.compare_key, trafo_2.compare_key)
         self.assertEqual(trafo, trafo_2)
         self.assertEqual(hash(trafo), hash(trafo_2))
-        self.assertEqual(trafo.compare_key, (in_chs, out_chs, matrix.tobytes()))
+        with self.assertWarns(DeprecationWarning):
+            self.assertEqual(trafo.compare_key, (in_chs, out_chs, matrix.tobytes()))
 
     def test_from_pandas(self):
         try:
@@ -175,7 +177,8 @@ class LinearTransformationTests(unittest.TestCase):
 
 class IdentityTransformationTests(unittest.TestCase):
     def test_compare_key(self):
-        self.assertIsNone(IdentityTransformation().compare_key)
+        with self.assertWarns(DeprecationWarning):
+            self.assertIsNone(IdentityTransformation().compare_key)
 
     def test_singleton(self):
         self.assertIs(IdentityTransformation(), IdentityTransformation())
@@ -216,7 +219,8 @@ class ChainedTransformationTests(unittest.TestCase):
         chained = ChainedTransformation(*trafos)
 
         self.assertEqual(chained.transformations, trafos)
-        self.assertIs(chained.transformations, chained.compare_key)
+        with self.assertWarns(DeprecationWarning):
+            self.assertIs(chained.transformations, chained.compare_key)
 
     def test_get_output_channels(self):
         trafos = TransformationStub(), TransformationStub(), TransformationStub()

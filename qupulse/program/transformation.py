@@ -1,12 +1,12 @@
 from typing import Any, Mapping, Set, Tuple, Sequence, AbstractSet, Union, TYPE_CHECKING, Hashable
 from abc import abstractmethod
 from numbers import Real
+import warnings
 
 import numpy as np
 
 from qupulse import ChannelID
-from qupulse.comparable import Comparable
-from qupulse.utils.types import SingletonABCMeta, frozendict
+from qupulse.utils.types import SingletonABCMeta, frozendict, DocStringABCMeta
 from qupulse.expressions import ExpressionScalar
 
 
@@ -18,7 +18,9 @@ __all__ = ['Transformation', 'IdentityTransformation', 'LinearTransformation', '
            'chain_transformations']
 
 
-class Transformation(Comparable):
+class Transformation(metaclass=DocStringABCMeta):
+    __slots__ = ()
+
     _identity_singleton = None
     """Transforms numeric time-voltage values for multiple channels to other time-voltage values. The number and names
      of input and output channels might differ."""
@@ -58,6 +60,8 @@ class Transformation(Comparable):
 
 
 class IdentityTransformation(Transformation, metaclass=SingletonABCMeta):
+    __slots__ = ()
+
     def __call__(self, time: Union[np.ndarray, float],
                  data: Mapping[ChannelID, Union[np.ndarray, float]]) -> Mapping[ChannelID, Union[np.ndarray, float]]:
         return data
@@ -66,8 +70,16 @@ class IdentityTransformation(Transformation, metaclass=SingletonABCMeta):
         return input_channels
 
     @property
-    def compare_key(self) -> None:
+    def compare_key(self) -> type(None):
+        warnings.warn("Transformation.compare_key is deprecated since 0.11 and will be removed in 0.12",
+                      DeprecationWarning, stacklevel=2)
         return None
+
+    def __hash__(self):
+        return 0x1234991
+
+    def __eq__(self, other):
+        return isinstance(other, IdentityTransformation)
 
     def get_input_channels(self, output_channels: AbstractSet[ChannelID]) -> AbstractSet[ChannelID]:
         return output_channels
@@ -87,6 +99,8 @@ class IdentityTransformation(Transformation, metaclass=SingletonABCMeta):
 
 
 class ChainedTransformation(Transformation):
+    __slots__ = ('_transformations',)
+
     def __init__(self, *transformations: Transformation):
         self._transformations = transformations
 
@@ -112,7 +126,15 @@ class ChainedTransformation(Transformation):
 
     @property
     def compare_key(self) -> Tuple[Transformation, ...]:
+        warnings.warn("Transformation.compare_key is deprecated since 0.11 and will be removed in 0.12",
+                      DeprecationWarning, stacklevel=2)
         return self._transformations
+
+    def __hash__(self):
+        return hash(self._transformations)
+
+    def __eq__(self, other):
+        return self._transformations == getattr(other, '_transformations', None)
 
     def chain(self, next_transformation) -> Transformation:
         return chain_transformations(*self.transformations, next_transformation)
@@ -197,8 +219,20 @@ class LinearTransformation(Transformation):
         else:
             return forwarded | self._input_channels_set
 
+    def __hash__(self):
+        return hash((self._input_channels, self._output_channels, self._matrix.tobytes()))
+
+    def __eq__(self, other):
+        if isinstance(other, type(self)):
+            return (self._input_channels == other._input_channels and
+                    self._output_channels == other._output_channels and
+                    np.array_equal(self._matrix, other._matrix))
+        return False
+
     @property
     def compare_key(self) -> Tuple[Tuple[ChannelID], Tuple[ChannelID], bytes]:
+        warnings.warn("Transformation.compare_key is deprecated since 0.11 and will be removed in 0.12",
+                      DeprecationWarning, stacklevel=2)
         return self._input_channels, self._output_channels, self._matrix.tobytes()
 
     def __repr__(self):
@@ -218,6 +252,8 @@ class LinearTransformation(Transformation):
 
 
 class OffsetTransformation(Transformation):
+    __slots__ = ('_offsets',)
+
     def __init__(self, offsets: Mapping[ChannelID, _TrafoValue]):
         """Adds an offset to each channel specified in offsets.
 
@@ -241,8 +277,16 @@ class OffsetTransformation(Transformation):
     def get_output_channels(self, input_channels: AbstractSet[ChannelID]) -> AbstractSet[ChannelID]:
         return input_channels
 
+    def __eq__(self, other):
+        return isinstance(other, OffsetTransformation) and self._offsets == other._offsets
+
+    def __hash__(self):
+        return hash(self._offsets)
+
     @property
     def compare_key(self) -> Hashable:
+        warnings.warn("Transformation.compare_key is deprecated since 0.11 and will be removed in 0.12",
+                      DeprecationWarning, stacklevel=2)
         return self._offsets
 
     def __repr__(self):
@@ -257,6 +301,8 @@ class OffsetTransformation(Transformation):
 
 
 class ScalingTransformation(Transformation):
+    __slots__ = ('_factors',)
+
     def __init__(self, factors: Mapping[ChannelID, _TrafoValue]):
         self._factors = frozendict(factors)
         assert _are_valid_transformation_expressions(self._factors), f"Not valid transformation expressions: {self._factors}"
@@ -273,8 +319,16 @@ class ScalingTransformation(Transformation):
     def get_output_channels(self, input_channels: AbstractSet[ChannelID]) -> AbstractSet[ChannelID]:
         return input_channels
 
+    def __eq__(self, other):
+        return isinstance(other, ScalingTransformation) and self._factors == other._factors
+
+    def __hash__(self):
+        return hash(self._factors)
+
     @property
     def compare_key(self) -> Hashable:
+        warnings.warn("Transformation.compare_key is deprecated since 0.11 and will be removed in 0.12",
+                      DeprecationWarning, stacklevel=2)
         return self._factors
 
     def __repr__(self):
@@ -312,6 +366,8 @@ except ImportError:
 
 
 class ParallelChannelTransformation(Transformation):
+    __slots__ = ('_channels', )
+
     def __init__(self, channels: Mapping[ChannelID, _TrafoValue]):
         """Set channel values to given values regardless their former existence. The values can be time dependent
         expressions.
@@ -333,8 +389,16 @@ class ParallelChannelTransformation(Transformation):
         return {channel: value.evaluate_in_scope(scope) if hasattr(value, 'evaluate_in_scope') else array_or_float(value)
                 for channel, value in self._channels.items()}
 
+    def __hash__(self):
+        return hash(self._channels)
+
+    def __eq__(self, other):
+        return isinstance(other, ParallelChannelTransformation) and self._channels == other._channels
+
     @property
     def compare_key(self) -> Hashable:
+        warnings.warn("Transformation.compare_key is deprecated since 0.11 and will be removed in 0.12",
+                      DeprecationWarning, stacklevel=2)
         return self._channels
 
     def get_input_channels(self, output_channels: AbstractSet[ChannelID]) -> AbstractSet[ChannelID]:
