@@ -144,12 +144,14 @@ class Waveform(metaclass=ABCMeta):
             return output_array
 
     def __hash__(self):
-        return hash(tuple(getattr(self, slot) for slot in self.__slots__))
+        if self.__class__.__base__ is not Waveform:
+            raise NotImplementedError("Waveforms __hash__ and __eq__ implementation requires direct inheritance")
+        return hash(tuple(getattr(self, slot) for slot in self.__slots__)) ^ hash(self._duration)
 
     def __eq__(self, other):
         slots = self.__slots__
         if slots is getattr(other, '__slots__', None):
-            return all(getattr(self, slot) == getattr(other, slot) for slot in slots)
+            return self._duration == other._duration and all(getattr(self, slot) == getattr(other, slot) for slot in slots)
         # The other class might be more lenient
         return NotImplemented
 
