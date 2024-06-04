@@ -911,6 +911,14 @@ class TransformingWaveform(Waveform):
         self._cached_data = None
         self._cached_times = lambda: None
 
+    def __hash__(self):
+        return hash((self._inner_waveform, self._transformation))
+
+    def __eq__(self, other):
+        if getattr(other, '__slots__', None) is self.__slots__:
+            return self._inner_waveform == other._inner_waveform and self._transformation == other._transformation
+        return NotImplemented
+
     @classmethod
     def from_transformation(cls, inner_waveform: Waveform, transformation: Transformation) -> Waveform:
         constant_values = inner_waveform.constant_value_dict()
