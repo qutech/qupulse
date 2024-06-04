@@ -434,23 +434,20 @@ def to_waveform(program: Sequence[LinSpaceNode], channels: Tuple[ChannelID]) -> 
     assert all(type(node) in SUPPORTED_NODES for node in program), 'some node not (yet) supported for single waveform'
     assert type(program[0]) in SUPPORTED_INITIAL_NODES, 'initial node not (yet) supported for single waveform'
     
-    if len(program) == 1:
-        return program[0].waveform
-    else:
-        sequence = []
-        for node in program:
-            if type(node)==LinSpaceArbitraryWaveform:
-                sequence += [node.waveform]
-            elif type(node)==LinSpaceHold:
-                assert node.duration_factors is None, 'NotImplemented'
-                assert all(factor is None for factor in node.factors), 'NotImplemented'
-                #the channels should be sorted accordingly so we can do this.
-                sequence += [MultiChannelWaveform(
-                    [ConstantWaveform(node.duration_base,base,ch) for base,ch in zip(node.bases,channels)])]
-            else:
-                raise NotImplementedError()
-        
-        sequenced_waveform = SequenceWaveform.from_sequence(
-            sequence
-            )
-        return sequenced_waveform
+    sequence = []
+    for node in program:
+        if type(node)==LinSpaceArbitraryWaveform:
+            sequence += [node.waveform]
+        elif type(node)==LinSpaceHold:
+            assert node.duration_factors is None, 'NotImplemented'
+            assert all(factor is None for factor in node.factors), 'NotImplemented'
+            #the channels should be sorted accordingly so we can do this.
+            sequence += [MultiChannelWaveform(
+                [ConstantWaveform(node.duration_base,base,ch) for base,ch in zip(node.bases,channels)])]
+        else:
+            raise NotImplementedError()
+    
+    sequenced_waveform = SequenceWaveform.from_sequence(
+        sequence
+        )
+    return sequenced_waveform
