@@ -360,6 +360,12 @@ class TableWaveform(Waveform):
         else:
             return TableWaveform(channel, tuple(table))
 
+    @property
+    def compare_key(self) -> Any:
+        warnings.warn("Waveform.compare_key is deprecated since 0.11 and will be removed in 0.12",
+                      DeprecationWarning, stacklevel=2)
+        return self._channel_id, self._table
+
     def unsafe_sample(self,
                       channel: ChannelID,
                       sample_times: np.ndarray,
@@ -440,6 +446,12 @@ class ConstantWaveform(Waveform):
 
         return {self._channel}
 
+    @property
+    def compare_key(self) -> Tuple[Any, ...]:
+        warnings.warn("Waveform.compare_key is deprecated since 0.11 and will be removed in 0.12",
+                      DeprecationWarning, stacklevel=2)
+        return self._duration, self._amplitude, self._channel
+
     def unsafe_sample(self,
                       channel: ChannelID,
                       sample_times: np.ndarray,
@@ -507,6 +519,12 @@ class FunctionWaveform(Waveform):
     @property
     def defined_channels(self) -> AbstractSet[ChannelID]:
         return {self._channel_id}
+
+    @property
+    def compare_key(self) -> Any:
+        warnings.warn("Waveform.compare_key is deprecated since 0.11 and will be removed in 0.12",
+                      DeprecationWarning, stacklevel=2)
+        return self._channel_id, self._expression, self._duration
 
     @property
     def duration(self) -> TimeType:
@@ -633,6 +651,12 @@ class SequenceWaveform(Waveform):
                                       output_array=output_array[indices])
             time = end
         return output_array
+
+    @property
+    def compare_key(self) -> Tuple[Waveform]:
+        warnings.warn("Waveform.compare_key is deprecated since 0.11 and will be removed in 0.12",
+                      DeprecationWarning, stacklevel=2)
+        return self._sequenced_waveforms
 
     @property
     def duration(self) -> TimeType:
@@ -778,6 +802,12 @@ class MultiChannelWaveform(Waveform):
     def defined_channels(self) -> AbstractSet[ChannelID]:
         return self._defined_channels
 
+    @property
+    def compare_key(self) -> Any:
+        warnings.warn("Waveform.compare_key is deprecated since 0.11 and will be removed in 0.12",
+                      DeprecationWarning, stacklevel=2)
+        return self._sub_waveforms
+
     def unsafe_sample(self,
                       channel: ChannelID,
                       sample_times: np.ndarray,
@@ -841,6 +871,12 @@ class RepetitionWaveform(Waveform):
                                      output_array=output_array[indices])
             time = end
         return output_array
+
+    @property
+    def compare_key(self) -> Tuple[Any, int]:
+        warnings.warn("Waveform.compare_key is deprecated since 0.11 and will be removed in 0.12",
+                      DeprecationWarning, stacklevel=2)
+        return self._body.compare_key, self._repetition_count
 
     def unsafe_get_subset_for_channels(self, channels: AbstractSet[ChannelID]) -> Waveform:
         return RepetitionWaveform.from_repetition_count(
@@ -913,6 +949,12 @@ class TransformingWaveform(Waveform):
     def defined_channels(self) -> AbstractSet[ChannelID]:
         return self.transformation.get_output_channels(self.inner_waveform.defined_channels)
 
+    @property
+    def compare_key(self) -> Tuple[Waveform, Transformation]:
+        warnings.warn("Waveform.compare_key is deprecated since 0.11 and will be removed in 0.12",
+                      DeprecationWarning, stacklevel=2)
+        return self.inner_waveform, self.transformation
+
     def unsafe_get_subset_for_channels(self, channels: Set[ChannelID]) -> 'SubsetWaveform':
         return SubsetWaveform(self, channel_subset=channels)
 
@@ -957,6 +999,12 @@ class SubsetWaveform(Waveform):
     @property
     def defined_channels(self) -> FrozenSet[ChannelID]:
         return self._channel_subset
+
+    @property
+    def compare_key(self) -> Tuple[frozenset, Waveform]:
+        warnings.warn("Waveform.compare_key is deprecated since 0.11 and will be removed in 0.12",
+                      DeprecationWarning, stacklevel=2)
+        return self.defined_channels, self.inner_waveform
 
     def unsafe_get_subset_for_channels(self, channels: Set[ChannelID]) -> Waveform:
         return self.inner_waveform.get_subset_for_channels(channels)
@@ -1105,6 +1153,12 @@ class ArithmeticWaveform(Waveform):
         # TODO: optimization possible
         return SubsetWaveform(self, channels)
 
+    @property
+    def compare_key(self) -> Tuple[str, Waveform, Waveform]:
+        warnings.warn("Waveform.compare_key is deprecated since 0.11 and will be removed in 0.12",
+                      DeprecationWarning, stacklevel=2)
+        return self._arithmetic_operator, self._lhs, self._rhs
+
 
 class FunctorWaveform(Waveform):
     # TODO: Use Protocol to enforce that it accepts second argument has the keyword out
@@ -1161,6 +1215,11 @@ class FunctorWaveform(Waveform):
             self._inner_waveform.unsafe_get_subset_for_channels(channels),
             {ch: self._functor[ch] for ch in channels})
 
+    @property
+    def compare_key(self) -> Tuple[Waveform, FrozenSet]:
+        warnings.warn("Waveform.compare_key is deprecated since 0.11 and will be removed in 0.12",
+                      DeprecationWarning, stacklevel=2)
+        return self._inner_waveform, frozenset(self._functor.items())
 
 
 class ReversedWaveform(Waveform):
@@ -1198,6 +1257,12 @@ class ReversedWaveform(Waveform):
 
     def unsafe_get_subset_for_channels(self, channels: AbstractSet[ChannelID]) -> 'Waveform':
         return ReversedWaveform.from_to_reverse(self._inner.unsafe_get_subset_for_channels(channels))
+
+    @property
+    def compare_key(self) -> Hashable:
+        warnings.warn("Waveform.compare_key is deprecated since 0.11 and will be removed in 0.12",
+                      DeprecationWarning, stacklevel=2)
+        return self._inner.compare_key
 
     def reversed(self) -> 'Waveform':
         return self._inner
