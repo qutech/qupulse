@@ -13,8 +13,8 @@ from qupulse.program.waveforms import MultiChannelWaveform, RepetitionWaveform, 
 from qupulse.program.transformation import LinearTransformation
 from qupulse.expressions import ExpressionScalar, Expression
 
-# from tests.pulses.sequencing_dummies import DummyWaveform, DummyInterpolationStrategy
-# from tests._program.transformation_tests import TransformationStub
+from tests.pulses.sequencing_dummies import DummyWaveform, DummyInterpolationStrategy
+from tests._program.transformation_tests import TransformationStub
 
 
 def assert_constant_consistent(test_case: unittest.TestCase, wf: Waveform):
