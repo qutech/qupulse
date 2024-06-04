@@ -54,7 +54,8 @@ def _parse_evaluate_numeric(result) -> Union[Number, numpy.ndarray]:
     if isinstance(result, numpy.ndarray):
         # allow numeric vector values
         return _parse_evaluate_numeric_vector(result)
-    raise ValueError("Non numeric result", result)
+
+    raise ValueError(f"Non numeric result: {type(result)!r}, {ALLOWED_NUMERIC_SCALAR_TYPES!r}, {type(result) in ALLOWED_NUMERIC_SCALAR_TYPES}", result)
 
 
 def _parse_evaluate_numeric_vector(vector_result: numpy.ndarray) -> numpy.ndarray:
