@@ -208,7 +208,7 @@ class LinSpaceBuilder(ProgramBuilder):
             #                 for name, (begins, lengths) in inner_program.get_measurement_windows().items()
             #                 for begin, length in zip(begins, lengths)]
             # self._top.add_measurements(measurements)
-            waveform = to_waveform(inner_program)
+            waveform = to_waveform(inner_program,self._idx_to_name)
             if global_transformation is not None:
                 waveform = TransformingWaveform.from_transformation(waveform, global_transformation)
             self.play_arbitrary_waveform(waveform)
@@ -426,10 +426,10 @@ def to_increment_commands(linspace_nodes: Sequence[LinSpaceNode]) -> List[Comman
     return state.commands
 
 
-def to_waveform(program: Sequence[LinSpaceNode]) -> Waveform:
+def to_waveform(program: Sequence[LinSpaceNode], channels: Tuple[ChannelID]) -> Waveform:
     
     SUPPORTED_NODES = {LinSpaceArbitraryWaveform,LinSpaceHold}
-    SUPPORTED_INITIAL_NODES = {LinSpaceArbitraryWaveform,}
+    SUPPORTED_INITIAL_NODES = {LinSpaceArbitraryWaveform,LinSpaceHold}
     
     assert all(type(node) in SUPPORTED_NODES for node in program), 'some node not (yet) supported for single waveform'
     assert type(program[0]) in SUPPORTED_INITIAL_NODES, 'initial node not (yet) supported for single waveform'
@@ -438,20 +438,15 @@ def to_waveform(program: Sequence[LinSpaceNode]) -> Waveform:
         return program[0].waveform
     else:
         sequence = []
-        last_play_node = None
         for node in program:
             if type(node)==LinSpaceArbitraryWaveform:
                 sequence += [node.waveform]
-                last_play_node = node
             elif type(node)==LinSpaceHold:
-                assert node.duration_factors is None
-                last_channels = last_play_node.waveform.defined_channels
-                sub_wfs = []
-                for ch in last_channels:
-                    #TimeType needs to be casted to float, hope that's not inducing edge-cases...
-                    s = last_play_node.waveform.get_sampled(ch,np.ones(1)*float(last_play_node.waveform.duration))
-                    sub_wfs += [ConstantWaveform(node.duration_base,s[0],ch)]
-                sequence += [MultiChannelWaveform(sub_wfs)]
+                assert node.duration_factors is None, 'NotImplemented'
+                assert all(factor is None for factor in node.factors), 'NotImplemented'
+                #the channels should be sorted accordingly so we can do this.
+                sequence += [MultiChannelWaveform(
+                    [ConstantWaveform(node.duration_base,base,ch) for base,ch in zip(node.bases,channels)])]
             else:
                 raise NotImplementedError()
         
