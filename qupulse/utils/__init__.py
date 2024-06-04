@@ -26,7 +26,7 @@ _T = TypeVar('_T')
 
 
 __all__ = ["checked_int_cast", "is_integer", "isclose", "pairwise", "replace_multiple", "cached_property",
-           "forced_hash", "to_next_multiple"]
+           "forced_hash", "to_next_multiple", "next_multiple_of"]
 
 
 def checked_int_cast(x: Union[float, int, numpy.ndarray], epsilon: float=1e-6) -> int:
@@ -150,3 +150,8 @@ def to_next_multiple(sample_rate: ExpressionLike, quantum: int,
         #still return 0 if duration==0
         return lambda duration: ExpressionScalar(f'{quantum}/({sample_rate})*Max({min_quanta},-(-{duration}*{sample_rate}//{quantum}))*Max(0, sign({duration}))')
    
+    
+def next_multiple_of(duration: ExpressionLike, sample_rate: ExpressionLike, quantum: int,
+                     min_quanta: Optional[int] = None) -> ExpressionScalar:
+    """thin wrapper around to_next_multiple to directly call the function"""
+    return to_next_multiple(sample_rate,quantum,min_quanta)(ExpressionScalar(duration))
