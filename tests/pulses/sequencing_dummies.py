@@ -34,7 +34,6 @@ class MeasurementWindowTestCase(unittest.TestCase):
 
 
 class DummyWaveform(Waveform):
-
     def __init__(self, duration: Union[float, TimeType]=0, sample_output: Union[numpy.ndarray, dict]=None, defined_channels=None) -> None:
         super().__init__(duration=duration if isinstance(duration, TimeType) else TimeType.from_float(duration))
         self.sample_output = sample_output
@@ -45,6 +44,12 @@ class DummyWaveform(Waveform):
                 defined_channels = {'A'}
         self.defined_channels_ = defined_channels
         self.sample_calls = []
+
+    def __hash__(self):
+        return hash(self.compare_key)
+
+    def __eq__(self, other):
+        return isinstance(other, DummyWaveform) and self.compare_key == other.compare_key
 
     @property
     def compare_key(self) -> Any:
