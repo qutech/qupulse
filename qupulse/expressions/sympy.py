@@ -55,7 +55,26 @@ def _parse_evaluate_numeric(result) -> Union[Number, numpy.ndarray]:
         # allow numeric vector values
         return _parse_evaluate_numeric_vector(result)
 
-    raise ValueError(f"Non numeric result: {type(result)!r}, {ALLOWED_NUMERIC_SCALAR_TYPES!r}, {type(result) in ALLOWED_NUMERIC_SCALAR_TYPES}", result)
+    for s_t in ALLOWED_NUMERIC_SCALAR_TYPES:
+        if s_t.__name__ == type(result).__name__:
+            break
+    else:
+        raise ValueError(f"Non numeric result: ", result)
+    r_t = type(result)
+
+    msg = [f"{s_t!r} with {id(s_t)} != {r_t!r} with {id(r_t)}"]
+    if s_t.__module__ != r_t.__module__:
+        msg.append(("modules differ:", s_t.__module__, r_t.__module__))
+
+    import sys
+    m_t = sys.modules[s_t.__module__].TimeType
+    if s_t is m_t:
+        msg.append("ALLOWED_NUMERIC_SCALAR_TYPES is in sys.modules")
+    elif r_t is m_t:
+        msg.append("result type is in sys.modules")
+    else:
+        msg.append("none is in sys.modules")
+    raise ValueError(*msg, result)
 
 
 def _parse_evaluate_numeric_vector(vector_result: numpy.ndarray) -> numpy.ndarray:
