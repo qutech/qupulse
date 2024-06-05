@@ -402,9 +402,11 @@ class _TranslationState:
             raise TypeError("The node type is not handled", type(node), node)
 
 
-def to_increment_commands(linspace_nodes: Sequence[LinSpaceNode]) -> List[Command]:
+def to_increment_commands(linspace_nodes: Sequence[LinSpaceNode],
+                          resolution: float = DEFAULT_INCREMENT_RESOLUTION
+                          ) -> List[Command]:
     """translate the given linspace node tree to a minimal sequence of set and increment commands as well as loops."""
-    state = _TranslationState()
+    state = _TranslationState(resolution=resolution)
     state.add_node(linspace_nodes)
     return state.commands
 

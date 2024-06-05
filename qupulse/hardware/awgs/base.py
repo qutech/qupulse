@@ -17,7 +17,7 @@ from enum import Enum
 from qupulse.hardware.util import get_sample_times, not_none_indices
 from qupulse.utils.types import ChannelID
 from qupulse.program.linspace import LinSpaceNode, LinSpaceArbitraryWaveform, to_increment_commands, Command, \
-    Increment, Set as LSPSet, LoopLabel, LoopJmp, Wait, Play
+    Increment, Set as LSPSet, LoopLabel, LoopJmp, Wait, Play, DEFAULT_INCREMENT_RESOLUTION
 from qupulse.program.loop import Loop
 from qupulse.program.waveforms import Waveform
 from qupulse.comparable import Comparable
@@ -191,6 +191,7 @@ class ProgramEntry:
                  voltage_transformations: Tuple[Optional[Callable], ...],
                  sample_rate: TimeType,
                  waveforms: Sequence[Waveform] = None,
+                 voltage_resolution: Optional[float] = None,
                  program_type: _ProgramType = _ProgramType.Loop):
         """
 
@@ -204,6 +205,8 @@ class ProgramEntry:
             sample_rate:
             waveforms: These waveforms are sampled and stored in _waveforms. If None the waveforms are extracted from
             loop
+            voltage_resolution: voltage resolution for LinSpaceProgram, i.e. 2**(-16) for 16 bit AWG
+            program_type: type of program from _ProgramType, determined by the ProgramBuilder used.
         """
         assert len(channels) == len(amplitudes) == len(offsets) == len(voltage_transformations)
 
@@ -219,7 +222,9 @@ class ProgramEntry:
         self._program = program
         
         if program_type == _ProgramType.Linspace:
-            self._transformed_commands = self._transform_linspace_commands(to_increment_commands(program))
+            #!!! the voltage resolution may not be adequately represented if voltage transformations are not None?
+            self._transformed_commands = self._transform_linspace_commands(
+                to_increment_commands(program,resolution=voltage_resolution if voltage_resolution is not None else DEFAULT_INCREMENT_RESOLUTION))
         
         if waveforms is None:
             if program_type is _ProgramType.Loop:
