@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2014-2024 Quantum Technology Group and Chair of Software Engineering, RWTH Aachen University
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
 
 from typing import Any, Dict, List, Set, Optional, Union, Mapping, FrozenSet, cast, Callable
 from numbers import Real

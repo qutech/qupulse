@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2014-2024 Quantum Technology Group and Chair of Software Engineering, RWTH Aachen University
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """This package contains utility functions and classes as well as custom sympy extensions(hacks)."""
 
 from typing import Union, Iterable, Any, Tuple, Mapping, Iterator, TypeVar, Sequence, AbstractSet, Optional, Callable

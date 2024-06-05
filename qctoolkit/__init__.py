@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2014-2024 Quantum Technology Group and Chair of Software Engineering, RWTH Aachen University
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """This is a (hopefully temporary) alias package to not break existing code. If you know a better way please change"""
 import sys
 import re

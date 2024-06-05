@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2014-2024 Quantum Technology Group and Chair of Software Engineering, RWTH Aachen University
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 from types import MappingProxyType
 from typing import Callable, Generic, Mapping, Optional, Type, TypeVar
 from abc import ABC

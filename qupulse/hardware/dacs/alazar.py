@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2014-2024 Quantum Technology Group and Chair of Software Engineering, RWTH Aachen University
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 import dataclasses
 from typing import Dict, Any, Optional, Tuple, List, Iterable, Callable, Sequence
 from collections import defaultdict

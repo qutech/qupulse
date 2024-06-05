@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2014-2024 Quantum Technology Group and Chair of Software Engineering, RWTH Aachen University
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """This subpackage contains qupulse's expression logic. The submodule :py:mod:`.expressions.protocol` defines the :py:class:`typing.Protocol`
 that expression functionality providers must implement. This allows to substitute the powerful and expressive but slow
 default implementation with a faster less expressive backend.

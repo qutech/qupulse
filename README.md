@@ -63,3 +63,6 @@ The repository primarily consists of the folders `qupulse` (toolkit core code) a
 
 Contents of `tests` mirror the structure of `qupulse`. For every `<module>` somewhere in `qupulse` there should exist a `<module>Tests.py` in the corresponding subdirectory of `tests`.
 
+## License
+
+The current version of qupulse is available under the `GPL-3.0-or-later` license. Versions up to and including 0.10 were licensed under the MIT license. If you require different licensing terms, please contact us to discuss your needs.

@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2014-2024 Quantum Technology Group and Chair of Software Engineering, RWTH Aachen University
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """This module defines MultiChannelPulseTemplate, which allows the combination of several
 AtomicPulseTemplates into a single template spanning several channels.
 

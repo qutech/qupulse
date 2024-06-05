@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2014-2024 Quantum Technology Group and Chair of Software Engineering, RWTH Aachen University
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 from abc import ABCMeta, abstractmethod
 from typing import Dict, Tuple, Iterable, TYPE_CHECKING
 
