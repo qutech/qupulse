@@ -437,13 +437,12 @@ def to_waveform(program: Sequence[LinSpaceNode], channels: Tuple[ChannelID]) -> 
     sequence = []
     for node in program:
         if type(node)==LinSpaceArbitraryWaveform:
-            sequence += [node.waveform]
+            sequence.append(node.waveform)
         elif type(node)==LinSpaceHold:
             assert node.duration_factors is None, 'NotImplemented'
             assert all(factor is None for factor in node.factors), 'NotImplemented'
             #the channels should be sorted accordingly so we can do this.
-            sequence += [MultiChannelWaveform(
-                [ConstantWaveform(node.duration_base,base,ch) for base,ch in zip(node.bases,channels)])]
+            sequence.append(ConstantWaveform.from_mapping(node.duration, dict(zip(channels, node.bases))))
         else:
             raise NotImplementedError()
     
