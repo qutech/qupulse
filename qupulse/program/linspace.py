@@ -406,6 +406,7 @@ def to_increment_commands(linspace_nodes: Sequence[LinSpaceNode],
                           resolution: float = DEFAULT_INCREMENT_RESOLUTION
                           ) -> List[Command]:
     """translate the given linspace node tree to a minimal sequence of set and increment commands as well as loops."""
+    if resolution: raise NotImplementedError('wrongly assumed resolution. need to fix')
     state = _TranslationState(resolution=resolution)
     state.add_node(linspace_nodes)
     return state.commands
