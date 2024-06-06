@@ -273,7 +273,7 @@ class ProgramEntry:
     
     def _transform_linspace_commands(self, command_list: List[Command]) -> List[Command]:
         # all commands = Union[Increment, Set, LoopLabel, LoopJmp, Wait, Play]
-        TODO: voltage resolution and sample rate time->sample conversion
+        # TODO: voltage resolution
         
         trafos_by_channel_idx = list(self._channel_transformations().values())
 

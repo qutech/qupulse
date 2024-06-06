@@ -346,7 +346,7 @@ class _TranslationState:
 
     def get_dependency_state(self, dependencies: Mapping[int, set]):
         return {
-            self.dep_states.get(ch, {}).get(DepKey.from_voltages(dep, self.resolution), None)
+            self.dep_states.get(ch, {}).get(DepKey.from_domain(dep, self.resolution), None)
             for ch, deps in dependencies.items()
             for dep in deps
         }
@@ -386,13 +386,14 @@ class _TranslationState:
         self.iterations.pop()
         
     def _set_indexed_voltage(self, channel: int, base: float, factors: Sequence[float]):
-        self.set_indexed_value(channel, base, factors, domain=DepDomain.VOLTAGE)
+        key = DepKey.from_voltages(voltages=factors, resolution=self.resolution)
+        self.set_indexed_value(key, channel, base, factors, domain=DepDomain.VOLTAGE)
     
     def _set_indexed_lin_time(self, base: TimeType, factors: Sequence[TimeType]):
-        self.set_indexed_value(DepDomain.TIME_LIN.value, base, factors, domain=DepDomain.TIME_LIN)
+        key = DepKey.from_lin_times(times=factors, resolution=self.resolution)
+        self.set_indexed_value(key, DepDomain.TIME_LIN.value, base, factors, domain=DepDomain.TIME_LIN)
     
-    def set_indexed_value(self, channel, base, factors, domain):
-        dep_key = DepKey.from_voltages(voltages=factors, resolution=self.resolution)
+    def set_indexed_value(self, dep_key, channel, base, factors, domain):
         new_dep_state = DepState(
             base,
             iterations=tuple(self.iterations)
@@ -423,9 +424,8 @@ class _TranslationState:
                 self._set_indexed_voltage(ch, base, factors)
                 
         if node.duration_factors:
-            self._set_indexed_lin_time(node.duration_base,)
+            self._set_indexed_lin_time(node.duration_base,node.duration_factors)
             # raise NotImplementedError("TODO")
-
             self.commands.append(Wait(None, self.active_dep[DepDomain.TIME_LIN.value]))
         else:
             self.commands.append(Wait(node.duration_base))
@@ -457,7 +457,7 @@ def to_increment_commands(linspace_nodes: Sequence[LinSpaceNode],
                           ) -> List[Command]:
     """translate the given linspace node tree to a minimal sequence of set and increment commands as well as loops."""
     # if resolution: raise NotImplementedError('wrongly assumed resolution. need to fix')
-    state = _TranslationState(resolution=resolution if voltage_resolution is not None else DEFAULT_INCREMENT_RESOLUTION)
+    state = _TranslationState(resolution=resolution if resolution is not None else DEFAULT_INCREMENT_RESOLUTION)
     state.add_node(linspace_nodes)
     return state.commands
 
