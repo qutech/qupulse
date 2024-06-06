@@ -4,6 +4,7 @@ import dataclasses
 import numpy as np
 from dataclasses import dataclass
 from typing import Mapping, Optional, Sequence, ContextManager, Iterable, Tuple, Union, Dict, List, Iterator
+from enum import Enum
 
 from qupulse import ChannelID, MeasurementWindow
 from qupulse.parameter_scope import Scope, MappedScope, FrozenDict
@@ -13,7 +14,21 @@ from qupulse.program.waveforms import MultiChannelWaveform
 
 # this resolution is used to unify increments
 # the increments themselves remain floats
+# !!! translated: this is NOT a hardware resolution,
+# just a programmatic 'small epsilon' to avoid rounding errors.
 DEFAULT_INCREMENT_RESOLUTION: float = 1e-9
+DEFAULT_TIME_RESOLUTION: float = 1e-3
+
+class DepDomain(Enum):
+    VOLTAGE = 0
+    TIME_LIN = -1
+    TIME_LOG = -2
+    FREQUENCY = -3
+    NODEP = None
+
+# class DepStrategy(Enum):
+#     CONSTANT = 0
+#     VARIABLE = 1
 
 
 @dataclass(frozen=True)
@@ -24,14 +39,25 @@ class DepKey:
     These objects allow backends which support it to track multiple amplitudes at once.
     """
     factors: Tuple[int, ...]
-
+    domain: DepDomain
+    # strategy: DepStrategy
+    
+    @classmethod
+    def from_domain(cls, factors, resolution, domain):
+        # remove trailing zeros
+        while factors and factors[-1] == 0:
+            factors = factors[:-1]
+        return cls(tuple(int(round(factor / resolution)) for factor in factors),
+                   domain)
+    
     @classmethod
     def from_voltages(cls, voltages: Sequence[float], resolution: float):
-        # remove trailing zeros
-        while voltages and voltages[-1] == 0:
-            voltages = voltages[:-1]
-        return cls(tuple(int(round(voltage / resolution)) for voltage in voltages))
-
+        return cls.from_domain(voltages, resolution, DepDomain.VOLTAGE)
+    
+    @classmethod
+    def from_lin_times(cls, times: Sequence[float], resolution: float):
+        return cls.from_domain(times, resolution, DepDomain.TIME_LIN)
+    
 
 @dataclass
 class LinSpaceNode:
@@ -139,6 +165,9 @@ class LinSpaceBuilder(ProgramBuilder):
         ranges = self._get_ranges()
         factors = []
         bases = []
+        duration_base = duration
+        duration_factors = None
+        
         for value in voltages:
             if isinstance(value, float):
                 bases.append(value)
@@ -160,11 +189,21 @@ class LinSpaceBuilder(ProgramBuilder):
             bases.append(base)
 
         if isinstance(duration, SimpleExpression):
-            duration_factors = duration.offsets
+            # duration_factors = duration.offsets
+            # duration_base = duration.base
+            duration_offsets = duration.offsets
             duration_base = duration.base
-        else:
-            duration_base = duration
-            duration_factors = None
+            duration_factors = []
+            for rng_name, rng in ranges.items():
+                start = TimeType(0)
+                step = TimeType(0)
+                offset = duration_offsets.get(rng_name, None)
+                if offset:
+                    start += rng.start * offset
+                    step += rng.step * offset
+                duration_base += start
+                duration_factors.append(step)
+            
 
         set_cmd = LinSpaceHold(bases=tuple(bases),
                                factors=tuple(factors),
@@ -223,21 +262,22 @@ class LoopLabel:
 
 @dataclass
 class Increment:
-    channel: int
-    value: float
+    channel: Optional[int]
+    value: Union[float,TimeType]
     dependency_key: DepKey
 
 
 @dataclass
 class Set:
-    channel: int
-    value: float
-    key: DepKey = dataclasses.field(default_factory=lambda: DepKey(()))
+    channel: Optional[int]
+    value: Union[float,TimeType]
+    key: DepKey = dataclasses.field(default_factory=lambda: DepKey((),DepDomain.NODEP))
 
 
 @dataclass
 class Wait:
-    duration: TimeType
+    duration: Optional[TimeType]
+    key: DepKey = dataclasses.field(default_factory=lambda: DepKey((),DepDomain.NODEP))
 
 
 @dataclass
@@ -296,6 +336,7 @@ class _TranslationState:
     dep_states: Dict[int, Dict[DepKey, DepState]] = dataclasses.field(default_factory=dict)
     plain_voltage: Dict[int, float] = dataclasses.field(default_factory=dict)
     resolution: float = dataclasses.field(default_factory=lambda: DEFAULT_INCREMENT_RESOLUTION)
+    resolution_time: float = dataclasses.field(default_factory=lambda: DEFAULT_TIME_RESOLUTION)
 
     def new_loop(self, count: int):
         label = LoopLabel(self.label_num, count)
@@ -311,7 +352,7 @@ class _TranslationState:
         }
 
     def set_voltage(self, channel: int, value: float):
-        key = DepKey(())
+        key = DepKey((),DepDomain.VOLTAGE)
         if self.active_dep.get(channel, None) != key or self.plain_voltage.get(channel, None) != value:
             self.commands.append(Set(channel, value, key))
             self.active_dep[channel] = key
@@ -343,8 +384,14 @@ class _TranslationState:
             self.add_node(node.body)
             self.commands.append(jmp)
         self.iterations.pop()
-
+        
     def _set_indexed_voltage(self, channel: int, base: float, factors: Sequence[float]):
+        self.set_indexed_value(channel, base, factors, domain=DepDomain.VOLTAGE)
+    
+    def _set_indexed_lin_time(self, base: TimeType, factors: Sequence[TimeType]):
+        self.set_indexed_value(DepDomain.TIME_LIN.value, base, factors, domain=DepDomain.TIME_LIN)
+    
+    def set_indexed_value(self, channel, base, factors, domain):
         dep_key = DepKey.from_voltages(voltages=factors, resolution=self.resolution)
         new_dep_state = DepState(
             base,
@@ -365,20 +412,23 @@ class _TranslationState:
                 self.commands.append(Increment(channel, inc, dep_key))
             self.active_dep[channel] = dep_key
         self.dep_states[channel][dep_key] = new_dep_state
-
+        
     def _add_hold_node(self, node: LinSpaceHold):
-        if node.duration_factors:
-            raise NotImplementedError("TODO")
 
         for ch, (base, factors) in enumerate(zip(node.bases, node.factors)):
             if factors is None:
                 self.set_voltage(ch, base)
                 continue
-
             else:
                 self._set_indexed_voltage(ch, base, factors)
+                
+        if node.duration_factors:
+            self._set_indexed_lin_time(node.duration_base,)
+            # raise NotImplementedError("TODO")
 
-        self.commands.append(Wait(node.duration_base))
+            self.commands.append(Wait(None, self.active_dep[DepDomain.TIME_LIN.value]))
+        else:
+            self.commands.append(Wait(node.duration_base))
 
     def add_node(self, node: Union[LinSpaceNode, Sequence[LinSpaceNode]]):
         """Translate a (sequence of) linspace node(s) to commands and add it to the internal command list."""
@@ -406,8 +456,8 @@ def to_increment_commands(linspace_nodes: Sequence[LinSpaceNode],
                           resolution: float = DEFAULT_INCREMENT_RESOLUTION
                           ) -> List[Command]:
     """translate the given linspace node tree to a minimal sequence of set and increment commands as well as loops."""
-    if resolution: raise NotImplementedError('wrongly assumed resolution. need to fix')
-    state = _TranslationState(resolution=resolution)
+    # if resolution: raise NotImplementedError('wrongly assumed resolution. need to fix')
+    state = _TranslationState(resolution=resolution if voltage_resolution is not None else DEFAULT_INCREMENT_RESOLUTION)
     state.add_node(linspace_nodes)
     return state.commands
 

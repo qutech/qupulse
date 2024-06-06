@@ -221,10 +221,11 @@ class ProgramEntry:
         self._program_type = program_type
         self._program = program
         
+        self._voltage_resolution = voltage_resolution
+        
         if program_type == _ProgramType.Linspace:
             #!!! the voltage resolution may not be adequately represented if voltage transformations are not None?
-            self._transformed_commands = self._transform_linspace_commands(
-                to_increment_commands(program,resolution=voltage_resolution if voltage_resolution is not None else DEFAULT_INCREMENT_RESOLUTION))
+            self._transformed_commands = self._transform_linspace_commands(to_increment_commands(program,self._voltage_resolution))
         
         if waveforms is None:
             if program_type is _ProgramType.Loop:
@@ -272,10 +273,13 @@ class ProgramEntry:
     
     def _transform_linspace_commands(self, command_list: List[Command]) -> List[Command]:
         # all commands = Union[Increment, Set, LoopLabel, LoopJmp, Wait, Play]
+        TODO: voltage resolution and sample rate time->sample conversion
+        
         trafos_by_channel_idx = list(self._channel_transformations().values())
 
         for command in command_list:
             if isinstance(command, (LoopLabel, LoopJmp, Play, Wait)):
+                
                 # play is handled by transforming the sampled waveform
                 continue
             elif isinstance(command, Increment):
