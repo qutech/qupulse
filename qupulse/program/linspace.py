@@ -10,7 +10,7 @@ from qupulse import ChannelID, MeasurementWindow
 from qupulse.parameter_scope import Scope, MappedScope, FrozenDict
 from qupulse.program import ProgramBuilder, HardwareTime, HardwareVoltage, Waveform, RepetitionCount, TimeType
 from qupulse.expressions.simple import SimpleExpression
-from qupulse.program.waveforms import MultiChannelWaveform
+from qupulse.program.waveforms import MultiChannelWaveform, TransformingWaveform
 
 # this resolution is used to unify increments
 # the increments themselves remain floats
@@ -25,6 +25,8 @@ class DepDomain(Enum):
     TIME_LOG = -2
     FREQUENCY = -3
     NODEP = None
+
+GeneralizedChannel = Union[DepDomain,ChannelID]
 
 # class DepStrategy(Enum):
 #     CONSTANT = 0
@@ -62,32 +64,41 @@ class DepKey:
 @dataclass
 class LinSpaceNode:
     """AST node for a program that supports linear spacing of set points as well as nested sequencing and repetitions"""
-
-    def dependencies(self) -> Mapping[int, set]:
+        
+    def dependencies(self) -> Mapping[GeneralizedChannel, set]:
         raise NotImplementedError
 
+@dataclass
+class LinSpaceNodeChannelSpecific(LinSpaceNode):
+    
+    channels: Tuple[GeneralizedChannel, ...]
+    
+    @property
+    def play_channels(self) -> Tuple[ChannelID, ...]:
+        return tuple(ch for ch in self.channels if isinstance(ch,ChannelID))
+    
 
 @dataclass
-class LinSpaceHold(LinSpaceNode):
+class LinSpaceHold(LinSpaceNodeChannelSpecific):
     """Hold voltages for a given time. The voltages and the time may depend on the iteration index."""
 
-    bases: Tuple[float, ...]
-    factors: Tuple[Optional[Tuple[float, ...]], ...]
+    bases: Dict[GeneralizedChannel, float]
+    factors: Dict[GeneralizedChannel, Optional[Tuple[float, ...]]]
 
     duration_base: TimeType
     duration_factors: Optional[Tuple[TimeType, ...]]
 
-    def dependencies(self) -> Mapping[int, set]:
+    def dependencies(self) -> Mapping[GeneralizedChannel, set]:
         return {idx: {factors}
-                for idx, factors in enumerate(self.factors)
+                for idx, factors in self.factors.items()
                 if factors}
 
 
 @dataclass
-class LinSpaceArbitraryWaveform(LinSpaceNode):
+class LinSpaceArbitraryWaveform(LinSpaceNodeChannelSpecific):
     """This is just a wrapper to pipe arbitrary waveforms through the system."""
     waveform: Waveform
-    channels: Tuple[ChannelID, ...]
+    # channels: Tuple[ChannelID, ...]
 
 
 @dataclass
@@ -132,10 +143,12 @@ class LinSpaceBuilder(ProgramBuilder):
     Arbitrary waveforms are not implemented yet
     """
 
-    def __init__(self, channels: Tuple[ChannelID, ...]):
+    def __init__(self,
+                 # channels: Tuple[ChannelID, ...]
+                 ):
         super().__init__()
-        self._name_to_idx = {name: idx for idx, name in enumerate(channels)}
-        self._idx_to_name = channels
+        # self._name_to_idx = {name: idx for idx, name in enumerate(channels)}
+        # self._voltage_idx_to_name = channels
 
         self._stack = [[]]
         self._ranges = []
@@ -159,19 +172,19 @@ class LinSpaceBuilder(ProgramBuilder):
         return dict(self._ranges)
 
     def hold_voltage(self, duration: HardwareTime, voltages: Mapping[ChannelID, HardwareVoltage]):
-        voltages = sorted((self._name_to_idx[ch_name], value) for ch_name, value in voltages.items())
-        voltages = [value for _, value in voltages]
+        # voltages = sorted((self._name_to_idx[ch_name], value) for ch_name, value in voltages.items())
+        # voltages = [value for _, value in voltages]
 
         ranges = self._get_ranges()
-        factors = []
-        bases = []
+        factors = {}
+        bases = {}
         duration_base = duration
         duration_factors = None
         
-        for value in voltages:
+        for ch_name,value in voltages.items():
             if isinstance(value, float):
-                bases.append(value)
-                factors.append(None)
+                bases[ch_name] = value
+                factors[ch_name] = None
                 continue
             offsets = value.offsets
             base = value.base
@@ -185,8 +198,8 @@ class LinSpaceBuilder(ProgramBuilder):
                     step += rng.step * offset
                 base += start
                 incs.append(step)
-            factors.append(tuple(incs))
-            bases.append(base)
+            factors[ch_name] = tuple(incs)
+            bases[ch_name] = base
 
         if isinstance(duration, SimpleExpression):
             # duration_factors = duration.offsets
@@ -205,15 +218,29 @@ class LinSpaceBuilder(ProgramBuilder):
                 duration_factors.append(step)
             
 
-        set_cmd = LinSpaceHold(bases=tuple(bases),
-                               factors=tuple(factors),
+        set_cmd = LinSpaceHold(channels=tuple(voltages.keys()),
+                               bases=bases,
+                               factors=factors,
                                duration_base=duration_base,
                                duration_factors=duration_factors)
 
         self._stack[-1].append(set_cmd)
 
     def play_arbitrary_waveform(self, waveform: Waveform):
-        return self._stack[-1].append(LinSpaceArbitraryWaveform(waveform, self._idx_to_name))
+        if not isinstance(waveform,TransformingWaveform):
+            return self._stack[-1].append(LinSpaceArbitraryWaveform(waveform=waveform,
+                                                                    channels=waveform.defined_channels,
+                                                                    # self._voltage_idx_to_name
+                                                                    )
+                                          )
+        
+        #test for transformations that contain SimpleExpression
+        wf_transformation = waveform.transformation
+        
+        return self._stack[-1].append(LinSpaceArbitraryWaveform(waveform=waveform,
+                                                                # self._voltage_idx_to_name
+                                                                channels=waveform.defined_channels
+                                                                ))
 
     def measure(self, measurements: Optional[Sequence[MeasurementWindow]]):
         """Ignores measurements"""
@@ -262,14 +289,14 @@ class LoopLabel:
 
 @dataclass
 class Increment:
-    channel: Optional[int]
+    channel: Optional[GeneralizedChannel]
     value: Union[float,TimeType]
     dependency_key: DepKey
 
 
 @dataclass
 class Set:
-    channel: Optional[int]
+    channel: Optional[GeneralizedChannel]
     value: Union[float,TimeType]
     key: DepKey = dataclasses.field(default_factory=lambda: DepKey((),DepDomain.NODEP))
 
@@ -332,9 +359,9 @@ class _TranslationState:
     label_num: int = dataclasses.field(default=0)
     commands: List[Command] = dataclasses.field(default_factory=list)
     iterations: List[int] = dataclasses.field(default_factory=list)
-    active_dep: Dict[int, DepKey] = dataclasses.field(default_factory=dict)
-    dep_states: Dict[int, Dict[DepKey, DepState]] = dataclasses.field(default_factory=dict)
-    plain_voltage: Dict[int, float] = dataclasses.field(default_factory=dict)
+    active_dep: Dict[GeneralizedChannel, DepKey] = dataclasses.field(default_factory=dict)
+    dep_states: Dict[GeneralizedChannel, Dict[DepKey, DepState]] = dataclasses.field(default_factory=dict)
+    plain_voltage: Dict[ChannelID, float] = dataclasses.field(default_factory=dict)
     resolution: float = dataclasses.field(default_factory=lambda: DEFAULT_INCREMENT_RESOLUTION)
     resolution_time: float = dataclasses.field(default_factory=lambda: DEFAULT_TIME_RESOLUTION)
 
@@ -344,14 +371,14 @@ class _TranslationState:
         self.label_num += 1
         return label, jmp
 
-    def get_dependency_state(self, dependencies: Mapping[int, set]):
+    def get_dependency_state(self, dependencies: Mapping[GeneralizedChannel, set]):
         return {
             self.dep_states.get(ch, {}).get(DepKey.from_domain(dep, self.resolution), None)
             for ch, deps in dependencies.items()
             for dep in deps
         }
 
-    def set_voltage(self, channel: int, value: float):
+    def set_voltage(self, channel: ChannelID, value: float):
         key = DepKey((),DepDomain.VOLTAGE)
         if self.active_dep.get(channel, None) != key or self.plain_voltage.get(channel, None) != value:
             self.commands.append(Set(channel, value, key))
@@ -385,15 +412,17 @@ class _TranslationState:
             self.commands.append(jmp)
         self.iterations.pop()
         
-    def _set_indexed_voltage(self, channel: int, base: float, factors: Sequence[float]):
+    def _set_indexed_voltage(self, channel: ChannelID, base: float, factors: Sequence[float]):
         key = DepKey.from_voltages(voltages=factors, resolution=self.resolution)
         self.set_indexed_value(key, channel, base, factors, domain=DepDomain.VOLTAGE)
     
     def _set_indexed_lin_time(self, base: TimeType, factors: Sequence[TimeType]):
         key = DepKey.from_lin_times(times=factors, resolution=self.resolution)
-        self.set_indexed_value(key, DepDomain.TIME_LIN.value, base, factors, domain=DepDomain.TIME_LIN)
+        self.set_indexed_value(key, DepDomain.TIME_LIN, base, factors, domain=DepDomain.TIME_LIN)
     
-    def set_indexed_value(self, dep_key, channel, base, factors, domain):
+    def set_indexed_value(self, dep_key: DepKey, channel: GeneralizedChannel,
+                          base: Union[float,TimeType], factors: Sequence[Union[float,TimeType]],
+                          domain: DepDomain):
         new_dep_state = DepState(
             base,
             iterations=tuple(self.iterations)
@@ -416,17 +445,17 @@ class _TranslationState:
         
     def _add_hold_node(self, node: LinSpaceHold):
 
-        for ch, (base, factors) in enumerate(zip(node.bases, node.factors)):
-            if factors is None:
-                self.set_voltage(ch, base)
+        for ch in node.play_channels:
+            if node.factors[ch] is None:
+                self.set_voltage(ch, node.bases[ch])
                 continue
             else:
-                self._set_indexed_voltage(ch, base, factors)
+                self._set_indexed_voltage(ch, node.bases[ch], node.factors[ch])
                 
         if node.duration_factors:
             self._set_indexed_lin_time(node.duration_base,node.duration_factors)
             # raise NotImplementedError("TODO")
-            self.commands.append(Wait(None, self.active_dep[DepDomain.TIME_LIN.value]))
+            self.commands.append(Wait(None, self.active_dep[DepDomain.TIME_LIN]))
         else:
             self.commands.append(Wait(node.duration_base))
 
