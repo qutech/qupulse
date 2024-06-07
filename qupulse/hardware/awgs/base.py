@@ -275,7 +275,7 @@ class ProgramEntry:
         # all commands = Union[Increment, Set, LoopLabel, LoopJmp, Wait, Play]
         # TODO: voltage resolution
         
-        trafos_by_channel_idx = list(self._channel_transformations().values())
+        # trafos_by_channel_idx = list(self._channel_transformations().values())
 
         for command in command_list:
             if isinstance(command, (LoopLabel, LoopJmp, Play, Wait)):
@@ -283,12 +283,12 @@ class ProgramEntry:
                 # play is handled by transforming the sampled waveform
                 continue
             elif isinstance(command, Increment):
-                ch_trafo = trafos_by_channel_idx[command.channel]
+                ch_trafo = self._channel_transformations()[command.channel]
                 if ch_trafo.voltage_transformation:
                     raise RuntimeError("Cannot apply a voltage transformation to a linspace increment command")
                 command.value /= ch_trafo.amplitude
             elif isinstance(command, LSPSet):
-                ch_trafo = trafos_by_channel_idx[command.channel]
+                ch_trafo = self._channel_transformations()[command.channel]
                 if ch_trafo.voltage_transformation:
                     command.value = float(ch_trafo.voltage_transformation(command.value))
                 command.value -= ch_trafo.offset
