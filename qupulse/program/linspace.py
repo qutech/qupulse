@@ -58,7 +58,32 @@ class ResolutionDependentValue(Generic[NumVal]):
     def __bool__(self):
         return any(bool(b) for b in self.bases) or bool(self.offset)
 
-
+    def __add__(self, other):
+        # this should happen in the context of an offset being added to it, not the bases being modified.
+        if isinstance(other, (float, int, TimeType)):
+            return ResolutionDependentValue(self.bases,self.multiplicities,self.offset+other)
+        return NotImplemented
+    
+    def __radd__(self, other):
+        return self.__add__(other)
+    
+    def __sub__(self, other):
+        return self.__add__(-other)
+    
+    def __mul__(self, other):
+        # this should happen when the amplitude is being scaled
+        if isinstance(other, (float, int, TimeType)):
+            return ResolutionDependentValue(self.bases*other,self.multiplicities,self.offset*other)
+        return NotImplemented
+    
+    def __rmul__(self,other):
+        return self.__mul__(other)
+    
+    def __truediv__(self,other):
+        return self.__mul__(1/other)
+    
+    
+    
 @dataclass(frozen=True)
 class DepKey:
     """The key that identifies how a certain set command depends on iteration indices. The factors are rounded with a
