@@ -73,7 +73,7 @@ class ResolutionDependentValue(Generic[NumVal]):
     def __mul__(self, other):
         # this should happen when the amplitude is being scaled
         if isinstance(other, (float, int, TimeType)):
-            return ResolutionDependentValue(self.bases*other,self.multiplicities,self.offset*other)
+            return ResolutionDependentValue(tuple(b*other for b in self.bases),self.multiplicities,self.offset*other)
         return NotImplemented
     
     def __rmul__(self,other):
