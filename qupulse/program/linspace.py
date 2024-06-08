@@ -39,14 +39,14 @@ class ResolutionDependentValue(Generic[NumVal]):
         self.bases = bases
         self.multiplicities = multiplicities
         self.offset = offset
-        self.__is_time = all(isinstance(b,TimeType) for b in bases) and isinstance(offset,TimeType)
+        self.__is_time_or_int = all(isinstance(b,(TimeType,int)) for b in bases) and isinstance(offset,(TimeType,int))
  
     #this is not to circumvent float errors in python, but rounding errors from awg-increment commands.
     #python float are thereby accurate enough if no awg with a 500 bit resolution is invented.
     def __call__(self, resolution: Optional[float]) -> Union[NumVal,TimeType]:
-        #with resolution = None handle TimeType case?
+        #with resolution = None handle TimeType/int case?
         if resolution is None:
-            assert self.__is_time
+            assert self.__is_time_or_int
             return sum(b*m for b,m in zip(self.bases,self.multiplicities)) + self.offset
         #resolution as float value of granularity of base val.
         #to avoid conflicts between positive and negative vals from casting half to even,
@@ -515,11 +515,11 @@ class _TranslationState:
 
 
 def to_increment_commands(linspace_nodes: Sequence[LinSpaceNode],
-                          resolution: float = DEFAULT_INCREMENT_RESOLUTION
+                          # resolution: float = DEFAULT_INCREMENT_RESOLUTION
                           ) -> List[Command]:
     """translate the given linspace node tree to a minimal sequence of set and increment commands as well as loops."""
     # if resolution: raise NotImplementedError('wrongly assumed resolution. need to fix')
-    state = _TranslationState(resolution=resolution if resolution is not None else DEFAULT_INCREMENT_RESOLUTION)
+    state = _TranslationState()
     state.add_node(linspace_nodes)
     return state.commands
 
