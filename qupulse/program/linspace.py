@@ -3,13 +3,13 @@ import contextlib
 import dataclasses
 import numpy as np
 from dataclasses import dataclass
-from typing import Mapping, Optional, Sequence, ContextManager, Iterable, Tuple, Union, Dict, List, Iterator
+from typing import Mapping, Optional, Sequence, ContextManager, Iterable, Tuple, Union, Dict, List, Iterator, Generic
 from enum import Enum
 
 from qupulse import ChannelID, MeasurementWindow
 from qupulse.parameter_scope import Scope, MappedScope, FrozenDict
 from qupulse.program import ProgramBuilder, HardwareTime, HardwareVoltage, Waveform, RepetitionCount, TimeType
-from qupulse.expressions.simple import SimpleExpression
+from qupulse.expressions.simple import SimpleExpression, NumVal
 from qupulse.program.waveforms import MultiChannelWaveform, TransformingWaveform
 
 # this resolution is used to unify increments
@@ -28,9 +28,35 @@ class DepDomain(Enum):
 
 GeneralizedChannel = Union[DepDomain,ChannelID]
 
-# class DepStrategy(Enum):
-#     CONSTANT = 0
-#     VARIABLE = 1
+
+class ResolutionDependentValue(Generic[NumVal]):
+    
+    def __init__(self,
+                 bases: Sequence[NumVal],
+                 multiplicities: Sequence[int],
+                 offset: NumVal):
+    
+        self.bases = bases
+        self.multiplicities = multiplicities
+        self.offset = offset
+        self.__is_time = all(isinstance(b,TimeType) for b in bases) and isinstance(offset,TimeType)
+ 
+    #this is not to circumvent float errors in python, but rounding errors from awg-increment commands.
+    #python float are thereby accurate enough if no awg with a 500 bit resolution is invented.
+    def __call__(self, resolution: Optional[float]) -> Union[NumVal,TimeType]:
+        #with resolution = None handle TimeType case?
+        if resolution is None:
+            assert self.__is_time
+            return sum(b*m for b,m in zip(self.bases,self.multiplicities)) + self.offset
+        #resolution as float value of granularity of base val.
+        #to avoid conflicts between positive and negative vals from casting half to even,
+        #use abs val
+        return sum(np.sign(b) * round(abs(b) / resolution) * m * resolution for b,m in zip(self.bases,self.multiplicities))\
+             + np.sign(self.offset) * round(abs(self.offset) / resolution) * resolution
+             #cast the offset only once?
+    
+    def __bool__(self):
+        return any(bool(b) for b in self.bases) or bool(self.offset)
 
 
 @dataclass(frozen=True)
@@ -59,7 +85,7 @@ class DepKey:
     @classmethod
     def from_lin_times(cls, times: Sequence[float], resolution: float):
         return cls.from_domain(times, resolution, DepDomain.TIME_LIN)
-    
+
 
 @dataclass
 class LinSpaceNode:
@@ -290,14 +316,14 @@ class LoopLabel:
 @dataclass
 class Increment:
     channel: Optional[GeneralizedChannel]
-    value: Union[float,TimeType]
+    value: ResolutionDependentValue
     dependency_key: DepKey
 
 
 @dataclass
 class Set:
     channel: Optional[GeneralizedChannel]
-    value: Union[float,TimeType]
+    value: ResolutionDependentValue
     key: DepKey = dataclasses.field(default_factory=lambda: DepKey((),DepDomain.NODEP))
 
 
@@ -326,11 +352,13 @@ class DepState:
     base: float
     iterations: Tuple[int, ...]
 
-    def required_increment_from(self, previous: 'DepState', factors: Sequence[float]) -> float:
+    def required_increment_from(self, previous: 'DepState',
+                                factors: Sequence[float]) -> ResolutionDependentValue:
         assert len(self.iterations) == len(previous.iterations)
         assert len(self.iterations) == len(factors)
 
-        increment = self.base - previous.base
+        # increment = self.base - previous.base
+        res_bases, res_mults, offset = [], [], self.base - previous.base
         for old, new, factor in zip(previous.iterations, self.iterations, factors):
             # By convention there are only two possible values for each integer here: 0 or the last index
             # The three possible increments are none, regular and jump to next line
@@ -343,13 +371,18 @@ class DepState:
                 assert old == 0
                 # regular iteration, although the new value will probably be > 1, the resulting increment will be
                 # applied multiple times so only one factor is needed.
-                increment += factor
-
+                # increment += factor
+                res_bases.append(factor)
+                res_mults.append(1)
+                
             else:
                 assert new == 0
                 # we need to jump back. The old value gives us the number of increments to reverse
-                increment -= factor * old
-        return increment
+                # increment -= factor * old
+                res_bases.append(-factor)
+                res_mults.append(old)
+                
+        return ResolutionDependentValue(res_bases,res_mults,offset)
 
 
 @dataclass
@@ -381,7 +414,7 @@ class _TranslationState:
     def set_voltage(self, channel: ChannelID, value: float):
         key = DepKey((),DepDomain.VOLTAGE)
         if self.active_dep.get(channel, None) != key or self.plain_voltage.get(channel, None) != value:
-            self.commands.append(Set(channel, value, key))
+            self.commands.append(Set(channel, ResolutionDependentValue((),(),offset=value), key))
             self.active_dep[channel] = key
             self.plain_voltage[channel] = value
 
@@ -431,7 +464,7 @@ class _TranslationState:
         current_dep_state = self.dep_states.setdefault(channel, {}).get(dep_key, None)
         if current_dep_state is None:
             assert all(it == 0 for it in self.iterations)
-            self.commands.append(Set(channel, base, dep_key))
+            self.commands.append(Set(channel, ResolutionDependentValue((),(),offset=base), dep_key))
             self.active_dep[channel] = dep_key
 
         else:
