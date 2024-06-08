@@ -282,14 +282,14 @@ class ProgramEntry:
                 # play is handled by transforming the sampled waveform
                 continue
             elif isinstance(command, Increment):
-                if command.dependency_key is not DepDomain.VOLTAGE:
+                if command.dependency_key.domain is not DepDomain.VOLTAGE:
                     continue
                 ch_trafo = self._channel_transformations()[command.channel]
                 if ch_trafo.voltage_transformation:
                     raise RuntimeError("Cannot apply a voltage transformation to a linspace increment command")
                 command.value /= ch_trafo.amplitude
             elif isinstance(command, LSPSet):
-                if command.key is not DepDomain.VOLTAGE:
+                if command.key.domain is not DepDomain.VOLTAGE:
                     continue
                 ch_trafo = self._channel_transformations()[command.channel]
                 if ch_trafo.voltage_transformation:
