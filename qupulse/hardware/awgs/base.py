@@ -17,7 +17,7 @@ from enum import Enum
 from qupulse.hardware.util import get_sample_times, not_none_indices
 from qupulse.utils.types import ChannelID
 from qupulse.program.linspace import LinSpaceNode, LinSpaceArbitraryWaveform, to_increment_commands, Command, \
-    Increment, Set as LSPSet, LoopLabel, LoopJmp, Wait, Play, DEFAULT_INCREMENT_RESOLUTION
+    Increment, Set as LSPSet, LoopLabel, LoopJmp, Wait, Play, DEFAULT_INCREMENT_RESOLUTION, DepDomain
 from qupulse.program.loop import Loop
 from qupulse.program.waveforms import Waveform
 from qupulse.comparable import Comparable
@@ -279,15 +279,18 @@ class ProgramEntry:
 
         for command in command_list:
             if isinstance(command, (LoopLabel, LoopJmp, Play, Wait)):
-                
                 # play is handled by transforming the sampled waveform
                 continue
             elif isinstance(command, Increment):
+                if command.dependency_key is not DepDomain.VOLTAGE:
+                    continue
                 ch_trafo = self._channel_transformations()[command.channel]
                 if ch_trafo.voltage_transformation:
                     raise RuntimeError("Cannot apply a voltage transformation to a linspace increment command")
                 command.value /= ch_trafo.amplitude
             elif isinstance(command, LSPSet):
+                if command.key is not DepDomain.VOLTAGE:
+                    continue
                 ch_trafo = self._channel_transformations()[command.channel]
                 if ch_trafo.voltage_transformation:
                     command.value = float(ch_trafo.voltage_transformation(command.value))
