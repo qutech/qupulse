@@ -109,7 +109,8 @@ HardwareVoltage = Union[float, SimpleExpression[float]]
 
 @runtime_checkable
 class Program(Protocol):
-    """This protocol is used to inspect and or manipulate programs"""
+    """This protocol is used to inspect and or manipulate programs. As you can see the functionality is very limited
+    because most of a program class' capability are specific to the implementation."""
 
     @property
     def duration(self) -> TimeType:
@@ -117,11 +118,12 @@ class Program(Protocol):
 
 
 class ProgramBuilder(Protocol):
-    """This protocol is used by PulseTemplate to build the program via the visitor pattern.
+    """This protocol is used by :py:meth:`.PulseTemplate.create_program` to build a program via the visitor pattern.
 
     There is a default implementation which is the loop class.
 
-    Other hardware backends can use this protocol to implement easy translation of pulse templates."""
+    Other hardware backends can use this protocol to implement easy translation of pulse templates into a hardware
+    compatible format."""
 
     def inner_scope(self, scope: Scope) -> Scope:
         """This function is necessary to inject program builder specific parameter implementations into the build
@@ -167,6 +169,7 @@ class ProgramBuilder(Protocol):
 
 
 def default_program_builder() -> ProgramBuilder:
+    """This function returns an instance of the default program builder class `LoopBuilder`"""
     from qupulse.program.loop import LoopBuilder
     return LoopBuilder()
 

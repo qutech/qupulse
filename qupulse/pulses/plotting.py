@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-"""Deprecated plotting location. Was moved to :py:`qupulse.plotting`.
+"""Deprecated plotting location. Was moved to :py:mod:`qupulse.plotting`.
 No deprecation warning because we will keep it around forever."""
 
 from qupulse.plotting import *
