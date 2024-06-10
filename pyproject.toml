@@ -10,8 +10,7 @@ readme = "README.md"
 license = "GPL-3.0-or-later"
 requires-python = ">=3.8"
 authors = [
-    { name = "Quantum Technology Group and Chair of Software Engineering" },
-    { name = "RWTH Aachen University" },
+    { name = "Quantum Technology Group and Chair of Software Engineering, RWTH Aachen University" },
 ]
 keywords = [
     "control",
@@ -80,6 +79,34 @@ path = "qupulse/__init__.py"
 include = [
     "/qupulse",
 ]
+
+[tool.hatch.envs.docs]
+dependencies = [
+  "sphinx",
+  "nbsphinx",
+  "sphinx-rtd-theme"
+]
+[tool.hatch.envs.docs.scripts]
+# This is a hack to achieve cross-platform version extraction until https://github.com/pypa/hatch/issues/1006
+build = """
+  python -c "import subprocess, os; \
+  result = subprocess.run(['hatch', 'version'], capture_output=True, text=True); \
+  version = result.stdout.strip(); \
+  subprocess.run(['sphinx-build', '-b', '{args:0}', 'doc/source', 'doc/build', '-D', 'version=%s' % version, '-D', 'release=%s' % version])"
+"""
+latex = """
+  python -c "import subprocess, os; \
+  result = subprocess.run(['hatch', 'version'], capture_output=True, text=True); \
+  version = result.stdout.strip(); \
+  subprocess.run(['sphinx-build', '-b', 'latex', 'doc/source', 'doc/build', '-D', 'version=%s' % version, '-D', 'release=%s' % version])"
+"""
+html = """
+  python -c "import subprocess, os; \
+  result = subprocess.run(['hatch', 'version'], capture_output=True, text=True); \
+  version = result.stdout.strip(); \
+  subprocess.run(['sphinx-build', '-b', 'html', 'doc/source', 'doc/build', '-D', 'version=%s' % version, '-D', 'release=%s' % version])"
+"""
+
 
 [tool.towncrier]
 directory = "changes.d"
