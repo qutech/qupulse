@@ -92,19 +92,19 @@ build = """
   python -c "import subprocess, os; \
   result = subprocess.run(['hatch', 'version'], capture_output=True, text=True); \
   version = result.stdout.strip(); \
-  subprocess.run(['sphinx-build', '-b', '{args:0}', 'doc/source', 'doc/build', '-D', 'version=%s' % version, '-D', 'release=%s' % version])"
+  subprocess.run(['sphinx-build', '-b', '{args:0}', 'doc/source', 'doc/build/{args:0}', '-d', 'doc/build/.doctrees', '-D', 'version=%s' % version, '-D', 'release=%s' % version])"
 """
 latex = """
   python -c "import subprocess, os; \
   result = subprocess.run(['hatch', 'version'], capture_output=True, text=True); \
   version = result.stdout.strip(); \
-  subprocess.run(['sphinx-build', '-b', 'latex', 'doc/source', 'doc/build', '-D', 'version=%s' % version, '-D', 'release=%s' % version])"
+  subprocess.run(['sphinx-build', '-b', 'latex', 'doc/source', 'doc/build/latex', '-D', 'version=%s' % version, '-D', 'release=%s' % version])"
 """
 html = """
   python -c "import subprocess, os; \
   result = subprocess.run(['hatch', 'version'], capture_output=True, text=True); \
   version = result.stdout.strip(); \
-  subprocess.run(['sphinx-build', '-b', 'html', 'doc/source', 'doc/build', '-D', 'version=%s' % version, '-D', 'release=%s' % version])"
+  subprocess.run(['sphinx-build', '-b', 'html', 'doc/source', 'doc/build/html', '-D', 'version=%s' % version, '-D', 'release=%s' % version])"
 """
 
 
