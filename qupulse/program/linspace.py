@@ -12,6 +12,9 @@ from qupulse.program import ProgramBuilder, HardwareTime, HardwareVoltage, Wavef
 from qupulse.expressions.simple import SimpleExpression, NumVal
 from qupulse.program.waveforms import MultiChannelWaveform, TransformingWaveform
 
+from qupulse.program.transformation import ChainedTransformation, ScalingTransformation, OffsetTransformation,\
+    IdentityTransformation, ParallelChannelTransformation, Transformation
+
 # this resolution is used to unify increments
 # the increments themselves remain floats
 # !!! translated: this is NOT a hardware resolution,
@@ -24,6 +27,8 @@ class DepDomain(Enum):
     TIME_LIN = -1
     TIME_LOG = -2
     FREQUENCY = -3
+    WF_SCALE = -4
+    WF_OFFSET = -5
     NODEP = None
 
 GeneralizedChannel = Union[DepDomain,ChannelID]
@@ -149,7 +154,18 @@ class LinSpaceHold(LinSpaceNodeChannelSpecific):
 class LinSpaceArbitraryWaveform(LinSpaceNodeChannelSpecific):
     """This is just a wrapper to pipe arbitrary waveforms through the system."""
     waveform: Waveform
-    # channels: Tuple[ChannelID, ...]
+
+
+@dataclass
+class LinSpaceArbitraryWaveformIndexed(LinSpaceNodeChannelSpecific):
+    """This is just a wrapper to pipe arbitrary waveforms through the system."""
+    waveform: Waveform
+    
+    scale_bases: Dict[ChannelID, float]
+    scale_factors: Dict[ChannelID, Optional[Tuple[float, ...]]]
+        
+    offset_bases: Dict[ChannelID, float]
+    offset_factors: Dict[ChannelID, Optional[Tuple[float, ...]]]
 
 
 @dataclass
@@ -278,20 +294,55 @@ class LinSpaceBuilder(ProgramBuilder):
         self._stack[-1].append(set_cmd)
 
     def play_arbitrary_waveform(self, waveform: Waveform):
+        
+        #recognize voltage trafo sweep syntax from a transforming waveform. other sweepable things may need different approaches.
         if not isinstance(waveform,TransformingWaveform):
-            return self._stack[-1].append(LinSpaceArbitraryWaveform(waveform=waveform,
-                                                                    channels=waveform.defined_channels,
-                                                                    # self._voltage_idx_to_name
-                                                                    )
-                                          )
+            return self._stack[-1].append(LinSpaceArbitraryWaveform(waveform=waveform,channels=waveform.defined_channels,))
         
         #test for transformations that contain SimpleExpression
         wf_transformation = waveform.transformation
         
-        return self._stack[-1].append(LinSpaceArbitraryWaveform(waveform=waveform,
-                                                                # self._voltage_idx_to_name
-                                                                channels=waveform.defined_channels
-                                                                ))
+        # chainedTransformation should now have flat hierachy.        
+        collected_trafos, dependent_vals_flag = collect_scaling_and_offset_per_channel(waveform.defined_channels,wf_transformation)
+        
+        #fast track
+        if not dependent_vals_flag:
+            return self._stack[-1].append(LinSpaceArbitraryWaveform(waveform=waveform,channels=waveform.defined_channels,))
+        
+        ranges = self._get_ranges()
+        scale_factors, offset_factors = {}, {}
+        scale_bases, offset_bases = {}, {}
+        
+        for ch_name,scale_offset_dict in collected_trafos.items():
+            for bases,factors,key in zip((scale_bases, offset_bases),(scale_factors, offset_factors),('s','o')):
+                value = scale_offset_dict[key]
+                if isinstance(value, float):
+                    bases[ch_name] = value
+                    factors[ch_name] = None
+                    continue
+                offsets = value.offsets
+                base = value.base
+                incs = []
+                for rng_name, rng in ranges.items():
+                    start = 0.
+                    step = 0.
+                    offset = offsets.get(rng_name, None)
+                    if offset:
+                        start += rng.start * offset
+                        step += rng.step * offset
+                    base += start
+                    incs.append(step)
+                factors[ch_name] = tuple(incs)
+                bases[ch_name] = base
+
+        
+        return self._stack[-1].append(LinSpaceArbitraryWaveformIndexed(waveform=waveform,
+                                                                       channels=waveform.defined_channels,
+                                                                       scale_bases=scale_bases,
+                                                                       scale_factors=scale_factors,
+                                                                       offset_bases=offset_bases,
+                                                                       offset_factors=offset_factors,
+                                                                       ))
 
     def measure(self, measurements: Optional[Sequence[MeasurementWindow]]):
         """Ignores measurements"""
@@ -332,6 +383,59 @@ class LinSpaceBuilder(ProgramBuilder):
             return self._root()
 
 
+def collect_scaling_and_offset_per_channel(channels: Sequence[ChannelID],
+                                           transformation: Transformation) \
+    -> Tuple[Dict[ChannelID,Dict[str,Union[NumVal,SimpleExpression]]], bool]:
+    
+    ch_trafo_dict = {ch: {'s':1.,'o':0.} for ch in channels}
+    
+    # allowed_trafos = {IdentityTransformation,}
+    if not isinstance(transformation,ChainedTransformation):
+        transformations = (transformation,)
+    else:
+        transformations = transformation.transformations
+    
+    is_dependent_flag = []
+    
+    for trafo in transformations:
+        #first elements of list are applied first in trafos.
+        assert trafo.is_constant_invariant()
+        if isinstance(trafo,ParallelChannelTransformation):
+            for ch,val in trafo._channels.items():
+                is_dependent_flag.append(trafo.contains_sweepval)
+                # assert not ch in ch_trafo_dict.keys()
+                # the waveform is sampled with these values taken into account, no change needed.
+                # ch_trafo_dict[ch]['o'] = val
+                # ch_trafo_dict.setdefault(ch,{'s':1.,'o':val})
+        elif isinstance(trafo,ScalingTransformation):
+            is_dependent_flag.append(trafo.contains_sweepval)
+            for ch,val in trafo._factors.items():
+                try:
+                    ch_trafo_dict[ch]['s'] = reduce_non_swept(ch_trafo_dict[ch]['s']*val)
+                    ch_trafo_dict[ch]['o'] = reduce_non_swept(ch_trafo_dict[ch]['o']*val)
+                except TypeError as e:
+                    print('Attempting scale sweep of other sweep val')
+                    raise e
+        elif isinstance(trafo,OffsetTransformation):
+            is_dependent_flag.append(trafo.contains_sweepval)
+            for ch,val in trafo._offsets.items():
+                ch_trafo_dict[ch]['o'] += val
+        elif isinstance(trafo,IdentityTransformation):
+            continue
+        elif isinstance(trafo,ChainedTransformation):
+            raise RuntimeError()
+        else:
+            raise NotImplementedError()
+    
+    return ch_trafo_dict, any(is_dependent_flag)
+    
+
+def reduce_non_swept(val: Union[SimpleExpression,NumVal]) -> Union[SimpleExpression,NumVal]:
+    if isinstance(val,SimpleExpression) and all(v==0 for v in val.offsets.values()):
+        return val.base
+    return val
+
+
 @dataclass
 class LoopLabel:
     idx: int
@@ -341,14 +445,14 @@ class LoopLabel:
 @dataclass
 class Increment:
     channel: Optional[GeneralizedChannel]
-    value: ResolutionDependentValue
+    value: Union[ResolutionDependentValue,Tuple[ResolutionDependentValue]]
     dependency_key: DepKey
 
 
 @dataclass
 class Set:
     channel: Optional[GeneralizedChannel]
-    value: ResolutionDependentValue
+    value: Union[ResolutionDependentValue,Tuple[ResolutionDependentValue]]
     key: DepKey = dataclasses.field(default_factory=lambda: DepKey((),DepDomain.NODEP))
 
 
@@ -367,7 +471,13 @@ class LoopJmp:
 class Play:
     waveform: Waveform
     channels: Tuple[ChannelID]
+    keys: Sequence[DepKey] = None
+    def __post_init__(self):
+        if self.keys is None:
+            self.keys = tuple(dataclasses.field(default_factory=lambda: DepKey((),DepDomain.NODEP))
+                              for i in range(len(self.channels)))
 
+    
 
 Command = Union[Increment, Set, LoopLabel, LoopJmp, Wait, Play]
 
@@ -419,7 +529,7 @@ class _TranslationState:
     iterations: List[int] = dataclasses.field(default_factory=list)
     active_dep: Dict[GeneralizedChannel, DepKey] = dataclasses.field(default_factory=dict)
     dep_states: Dict[GeneralizedChannel, Dict[DepKey, DepState]] = dataclasses.field(default_factory=dict)
-    plain_voltage: Dict[ChannelID, float] = dataclasses.field(default_factory=dict)
+    plain_value: Dict[GeneralizedChannel, Dict[DepDomain,float]] = dataclasses.field(default_factory=dict)
     resolution: float = dataclasses.field(default_factory=lambda: DEFAULT_INCREMENT_RESOLUTION)
     resolution_time: float = dataclasses.field(default_factory=lambda: DEFAULT_TIME_RESOLUTION)
 
@@ -437,12 +547,24 @@ class _TranslationState:
         }
 
     def set_voltage(self, channel: ChannelID, value: float):
-        key = DepKey((),DepDomain.VOLTAGE)
-        if self.active_dep.get(channel, None) != key or self.plain_voltage.get(channel, None) != value:
+        self.set_non_indexed_value(channel, value, domain=DepDomain.VOLTAGE)
+        
+    def set_wf_scale(self, channel: ChannelID, value: float):
+        self.set_non_indexed_value(channel, value, domain=DepDomain.WF_SCALE)
+        
+    def set_wf_offset(self, channel: ChannelID, value: float):
+        self.set_non_indexed_value(channel, value, domain=DepDomain.WF_OFFSET)
+            
+    def set_non_indexed_value(self, channel: GeneralizedChannel, value: float, domain: DepDomain):
+        key = DepKey((),domain)
+        # I do not completely get why it would have to be set again if not in active dep.
+        # if not key != self.active_dep.get(channel, None)  or
+        if self.plain_value.get(channel, {}).get(domain, None) != value:
             self.commands.append(Set(channel, ResolutionDependentValue((),(),offset=value), key))
             self.active_dep[channel] = key
-            self.plain_voltage[channel] = value
-
+            self.plain_value.setdefault(channel,{})
+            self.plain_value[channel][domain] = value    
+    
     def _add_repetition_node(self, node: LinSpaceRepeat):
         pre_dep_state = self.get_dependency_state(node.dependencies())
         label, jmp = self.new_loop(node.count)
@@ -477,7 +599,7 @@ class _TranslationState:
     def _set_indexed_lin_time(self, base: TimeType, factors: Sequence[TimeType]):
         key = DepKey.from_lin_times(times=factors, resolution=self.resolution)
         self.set_indexed_value(key, DepDomain.TIME_LIN, base, factors, domain=DepDomain.TIME_LIN)
-    
+
     def set_indexed_value(self, dep_key: DepKey, channel: GeneralizedChannel,
                           base: Union[float,TimeType], factors: Sequence[Union[float,TimeType]],
                           domain: DepDomain):
@@ -516,7 +638,22 @@ class _TranslationState:
             self.commands.append(Wait(None, self.active_dep[DepDomain.TIME_LIN]))
         else:
             self.commands.append(Wait(node.duration_base))
-
+            
+    def _add_indexed_play_node(self, node: LinSpaceArbitraryWaveformIndexed):
+        
+        for ch in node.channels:
+            for base,factors,domain in zip((node.scale_bases[ch], node.offset_bases[ch]),
+                                           (node.scale_factors[ch], node.offset_factors[ch]),
+                                           (DepDomain.WF_SCALE,DepDomain.WF_OFFSET)): 
+                if factors is None:
+                    self.set_non_indexed_value(ch, base, domain)
+                else:
+                    key = DepKey.from_domain(factors, resolution=self.resolution, domain=domain)
+                    self.set_indexed_value(key, ch, base, factors, key.domain)
+                
+        self.commands.append(Play(node.waveform, node.channels, keys=tuple(self.active_dep[ch] for ch in node.channels)))
+        
+            
     def add_node(self, node: Union[LinSpaceNode, Sequence[LinSpaceNode]]):
         """Translate a (sequence of) linspace node(s) to commands and add it to the internal command list."""
         if isinstance(node, Sequence):
@@ -531,7 +668,10 @@ class _TranslationState:
 
         elif isinstance(node, LinSpaceHold):
             self._add_hold_node(node)
-
+        
+        elif isinstance(node, LinSpaceArbitraryWaveformIndexed):
+            self._add_indexed_play_node(node)
+        
         elif isinstance(node, LinSpaceArbitraryWaveform):
             self.commands.append(Play(node.waveform, node.channels))
 

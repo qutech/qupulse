@@ -8,9 +8,9 @@ from qupulse import ChannelID
 from qupulse.comparable import Comparable
 from qupulse.utils.types import SingletonABCMeta, frozendict
 from qupulse.expressions import ExpressionScalar
+from qupulse.expressions.simple import SimpleExpression
 
-
-_TrafoValue = Union[Real, ExpressionScalar]
+_TrafoValue = Union[Real, ExpressionScalar, SimpleExpression]
 
 
 __all__ = ['Transformation', 'IdentityTransformation', 'LinearTransformation', 'ScalingTransformation',
@@ -88,7 +88,16 @@ class IdentityTransformation(Transformation, metaclass=SingletonABCMeta):
 
 class ChainedTransformation(Transformation):
     def __init__(self, *transformations: Transformation):
-        self._transformations = transformations
+        #avoid nesting also here in init to ensure always flat hierachy?
+        parsed = []
+        for t in transformations:
+            if t is IdentityTransformation() or t is None:
+                pass
+            elif isinstance(t,ChainedTransformation):
+                parsed.extend(t.transformations)
+            else:
+                parsed.append(t)
+        self._transformations = tuple(parsed)
 
     @property
     def transformations(self) -> Tuple[Transformation, ...]:
@@ -231,7 +240,7 @@ class OffsetTransformation(Transformation):
 
     def __call__(self, time: Union[np.ndarray, float],
                  data: Mapping[ChannelID, Union[np.ndarray, float]]) -> Mapping[ChannelID, Union[np.ndarray, float]]:
-        offsets = _instantiate_expression_dict(time, self._offsets)
+        offsets = _instantiate_expression_dict(time, self._offsets, default_sweepval = 0.)
         return {channel: channel_values + offsets[channel] if channel in offsets else channel_values
                 for channel, channel_values in data.items()}
 
@@ -254,6 +263,10 @@ class OffsetTransformation(Transformation):
 
     def get_constant_output_channels(self, input_channels: AbstractSet[ChannelID]) -> AbstractSet[ChannelID]:
         return _get_constant_output_channels(self._offsets, input_channels)
+    
+    @property
+    def contains_sweepval(self) -> bool:
+        return any(isinstance(o,SimpleExpression) for o in self._offsets.values())
 
 
 class ScalingTransformation(Transformation):
@@ -263,7 +276,7 @@ class ScalingTransformation(Transformation):
 
     def __call__(self, time: Union[np.ndarray, float],
                  data: Mapping[ChannelID, Union[np.ndarray, float]]) -> Mapping[ChannelID, Union[np.ndarray, float]]:
-        factors = _instantiate_expression_dict(time, self._factors)
+        factors = _instantiate_expression_dict(time, self._factors, default_sweepval = 1.)
         return {channel: channel_values * factors[channel] if channel in factors else channel_values
                 for channel, channel_values in data.items()}
 
@@ -286,6 +299,10 @@ class ScalingTransformation(Transformation):
 
     def get_constant_output_channels(self, input_channels: AbstractSet[ChannelID]) -> AbstractSet[ChannelID]:
         return _get_constant_output_channels(self._factors, input_channels)
+
+    @property
+    def contains_sweepval(self) -> bool:
+        return any(isinstance(o,SimpleExpression) for o in self._factors.values())
 
 
 try:
@@ -359,6 +376,10 @@ class ParallelChannelTransformation(Transformation):
                 output_channels.add(ch)
 
         return output_channels
+    
+    @property
+    def contains_sweepval(self) -> bool:
+        return any(isinstance(o,SimpleExpression) for o in self._channels.values())
 
 
 def chain_transformations(*transformations: Transformation) -> Transformation:
@@ -378,12 +399,17 @@ def chain_transformations(*transformations: Transformation) -> Transformation:
         return ChainedTransformation(*parsed_transformations)
 
 
-def _instantiate_expression_dict(time, expressions: Mapping[str, _TrafoValue]) -> Mapping[str, Union[Real, np.ndarray]]:
+def _instantiate_expression_dict(time, expressions: Mapping[str, _TrafoValue],
+                                 default_sweepval: float) -> Mapping[str, Union[Real, np.ndarray]]:
     scope = {'t': time}
     modified_expressions = {}
     for name, value in expressions.items():
         if hasattr(value, 'evaluate_in_scope'):
             modified_expressions[name] = value.evaluate_in_scope(scope)
+        if isinstance(value, SimpleExpression):
+            # it is assumed that swept parameters will be handled by the ProgramBuilder accordingly
+            # such that here only an "identity" trafo is to be applied and the trafos are set in the program internally.
+            modified_expressions[name] = default_sweepval
     if modified_expressions:
         return {**expressions, **modified_expressions}
     else:

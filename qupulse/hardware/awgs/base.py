@@ -276,13 +276,15 @@ class ProgramEntry:
         # TODO: voltage resolution
         
         # trafos_by_channel_idx = list(self._channel_transformations().values())
-
+        # increment_domains_to_transform = {DepDomain.VOLTAGE, DepDomain.WF_SCALE, DepDomain.WF_OFFSET}
+        
         for command in command_list:
             if isinstance(command, (LoopLabel, LoopJmp, Play, Wait)):
                 # play is handled by transforming the sampled waveform
                 continue
             elif isinstance(command, Increment):
                 if command.dependency_key.domain is not DepDomain.VOLTAGE:
+                    #for sweeps of wf-scale and wf-offset, the channel amplitudes/offsets are already considered in the wf sampling.
                     continue
                 ch_trafo = self._channel_transformations()[command.channel]
                 if ch_trafo.voltage_transformation:
@@ -290,9 +292,11 @@ class ProgramEntry:
                 command.value /= ch_trafo.amplitude
             elif isinstance(command, LSPSet):
                 if command.key.domain is not DepDomain.VOLTAGE:
+                    #for sweeps of wf-scale and wf-offset, the channel amplitudes/offsets are already considered in the wf sampling.
                     continue
                 ch_trafo = self._channel_transformations()[command.channel]
                 if ch_trafo.voltage_transformation:
+                    # for the case of swept parameters, this is defaulted to identity
                     command.value = float(ch_trafo.voltage_transformation(command.value))
                 command.value -= ch_trafo.offset
                 command.value /= ch_trafo.amplitude

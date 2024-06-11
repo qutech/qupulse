@@ -110,7 +110,10 @@ class SimpleExpression(Generic[NumVal]):
     def __truediv__(self, other):
         inv = 1 / other
         return self.__mul__(inv)
-
+    
+    def __hash__(self):
+        return hash((self.base,frozenset(sorted(self.offsets.items()))))
+    
     @property
     def free_symbols(self):
         return ()
