@@ -474,9 +474,7 @@ class Play:
     keys: Sequence[DepKey] = None
     def __post_init__(self):
         if self.keys is None:
-            self.keys = tuple(dataclasses.field(default_factory=lambda: DepKey((),DepDomain.NODEP))
-                              for i in range(len(self.channels)))
-
+            self.keys = tuple(DepKey((),DepDomain.NODEP) for i in range(len(self.channels)))
     
 
 Command = Union[Increment, Set, LoopLabel, LoopJmp, Wait, Play]
