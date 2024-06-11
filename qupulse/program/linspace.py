@@ -616,7 +616,8 @@ class _TranslationState:
             inc = new_dep_state.required_increment_from(previous=current_dep_state, factors=factors)
 
             # we insert all inc here (also inc == 0) because it signals to activate this amplitude register
-            if inc or self.active_dep.get(channel, None) != dep_key:
+            #not really sure if correct, but if dep states are the same, dont emit increment call.
+            if (inc or self.active_dep.get(channel, None) != dep_key) and new_dep_state != current_dep_state:
                 self.commands.append(Increment(channel, inc, dep_key))
             self.active_dep[channel] = dep_key
         self.dep_states[channel][dep_key] = new_dep_state
