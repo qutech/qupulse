@@ -459,7 +459,7 @@ class Set:
 @dataclass
 class Wait:
     duration: Optional[TimeType]
-    key: DepKey = dataclasses.field(default_factory=lambda: DepKey((),DepDomain.NODEP))
+    key_by_domain: Dict[DepDomain,DepKey] = dataclasses.field(default_factory=lambda: {})
 
 
 @dataclass
@@ -471,10 +471,10 @@ class LoopJmp:
 class Play:
     waveform: Waveform
     channels: Tuple[ChannelID]
-    keys: Sequence[DepKey] = None
+    keys_by_ch_by_domain: Dict[DepDomain,Dict[ChannelID,DepKey]] = None
     def __post_init__(self):
-        if self.keys is None:
-            self.keys = tuple(DepKey((),DepDomain.NODEP) for i in range(len(self.channels)))
+        if self.keys_by_ch_by_domain is None:
+            self.keys_by_ch_by_domain = {ch: {} for ch in self.channels}
     
 
 Command = Union[Increment, Set, LoopLabel, LoopJmp, Wait, Play]
@@ -525,7 +525,7 @@ class _TranslationState:
     label_num: int = dataclasses.field(default=0)
     commands: List[Command] = dataclasses.field(default_factory=list)
     iterations: List[int] = dataclasses.field(default_factory=list)
-    active_dep: Dict[GeneralizedChannel, DepKey] = dataclasses.field(default_factory=dict)
+    active_dep: Dict[GeneralizedChannel, Dict[DepDomain, DepKey]] = dataclasses.field(default_factory=dict)
     dep_states: Dict[GeneralizedChannel, Dict[DepKey, DepState]] = dataclasses.field(default_factory=dict)
     plain_value: Dict[GeneralizedChannel, Dict[DepDomain,float]] = dataclasses.field(default_factory=dict)
     resolution: float = dataclasses.field(default_factory=lambda: DEFAULT_INCREMENT_RESOLUTION)
@@ -559,7 +559,8 @@ class _TranslationState:
         # if not key != self.active_dep.get(channel, None)  or
         if self.plain_value.get(channel, {}).get(domain, None) != value:
             self.commands.append(Set(channel, ResolutionDependentValue((),(),offset=value), key))
-            self.active_dep[channel] = key
+            # there has to be no active dep when the value is not indexed?
+            # self.active_dep.setdefault(channel,{})[DepDomain.NODEP] = key
             self.plain_value.setdefault(channel,{})
             self.plain_value[channel][domain] = value    
     
@@ -610,16 +611,16 @@ class _TranslationState:
         if current_dep_state is None:
             assert all(it == 0 for it in self.iterations)
             self.commands.append(Set(channel, ResolutionDependentValue((),(),offset=base), dep_key))
-            self.active_dep[channel] = dep_key
+            self.active_dep.setdefault(channel,{})[dep_key.domain] = dep_key
 
         else:
             inc = new_dep_state.required_increment_from(previous=current_dep_state, factors=factors)
 
             # we insert all inc here (also inc == 0) because it signals to activate this amplitude register
             #not really sure if correct, but if dep states are the same, dont emit increment call.
-            if (inc or self.active_dep.get(channel, None) != dep_key) and new_dep_state != current_dep_state:
+            if (inc or self.active_dep.get(channel, {}).get(dep_key.domain) != dep_key) and new_dep_state != current_dep_state:
                 self.commands.append(Increment(channel, inc, dep_key))
-            self.active_dep[channel] = dep_key
+            self.active_dep.setdefault(channel,{})[dep_key.domain] = dep_key
         self.dep_states[channel][dep_key] = new_dep_state
         
     def _add_hold_node(self, node: LinSpaceHold):
@@ -634,7 +635,7 @@ class _TranslationState:
         if node.duration_factors:
             self._set_indexed_lin_time(node.duration_base,node.duration_factors)
             # raise NotImplementedError("TODO")
-            self.commands.append(Wait(None, self.active_dep[DepDomain.TIME_LIN]))
+            self.commands.append(Wait(None, {DepDomain.TIME_LIN: self.active_dep[DepDomain.TIME_LIN][DepDomain.TIME_LIN]}))
         else:
             self.commands.append(Wait(node.duration_base))
             
@@ -645,12 +646,17 @@ class _TranslationState:
                                            (node.scale_factors[ch], node.offset_factors[ch]),
                                            (DepDomain.WF_SCALE,DepDomain.WF_OFFSET)): 
                 if factors is None:
-                    self.set_non_indexed_value(ch, base, domain)
+                    continue
+                    # assume here that the waveform will have the correct settings the TransformingWaveform,
+                    # where no SimpleExpression is replaced now.
+                    # will yield the correct trafo already without having to make adjustments
+                    # self.set_non_indexed_value(ch, base, domain)
                 else:
                     key = DepKey.from_domain(factors, resolution=self.resolution, domain=domain)
                     self.set_indexed_value(key, ch, base, factors, key.domain)
                 
-        self.commands.append(Play(node.waveform, node.channels, keys=tuple(self.active_dep[ch] for ch in node.channels)))
+        self.commands.append(Play(node.waveform, node.channels,
+                                  keys_by_ch_by_domain={c: self.active_dep.get(c,{}) for c in node.channels}))
         
             
     def add_node(self, node: Union[LinSpaceNode, Sequence[LinSpaceNode]]):
