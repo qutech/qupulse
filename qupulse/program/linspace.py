@@ -469,7 +469,7 @@ class LoopLabel:
 class Increment:
     channel: Optional[GeneralizedChannel]
     value: Union[ResolutionDependentValue,Tuple[ResolutionDependentValue]]
-    dependency_key: DepKey
+    key: DepKey
 
 
 @dataclass
