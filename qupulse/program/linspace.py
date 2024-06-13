@@ -5,6 +5,7 @@ import numpy as np
 from dataclasses import dataclass
 from typing import Mapping, Optional, Sequence, ContextManager, Iterable, Tuple, Union, Dict, List, Iterator, Generic
 from enum import Enum
+from itertools import dropwhile
 
 from qupulse import ChannelID, MeasurementWindow
 from qupulse.parameter_scope import Scope, MappedScope, FrozenDict
@@ -122,6 +123,8 @@ class LinSpaceNode:
     """AST node for a program that supports linear spacing of set points as well as nested sequencing and repetitions"""
         
     def dependencies(self) -> Mapping[GeneralizedChannel, set]:
+        # doing this as a set _should_ get rid of non-active deps that are one level above?
+        #!!! 
         raise NotImplementedError
 
 @dataclass
@@ -144,17 +147,25 @@ class LinSpaceHold(LinSpaceNodeChannelSpecific):
     duration_base: TimeType
     duration_factors: Optional[Tuple[TimeType, ...]]
 
-    def dependencies(self) -> Mapping[GeneralizedChannel, set]:
-        return {idx: {factors}
-                for idx, factors in self.factors.items()
+    def dependencies(self) -> Mapping[DepDomain, Mapping[ChannelID, set]]:
+        return {dom: {ch: {factors}}
+                for dom, ch_to_factors in self._dep_by_domain().items()
+                for ch, factors in ch_to_factors.items()
                 if factors}
-
+    
+    def _dep_by_domain(self) -> Mapping[DepDomain, set]:
+        return {DepDomain.VOLTAGE: self.factors,
+                DepDomain.TIME_LIN: {DepDomain.TIME_LIN:self.duration_factors},}
+    
 
 @dataclass
 class LinSpaceArbitraryWaveform(LinSpaceNodeChannelSpecific):
     """This is just a wrapper to pipe arbitrary waveforms through the system."""
     waveform: Waveform
-
+    
+    def dependencies(self):
+        return {}
+    
 
 @dataclass
 class LinSpaceArbitraryWaveformIndexed(LinSpaceNodeChannelSpecific):
@@ -166,7 +177,17 @@ class LinSpaceArbitraryWaveformIndexed(LinSpaceNodeChannelSpecific):
         
     offset_bases: Dict[ChannelID, float]
     offset_factors: Dict[ChannelID, Optional[Tuple[float, ...]]]
-
+    
+    def dependencies(self) -> Mapping[DepDomain, Mapping[ChannelID, set]]:
+        return {dom: {ch: {factors}}
+                for dom, ch_to_factors in self._dep_by_domain().items()
+                for ch, factors in ch_to_factors.items()
+                if factors}
+    
+    def _dep_by_domain(self) -> Mapping[DepDomain, set]:
+        return {DepDomain.WF_SCALE: self.scale_factors,
+                DepDomain.WF_OFFSET: self.offset_factors,}
+    
 
 @dataclass
 class LinSpaceRepeat(LinSpaceNode):
@@ -177,8 +198,9 @@ class LinSpaceRepeat(LinSpaceNode):
     def dependencies(self):
         dependencies = {}
         for node in self.body:
-            for idx, deps in node.dependencies().items():
-                dependencies.setdefault(idx, set()).update(deps)
+            for dom, ch_to_deps in node.dependencies().items():
+                for ch, deps in ch_to_deps.items():
+                    dependencies.setdefault(dom,{}).setdefault(ch, set()).update(deps)
         return dependencies
 
 
@@ -193,11 +215,12 @@ class LinSpaceIter(LinSpaceNode):
     def dependencies(self):
         dependencies = {}
         for node in self.body:
-            for idx, deps in node.dependencies().items():
-                # remove the last elemt in index because this iteration sets it -> no external dependency
-                shortened = {dep[:-1] for dep in deps}
-                if shortened != {()}:
-                    dependencies.setdefault(idx, set()).update(shortened)
+            for dom, ch_to_deps in node.dependencies().items():
+                for ch, deps in ch_to_deps.items():
+                    # remove the last elemt in index because this iteration sets it -> no external dependency
+                    shortened = {dep[:-1] for dep in deps}
+                    if shortened != {()}:
+                        dependencies.setdefault(dom,{}).setdefault(ch, set()).update(shortened)
         return dependencies
 
 
@@ -537,13 +560,52 @@ class _TranslationState:
         self.label_num += 1
         return label, jmp
 
-    def get_dependency_state(self, dependencies: Mapping[GeneralizedChannel, set]):
-        return {
-            self.dep_states.get(ch, {}).get(DepKey.from_domain(dep, self.resolution), None)
-            for ch, deps in dependencies.items()
-            for dep in deps
-        }
-
+    def get_dependency_state(self, dependencies: Mapping[DepDomain, Mapping[GeneralizedChannel, set]]):
+        dom_to_ch_to_depstates = {}
+        
+        for dom, ch_to_deps in dependencies.items():
+            dom_to_ch_to_depstates.setdefault(dom,{})
+            for ch, deps in ch_to_deps.items():
+                dom_to_ch_to_depstates[dom].setdefault(ch,set())
+                for dep in deps:
+                    dom_to_ch_to_depstates[dom][ch].add(self.dep_states.get(ch, {}).get(
+                        DepKey.from_domain(dep, self.resolution, dom),None))
+        
+        return dom_to_ch_to_depstates
+        # return {
+        #     dom: self.dep_states.get(ch, {}).get(DepKey.from_domain(dep, self.resolution, dom),
+        #         None)
+        #     for dom, ch_to_deps in dependencies.items()
+        #     for ch, deps in ch_to_deps.items()
+        #     for dep in deps
+        # }
+    
+    def compare_ignoring_post_trailing_zeros(self,
+                                             pre_state: Mapping[DepDomain, Mapping[GeneralizedChannel, set]],
+                                             post_state: Mapping[DepDomain, Mapping[GeneralizedChannel, set]]) -> bool:
+        
+        def reduced_or_none(dep_state: DepState) -> Union[DepState,None]:
+            new_iterations = tuple(dropwhile(lambda x: x == 0, reversed(dep_state.iterations)))[::-1]
+            return DepState(dep_state.base, new_iterations) if len(new_iterations)>0 else None
+        
+        has_changed = False
+        dom_keys = set(pre_state.keys()).union(post_state.keys())
+        for dom_key in dom_keys:
+            pre_state_dom, post_state_dom = pre_state.get(dom_key,{}), post_state.get(dom_key,{})
+            ch_keys = set(pre_state_dom.keys()).union(post_state_dom.keys())
+            for ch_key in ch_keys:
+                pre_state_dom_ch, post_state_dom_ch = pre_state_dom.get(ch_key,set()), post_state_dom.get(ch_key,set())
+                # reduce the depStates to the ones which do not just contain zeros
+                reduced_pre_set = set(reduced_or_none(dep_state) for dep_state in pre_state_dom_ch
+                                      if dep_state is not None) - {None}
+                reduced_post_set = set(reduced_or_none(dep_state) for dep_state in post_state_dom_ch
+                                       if dep_state is not None) - {None}
+                
+                if not reduced_post_set <= reduced_pre_set:
+                    has_changed == True
+                    
+        return has_changed
+    
     def set_voltage(self, channel: ChannelID, value: float):
         self.set_non_indexed_value(channel, value, domain=DepDomain.VOLTAGE)
         
@@ -562,7 +624,7 @@ class _TranslationState:
             # there has to be no active dep when the value is not indexed?
             # self.active_dep.setdefault(channel,{})[DepDomain.NODEP] = key
             self.plain_value.setdefault(channel,{})
-            self.plain_value[channel][domain] = value    
+            self.plain_value[channel][domain] = value
     
     def _add_repetition_node(self, node: LinSpaceRepeat):
         pre_dep_state = self.get_dependency_state(node.dependencies())
@@ -571,14 +633,20 @@ class _TranslationState:
         self.commands.append(label)
         self.add_node(node.body)
         post_dep_state = self.get_dependency_state(node.dependencies())
-        if pre_dep_state != post_dep_state:
+        # the last index in the iterations may not be initialized in pre_dep_state if the outer loop only sets an index
+        # after this loop is in the sequence of the current level,
+        # meaning that an trailing 0 at the end of iterations of each depState in the post_dep_state
+        # should be ignored when comparing.
+        # zeros also should only mean a "Set" command, which is not harmful if executed multiple times.
+        # if pre_dep_state != post_dep_state:
+        if self.compare_ignoring_post_trailing_zeros(pre_dep_state,post_dep_state):
             # hackedy
             self.commands.pop(initial_position)
             self.commands.append(label)
             label.count -= 1
             self.add_node(node.body)
         self.commands.append(jmp)
-
+    
     def _add_iteration_node(self, node: LinSpaceIter):
         self.iterations.append(0)
         self.add_node(node.body)
