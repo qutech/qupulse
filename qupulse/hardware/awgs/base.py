@@ -283,7 +283,7 @@ class ProgramEntry:
                 # play is handled by transforming the sampled waveform
                 continue
             elif isinstance(command, Increment):
-                if command.dependency_key.domain is not DepDomain.VOLTAGE:
+                if command.key.domain is not DepDomain.VOLTAGE:
                     #for sweeps of wf-scale and wf-offset, the channel amplitudes/offsets are already considered in the wf sampling.
                     continue
                 ch_trafo = self._channel_transformations()[command.channel]

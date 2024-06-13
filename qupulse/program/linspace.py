@@ -312,7 +312,7 @@ class LinSpaceBuilder(ProgramBuilder):
                                bases=bases,
                                factors=factors,
                                duration_base=duration_base,
-                               duration_factors=duration_factors)
+                               duration_factors=tuple(duration_factors))
 
         self._stack[-1].append(set_cmd)
 
@@ -607,7 +607,7 @@ class _TranslationState:
         return has_changed
     
     def set_voltage(self, channel: ChannelID, value: float):
-        self.set_non_indexed_value(channel, value, domain=DepDomain.VOLTAGE)
+        self.set_non_indexed_value(channel, value, domain=DepDomain.VOLTAGE, always_emit_set=True)
         
     def set_wf_scale(self, channel: ChannelID, value: float):
         self.set_non_indexed_value(channel, value, domain=DepDomain.WF_SCALE)
@@ -615,11 +615,11 @@ class _TranslationState:
     def set_wf_offset(self, channel: ChannelID, value: float):
         self.set_non_indexed_value(channel, value, domain=DepDomain.WF_OFFSET)
             
-    def set_non_indexed_value(self, channel: GeneralizedChannel, value: float, domain: DepDomain):
+    def set_non_indexed_value(self, channel: GeneralizedChannel, value: float, domain: DepDomain, always_emit_set: bool=False):
         key = DepKey((),domain)
         # I do not completely get why it would have to be set again if not in active dep.
         # if not key != self.active_dep.get(channel, None)  or
-        if self.plain_value.get(channel, {}).get(domain, None) != value:
+        if self.plain_value.get(channel, {}).get(domain, None) != value or always_emit_set:
             self.commands.append(Set(channel, ResolutionDependentValue((),(),offset=value), key))
             # there has to be no active dep when the value is not indexed?
             # self.active_dep.setdefault(channel,{})[DepDomain.NODEP] = key
@@ -661,7 +661,7 @@ class _TranslationState:
         
     def _set_indexed_voltage(self, channel: ChannelID, base: float, factors: Sequence[float]):
         key = DepKey.from_voltages(voltages=factors, resolution=self.resolution)
-        self.set_indexed_value(key, channel, base, factors, domain=DepDomain.VOLTAGE)
+        self.set_indexed_value(key, channel, base, factors, domain=DepDomain.VOLTAGE, always_emit_incr=True)
     
     def _set_indexed_lin_time(self, base: TimeType, factors: Sequence[TimeType]):
         key = DepKey.from_lin_times(times=factors, resolution=self.resolution)
@@ -669,7 +669,7 @@ class _TranslationState:
 
     def set_indexed_value(self, dep_key: DepKey, channel: GeneralizedChannel,
                           base: Union[float,TimeType], factors: Sequence[Union[float,TimeType]],
-                          domain: DepDomain):
+                          domain: DepDomain, always_emit_incr: bool = False):
         new_dep_state = DepState(
             base,
             iterations=tuple(self.iterations)
@@ -685,8 +685,12 @@ class _TranslationState:
             inc = new_dep_state.required_increment_from(previous=current_dep_state, factors=factors)
 
             # we insert all inc here (also inc == 0) because it signals to activate this amplitude register
-            #not really sure if correct, but if dep states are the same, dont emit increment call.
-            if (inc or self.active_dep.get(channel, {}).get(dep_key.domain) != dep_key) and new_dep_state != current_dep_state:
+            # -> since this is not necessary for other domains, make it stricter and bypass if necessary for voltage.
+            if ((inc or self.active_dep.get(channel, {}).get(dep_key.domain) != dep_key) and new_dep_state != current_dep_state)\
+                or always_emit_incr:
+                # if always_emit_incr and new_dep_state == current_dep_state, inc should be zero.
+                if always_emit_incr and new_dep_state == current_dep_state:
+                    assert inc==0.
                 self.commands.append(Increment(channel, inc, dep_key))
             self.active_dep.setdefault(channel,{})[dep_key.domain] = dep_key
         self.dep_states[channel][dep_key] = new_dep_state
