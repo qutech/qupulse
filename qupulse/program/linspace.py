@@ -3,15 +3,20 @@ import contextlib
 import dataclasses
 import numpy as np
 from dataclasses import dataclass
-from typing import Mapping, Optional, Sequence, ContextManager, Iterable, Tuple, Union, Dict, List, Iterator, Generic
+from typing import Mapping, Optional, Sequence, ContextManager, Iterable, Tuple, Union, Dict, List, Iterator, Generic,\
+    Set as TypingSet, Callable
 from enum import Enum
-from itertools import dropwhile
+from itertools import dropwhile, count
+from numbers import Real, Number
+
 
 from qupulse import ChannelID, MeasurementWindow
 from qupulse.parameter_scope import Scope, MappedScope, FrozenDict
+# from qupulse.pulses.pulse_template import PulseTemplate
+# from qupulse.pulses import ForLoopPT
 from qupulse.program import ProgramBuilder, HardwareTime, HardwareVoltage, Waveform, RepetitionCount, TimeType
-from qupulse.expressions.simple import SimpleExpression, NumVal
-from qupulse.program.waveforms import MultiChannelWaveform, TransformingWaveform
+from qupulse.expressions.simple import SimpleExpression, NumVal, SimpleExpressionStepped
+from qupulse.program.waveforms import MultiChannelWaveform, TransformingWaveform, WaveformCollection
 
 from qupulse.program.transformation import ChainedTransformation, ScalingTransformation, OffsetTransformation,\
     IdentityTransformation, ParallelChannelTransformation, Transformation
@@ -30,9 +35,50 @@ class DepDomain(Enum):
     FREQUENCY = -3
     WF_SCALE = -4
     WF_OFFSET = -5
+    STEP_INDEX = -6
     NODEP = None
 
-GeneralizedChannel = Union[DepDomain,ChannelID]
+
+class InstanceCounterMeta(type):
+    def __init__(cls, name, bases, dct):
+        super().__init__(name, bases, dct)
+        cls._instance_tracker = {}
+
+    def __call__(cls, *args, **kwargs):
+        normalized_args = cls._normalize_args(*args, **kwargs)
+        # Create a key based on the arguments
+        key = tuple(sorted(normalized_args.items()))
+        cls._instance_tracker.setdefault(key,count(start=0))
+        instance = super().__call__(*args, **kwargs)
+        instance._channel_num = next(cls._instance_tracker[key])
+        return instance
+    
+    def _normalize_args(cls, *args, **kwargs):
+        # Get the parameter names from the __init__ method
+        param_names = cls.__init__.__code__.co_varnames[1:cls.__init__.__code__.co_argcount]
+        # Create a dictionary with default values
+        normalized_args = dict(zip(param_names, args))
+        # Update with any kwargs
+        normalized_args.update(kwargs)
+        return normalized_args
+
+@dataclass
+class StepRegister(metaclass=InstanceCounterMeta):
+    #set this as name of sweepval var
+    register_name: str
+    register_nesting: int
+    #should be increased by metaclass every time the class is instantiated with the same arguments
+    _channel_num: int = dataclasses.field(default_factory=lambda: None)
+    
+    @property
+    def reg_var_name(self):
+        return self.register_name+'_'+str(self.register_num)+'_'+str(self._channel_num)
+    
+    def __hash__(self):
+        return hash((self.register_name,self.register_nesting,self._channel_num))
+    
+
+GeneralizedChannel = Union[DepDomain,ChannelID,StepRegister]
 
 
 class ResolutionDependentValue(Generic[NumVal]):
@@ -146,16 +192,17 @@ class LinSpaceHold(LinSpaceNodeChannelSpecific):
 
     duration_base: TimeType
     duration_factors: Optional[Tuple[TimeType, ...]]
-
+    
     def dependencies(self) -> Mapping[DepDomain, Mapping[ChannelID, set]]:
         return {dom: {ch: {factors}}
                 for dom, ch_to_factors in self._dep_by_domain().items()
                 for ch, factors in ch_to_factors.items()
                 if factors}
     
-    def _dep_by_domain(self) -> Mapping[DepDomain, set]:
+    def _dep_by_domain(self) -> Mapping[DepDomain, Mapping[GeneralizedChannel, set]]:
         return {DepDomain.VOLTAGE: self.factors,
-                DepDomain.TIME_LIN: {DepDomain.TIME_LIN:self.duration_factors},}
+                DepDomain.TIME_LIN: {DepDomain.TIME_LIN:self.duration_factors},
+                }
     
 
 @dataclass
@@ -170,7 +217,7 @@ class LinSpaceArbitraryWaveform(LinSpaceNodeChannelSpecific):
 @dataclass
 class LinSpaceArbitraryWaveformIndexed(LinSpaceNodeChannelSpecific):
     """This is just a wrapper to pipe arbitrary waveforms through the system."""
-    waveform: Waveform
+    waveform: Union[Waveform,WaveformCollection]
     
     scale_bases: Dict[ChannelID, float]
     scale_factors: Dict[ChannelID, Optional[Tuple[float, ...]]]
@@ -178,16 +225,27 @@ class LinSpaceArbitraryWaveformIndexed(LinSpaceNodeChannelSpecific):
     offset_bases: Dict[ChannelID, float]
     offset_factors: Dict[ChannelID, Optional[Tuple[float, ...]]]
     
-    def dependencies(self) -> Mapping[DepDomain, Mapping[ChannelID, set]]:
+    index_factors: Optional[Dict[StepRegister,Tuple[int, ...]]] = dataclasses.field(default_factory=lambda: None)
+    
+    def __post_init__(self):
+        #somewhat assert the integrity in this case.
+        if isinstance(self.waveform,WaveformCollection):
+            assert self.index_factors is not None
+    
+    def dependencies(self) -> Mapping[DepDomain, Mapping[GeneralizedChannel, set]]:
         return {dom: {ch: {factors}}
                 for dom, ch_to_factors in self._dep_by_domain().items()
                 for ch, factors in ch_to_factors.items()
                 if factors}
     
-    def _dep_by_domain(self) -> Mapping[DepDomain, set]:
+    def _dep_by_domain(self) -> Mapping[DepDomain, Mapping[GeneralizedChannel, set]]:
         return {DepDomain.WF_SCALE: self.scale_factors,
-                DepDomain.WF_OFFSET: self.offset_factors,}
+                DepDomain.WF_OFFSET: self.offset_factors,
+                DepDomain.STEP_INDEX: self.index_factors}
     
+    @property
+    def step_channels(self) -> Optional[Tuple[StepRegister]]:
+        return tuple(self.index_factors.keys()) if self.index_factors else None
 
 @dataclass
 class LinSpaceRepeat(LinSpaceNode):
@@ -211,13 +269,15 @@ class LinSpaceIter(LinSpaceNode):
     Offsets and spacing are stored in the hold node."""
     body: Tuple[LinSpaceNode, ...]
     length: int
-
+    
+    to_be_stepped: bool
+    
     def dependencies(self):
         dependencies = {}
         for node in self.body:
             for dom, ch_to_deps in node.dependencies().items():
                 for ch, deps in ch_to_deps.items():
-                    # remove the last elemt in index because this iteration sets it -> no external dependency
+                    # remove the last element in index because this iteration sets it -> no external dependency
                     shortened = {dep[:-1] for dep in deps}
                     if shortened != {()}:
                         dependencies.setdefault(dom,{}).setdefault(ch, set()).update(shortened)
@@ -235,6 +295,8 @@ class LinSpaceBuilder(ProgramBuilder):
 
     def __init__(self,
                  # channels: Tuple[ChannelID, ...]
+                 to_stepping_repeat: TypingSet[Union[str,'ForLoopPT']] = set()
+                 # identifier, loop_index or ForLoopPT which is to be stepped.
                  ):
         super().__init__()
         # self._name_to_idx = {name: idx for idx, name in enumerate(channels)}
@@ -242,6 +304,7 @@ class LinSpaceBuilder(ProgramBuilder):
 
         self._stack = [[]]
         self._ranges = []
+        self._to_stepping_repeat = to_stepping_repeat
 
     def _root(self):
         return self._stack[0]
@@ -249,11 +312,17 @@ class LinSpaceBuilder(ProgramBuilder):
     def _get_rng(self, idx_name: str) -> range:
         return self._get_ranges()[idx_name]
 
-    def inner_scope(self, scope: Scope) -> Scope:
+    def inner_scope(self, scope: Scope, pt_obj: 'ForLoopPT') -> Scope:
         """This function is necessary to inject program builder specific parameter implementations into the build
         process."""
         if self._ranges:
-            name, _ = self._ranges[-1]
+            name, rng = self._ranges[-1]
+            if pt_obj in self._to_stepping_repeat or pt_obj.identifier in self._to_stepping_repeat \
+                or pt_obj.loop_index in self._to_stepping_repeat:
+                    # the nesting level should be simply the amount of this type in the scope.
+                    nest = len(tuple(v for v in scope.values() if isinstance(v,SimpleExpressionStepped)))
+                    return scope.overwrite({name:SimpleExpressionStepped(
+                        base=0,offsets={name: 1},step_nesting_level=nest+1,rng=rng)})
             return scope.overwrite({name: SimpleExpression(base=0, offsets={name: 1})})
         else:
             return scope
@@ -312,60 +381,126 @@ class LinSpaceBuilder(ProgramBuilder):
                                bases=bases,
                                factors=factors,
                                duration_base=duration_base,
-                               duration_factors=tuple(duration_factors))
+                               duration_factors=tuple(duration_factors),
+                               )
 
         self._stack[-1].append(set_cmd)
 
-    def play_arbitrary_waveform(self, waveform: Waveform):
+    def play_arbitrary_waveform(self, waveform: Union[Waveform,WaveformCollection],
+                                stepped_var_list: Optional[List[Tuple[str,SimpleExpressionStepped]]] = None):
         
-        #recognize voltage trafo sweep syntax from a transforming waveform. other sweepable things may need different approaches.
-        if not isinstance(waveform,TransformingWaveform):
+        # recognize voltage trafo sweep syntax from a transforming waveform.
+        # other sweepable things may need different approaches.
+        if not isinstance(waveform,(TransformingWaveform,WaveformCollection)):
+            assert stepped_var_list is None
             return self._stack[-1].append(LinSpaceArbitraryWaveform(waveform=waveform,channels=waveform.defined_channels,))
         
-        #test for transformations that contain SimpleExpression
-        wf_transformation = waveform.transformation
+            
+        #should be sufficient to test the first wf, as all should have the same trafo
+        waveform_propertyextractor = waveform
+        while isinstance(waveform_propertyextractor,WaveformCollection):
+            waveform_propertyextractor = waveform.waveform_collection[0] 
         
-        # chainedTransformation should now have flat hierachy.        
-        collected_trafos, dependent_vals_flag = collect_scaling_and_offset_per_channel(waveform.defined_channels,wf_transformation)
+        if isinstance(waveform_propertyextractor,TransformingWaveform):
+            #test for transformations that contain SimpleExpression
+            wf_transformation = waveform_propertyextractor.transformation
+            
+            # chainedTransformation should now have flat hierachy.        
+            collected_trafos, dependent_trafo_vals_flag = collect_scaling_and_offset_per_channel(
+                waveform_propertyextractor.defined_channels,wf_transformation)
+        else:
+            dependent_trafo_vals_flag = False
         
         #fast track
-        if not dependent_vals_flag:
+        if not dependent_trafo_vals_flag and not isinstance(waveform,WaveformCollection):
             return self._stack[-1].append(LinSpaceArbitraryWaveform(waveform=waveform,channels=waveform.defined_channels,))
-        
+    
         ranges = self._get_ranges()
+        ranges_list = list(ranges)
+        index_factors = {}
+        
+        if stepped_var_list:
+            # the index ordering shall be with the last index changing fastest.
+            # (assuming the WaveformColleciton will be flattened)
+            # this means increments on last shall be 1, next lower 1*len(fastest),
+            # next 1*len(fastest)*len(second_fastest),... -> product(higher_reg_range_lens)
+            # total_reg_len = len(stepped_var_list)
+            reg_lens = tuple(len(v.rng) for s,v in stepped_var_list)
+            total_rng_len = np.cumprod(reg_lens)[-1]
+            reg_incr_values = list(np.cumprod(reg_lens[::-1]))[::-1][1:] + [1,]
+            
+            assert isinstance(waveform,WaveformCollection)
+            
+            for reg_num,(var_name,value) in enumerate(stepped_var_list):
+                # this should be given anyway:
+                assert isinstance(value, SimpleExpressionStepped)
+                
+                """
+                # by definition, every var_name should be relevant for the waveform/
+                # has been included in the nested WaveformCollection.
+                # so, each time this code is called, a new waveform node containing this is called,
+                # and one can/must increase the offset by the 
+                
+                # assert value.base += total_rng_len
+                """
+                
+                assert value.base == 0
+
+                offsets = value.offsets
+                #there can never be more than one key in this
+                # (nowhere is an evaluation of arithmetics betwen steppings intended)
+                assert len(offsets)==1
+                assert all(v==1 for v in offsets.values())
+                assert set(offsets.keys())=={var_name,}
+                
+                # this makes the search through ranges pointless; have tuple of zeros
+                # except for one inc at the position of the stepvar in the ranges dict
+                
+                incs = [0 for v in ranges_list]
+                incs[ranges_list.index(var_name)] = reg_incr_values[reg_num]
+                
+                #needs to be new "channel" each time? should be handled by metaclass
+                reg_channel = StepRegister(var_name,reg_num)
+                index_factors[reg_channel] = tuple(incs)
+                # bases[reg_channel] = value.base
+
         scale_factors, offset_factors = {}, {}
         scale_bases, offset_bases = {}, {}
         
-        for ch_name,scale_offset_dict in collected_trafos.items():
-            for bases,factors,key in zip((scale_bases, offset_bases),(scale_factors, offset_factors),('s','o')):
-                value = scale_offset_dict[key]
-                if isinstance(value, float):
-                    bases[ch_name] = value
-                    factors[ch_name] = None
-                    continue
-                offsets = value.offsets
-                base = value.base
-                incs = []
-                for rng_name, rng in ranges.items():
-                    start = 0.
-                    step = 0.
-                    offset = offsets.get(rng_name, None)
-                    if offset:
-                        start += rng.start * offset
-                        step += rng.step * offset
-                    base += start
-                    incs.append(step)
-                factors[ch_name] = tuple(incs)
-                bases[ch_name] = base
+        if dependent_trafo_vals_flag:
+            for ch_name,scale_offset_dict in collected_trafos.items():
+                for bases,factors,key in zip((scale_bases, offset_bases),(scale_factors, offset_factors),('s','o')):
+                    value = scale_offset_dict[key]
+                    if isinstance(value, float):
+                        bases[ch_name] = value
+                        factors[ch_name] = None
+                        continue
+                    offsets = value.offsets
+                    base = value.base
+                    incs = []
+                    for rng_name, rng in ranges.items():
+                        start = 0.
+                        step = 0.
+                        offset = offsets.get(rng_name, None)
+                        if offset:
+                            start += rng.start * offset
+                            step += rng.step * offset
+                        base += start
+                        incs.append(step)
+                    factors[ch_name] = tuple(incs)
+                    bases[ch_name] = base
 
-        
-        return self._stack[-1].append(LinSpaceArbitraryWaveformIndexed(waveform=waveform,
-                                                                       channels=waveform.defined_channels,
-                                                                       scale_bases=scale_bases,
-                                                                       scale_factors=scale_factors,
-                                                                       offset_bases=offset_bases,
-                                                                       offset_factors=offset_factors,
-                                                                       ))
+        # assert ba        
+
+        return self._stack[-1].append(LinSpaceArbitraryWaveformIndexed(
+            waveform=waveform,
+            channels=waveform_propertyextractor.defined_channels.union(set(index_factors.keys())),
+            scale_bases=scale_bases,
+            scale_factors=scale_factors,
+            offset_bases=offset_bases,
+            offset_factors=offset_factors,
+            index_factors=index_factors,
+            ))
 
     def measure(self, measurements: Optional[Sequence[MeasurementWindow]]):
         """Ignores measurements"""
@@ -390,6 +525,7 @@ class LinSpaceBuilder(ProgramBuilder):
         raise NotImplementedError('Not implemented yet (postponed)')
 
     def with_iteration(self, index_name: str, rng: range,
+                       pt_obj: 'ForLoopPT',
                        measurements: Optional[Sequence[MeasurementWindow]] = None) -> Iterable['ProgramBuilder']:
         if len(rng) == 0:
             return
@@ -399,8 +535,71 @@ class LinSpaceBuilder(ProgramBuilder):
         cmds = self._stack.pop()
         self._ranges.pop()
         if cmds:
-            self._stack[-1].append(LinSpaceIter(body=tuple(cmds), length=len(rng)))
+            stepped = False
+            if pt_obj in self._to_stepping_repeat or pt_obj.identifier in self._to_stepping_repeat \
+                or pt_obj.loop_index in self._to_stepping_repeat:
+                stepped = True
+            self._stack[-1].append(LinSpaceIter(body=tuple(cmds), length=len(rng), to_be_stepped=stepped))
+            
+            
+    def evaluate_nested_stepping(self, scope: Scope, parameter_names: set[str]) -> bool:
+        
+        stepped_vals = {k:v for k,v in scope.items() if isinstance(v,SimpleExpressionStepped)}
+        #when overlap, then the PT is part of the stepped progression
+        if stepped_vals.keys() & parameter_names:
+            return True   
+        return False     
+    
+    def dispatch_to_stepped_wf_or_hold(self,
+            build_func: Callable[[Mapping[str, Real],Dict[ChannelID, Optional[ChannelID]]],Optional[Waveform]],
+            build_parameters: Scope,
+            parameter_names: set[str],
+            channel_mapping: Dict[ChannelID, Optional[ChannelID]],
+            #measurements tbd
+            global_transformation: Optional["Transformation"]) -> None:
+        
+        stepped_vals = {k:v for k,v in build_parameters.items()
+                        if isinstance(v,SimpleExpressionStepped) and k in parameter_names}
+        sorted_steps = list(sorted(stepped_vals.items(), key=lambda item: item[1].step_nesting_level))
 
+        def build_nested_wf_colls(remaining_ranges: List[Tuple], fixed_elements: List[Tuple] = []):
+            
+            if len(remaining_ranges) == 0:
+                inner_scope = build_parameters.overwrite(dict(fixed_elements))
+                #by now, no SimpleExpressionStepped should remain here.
+                assert not any(isinstance(v,SimpleExpressionStepped) for v in inner_scope.values())
+                waveform = build_func(inner_scope,channel_mapping=channel_mapping)
+                if global_transformation:
+                    waveform = TransformingWaveform.from_transformation(waveform, global_transformation)
+                #this case should not happen, should have been caught beforehand:
+                # or maybe not, if e.g. amp is zero for some reason
+                # assert waveform.constant_value_dict() is None
+                return waveform
+            else:
+                return WaveformCollection(
+                    tuple(build_nested_wf_colls(remaining_ranges[1:],
+                          fixed_elements+[(remaining_ranges[0][0],remaining_ranges[0][1].value({remaining_ranges[0][0]:it})),])
+                          for it in remaining_ranges[0][1].rng))
+        
+        # not completely convinced this works as intended.
+        # doesn't this - also in pulse_template program creation - lead to complications with ParallelConstantChannelTrafo?
+        # dirty, quick workaround - if this doesnt work, assume it is also not constant:
+        try:
+            potential_waveform = build_func(build_parameters,channel_mapping=channel_mapping)
+            if global_transformation:
+                potential_waveform = TransformingWaveform.from_transformation(potential_waveform, global_transformation)
+                constant_values = potential_waveform.constant_value_dict()
+        except:
+            constant_values = None
+        
+        if constant_values is None:
+            wf_coll = build_nested_wf_colls(sorted_steps)
+            self.play_arbitrary_waveform(wf_coll,sorted_steps)
+        else:
+            # in the other case, all dependencies _should_ be on amp and length, which is covered by hold appropriately
+            # and doesn't need to be stepped?
+            self.hold_voltage(potential_waveform.duration, constant_values)
+    
     def to_program(self) -> Optional[Sequence[LinSpaceNode]]:
         if self._root():
             return self._root()
@@ -492,12 +691,14 @@ class LoopJmp:
 
 @dataclass
 class Play:
-    waveform: Waveform
-    channels: Tuple[ChannelID]
-    keys_by_ch_by_domain: Dict[DepDomain,Dict[ChannelID,DepKey]] = None
+    waveform: Union[Waveform,WaveformCollection]
+    play_channels: Tuple[ChannelID]
+    step_channels: Optional[Tuple[StepRegister]] = None
+    #actually did the name
+    keys_by_domain_by_ch: Dict[ChannelID,Dict[DepDomain,DepKey]] = None
     def __post_init__(self):
-        if self.keys_by_ch_by_domain is None:
-            self.keys_by_ch_by_domain = {ch: {} for ch in self.channels}
+        if self.keys_by_domain_by_ch is None:
+            self.keys_by_domain_by_ch = {ch: {} for ch in self.channels}
     
 
 Command = Union[Increment, Set, LoopLabel, LoopJmp, Wait, Play]
@@ -615,7 +816,8 @@ class _TranslationState:
     def set_wf_offset(self, channel: ChannelID, value: float):
         self.set_non_indexed_value(channel, value, domain=DepDomain.WF_OFFSET)
             
-    def set_non_indexed_value(self, channel: GeneralizedChannel, value: float, domain: DepDomain, always_emit_set: bool=False):
+    def set_non_indexed_value(self, channel: GeneralizedChannel, value: float,
+                              domain: DepDomain, always_emit_set: bool=False):
         key = DepKey((),domain)
         # I do not completely get why it would have to be set again if not in active dep.
         # if not key != self.active_dep.get(channel, None)  or
@@ -648,6 +850,7 @@ class _TranslationState:
         self.commands.append(jmp)
     
     def _add_iteration_node(self, node: LinSpaceIter):
+        
         self.iterations.append(0)
         self.add_node(node.body)
 
@@ -686,7 +889,8 @@ class _TranslationState:
 
             # we insert all inc here (also inc == 0) because it signals to activate this amplitude register
             # -> since this is not necessary for other domains, make it stricter and bypass if necessary for voltage.
-            if ((inc or self.active_dep.get(channel, {}).get(dep_key.domain) != dep_key) and new_dep_state != current_dep_state)\
+            if ((inc or self.active_dep.get(channel, {}).get(dep_key.domain) != dep_key)
+                and new_dep_state != current_dep_state)\
                 or always_emit_incr:
                 # if always_emit_incr and new_dep_state == current_dep_state, inc should be zero.
                 if always_emit_incr and new_dep_state == current_dep_state:
@@ -713,22 +917,31 @@ class _TranslationState:
             
     def _add_indexed_play_node(self, node: LinSpaceArbitraryWaveformIndexed):
         
-        for ch in node.channels:
-            for base,factors,domain in zip((node.scale_bases[ch], node.offset_bases[ch]),
-                                           (node.scale_factors[ch], node.offset_factors[ch]),
-                                           (DepDomain.WF_SCALE,DepDomain.WF_OFFSET)): 
-                if factors is None:
-                    continue
-                    # assume here that the waveform will have the correct settings the TransformingWaveform,
-                    # where no SimpleExpression is replaced now.
-                    # will yield the correct trafo already without having to make adjustments
-                    # self.set_non_indexed_value(ch, base, domain)
-                else:
-                    key = DepKey.from_domain(factors, resolution=self.resolution, domain=domain)
-                    self.set_indexed_value(key, ch, base, factors, key.domain)
-                
-        self.commands.append(Play(node.waveform, node.channels,
-                                  keys_by_ch_by_domain={c: self.active_dep.get(c,{}) for c in node.channels}))
+        #assume this as criterion:
+        if len(node.scale_bases) and len(node.offset_bases):
+            for ch in node.play_channels:
+                for base,factors,domain in zip((node.scale_bases[ch], node.offset_bases[ch]),
+                                               (node.scale_factors[ch], node.offset_factors[ch]),
+                                               (DepDomain.WF_SCALE,DepDomain.WF_OFFSET)): 
+                    if factors is None:
+                        continue
+                        # assume here that the waveform will have the correct settings the TransformingWaveform,
+                        # where no SimpleExpression is replaced now.
+                        # will yield the correct trafo already without having to make adjustments
+                        # self.set_non_indexed_value(ch, base, domain)
+                    else:
+                        key = DepKey.from_domain(factors, resolution=self.resolution, domain=domain)
+                        self.set_indexed_value(key, ch, base, factors, key.domain)
+            
+        for st_ch, st_factors in node.index_factors.items():
+            #this should not happen:
+            assert st_factors is not None
+            key = DepKey.from_domain(st_factors, resolution=self.resolution, domain=DepDomain.STEP_INDEX)
+            self.set_indexed_value(key, st_ch, 0, st_factors, key.domain)
+            
+            
+        self.commands.append(Play(node.waveform, node.channels, step_channels=node.step_channels,
+                                  keys_by_domain_by_ch={c: self.active_dep.get(c,{}) for c in node.channels}))
         
             
     def add_node(self, node: Union[LinSpaceNode, Sequence[LinSpaceNode]]):

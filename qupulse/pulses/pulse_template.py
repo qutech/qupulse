@@ -28,6 +28,9 @@ from qupulse.pulses.measurement import MeasurementDefiner, MeasurementDeclaratio
 from qupulse.parameter_scope import Scope, DictScope
 
 from qupulse.program import ProgramBuilder, default_program_builder, Program
+from qupulse.program.linspace import LinSpaceBuilder
+
+from qupulse.expressions.simple import SimpleExpressionStepped
 
 __all__ = ["PulseTemplate", "AtomicPulseTemplate", "DoubleParameterNameException", "MappingTuple",
            "UnknownVolatileParameter"]
@@ -513,7 +516,19 @@ class AtomicPulseTemplate(PulseTemplate, MeasurementDefiner):
         ### current behavior (same as previously): only adds EXEC Loop and measurements if a waveform exists.
         ### measurements are directly added to parent_loop (to reflect behavior of Sequencer + MultiChannelProgram)
         assert not scope.get_volatile_parameters().keys() & self.parameter_names, "AtomicPT cannot be volatile"
-
+        
+        
+        # "hackedy":
+        if program_builder.evaluate_nested_stepping(scope,self.parameter_names):
+            program_builder.dispatch_to_stepped_wf_or_hold(build_func=self.build_waveform,
+                                                           build_parameters=scope,
+                                                           parameter_names=self.parameter_names,
+                                                           channel_mapping=channel_mapping,
+                                                           #measurements
+                                                           global_transformation=global_transformation
+                                                           )
+            return
+        
         waveform = self.build_waveform(parameters=scope,
                                        channel_mapping=channel_mapping)
         if waveform:

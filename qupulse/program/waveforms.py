@@ -1291,3 +1291,31 @@ class ReversedWaveform(Waveform):
 
     def reversed(self) -> 'Waveform':
         return self._inner
+
+
+
+class WaveformCollection():
+    
+    def __init__(self, waveform_collection: Tuple[Union[Waveform,"WaveformCollection"]]):
+        
+        self._waveform_collection = tuple(waveform_collection)
+        
+    @property
+    def waveform_collection(self):
+        return self._waveform_collection
+    
+    @property
+    def nesting_level(self):
+        #assume it is balanced for now.
+        if isinstance(self.waveform_collection[0],type(self)):
+            return self.waveform_collection[0].nesting_level+1
+        return 0
+    
+    def flatten(self) -> Tuple[Waveform]:
+        def flatten_tuple(nested_tuple):
+            for item in nested_tuple:
+                if isinstance(item, tuple):
+                    yield from flatten_tuple(item)
+                else:
+                    yield item
+        return flatten_tuple(self.waveform_collection)

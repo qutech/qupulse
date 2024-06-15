@@ -771,7 +771,7 @@ class LoopBuilder(ProgramBuilder):
 
         self._stack: List[StackFrame] = [StackFrame(self._root, None)]
 
-    def inner_scope(self, scope: Scope) -> Scope:
+    def inner_scope(self, scope: Scope, pt_obj: 'ForLoopPT') -> Scope:
         local_vars = self._stack[-1].iterating
         if local_vars is None:
             return scope
@@ -806,6 +806,7 @@ class LoopBuilder(ProgramBuilder):
         self._try_append(repetition_loop, measurements)
 
     def with_iteration(self, index_name: str, rng: range,
+                       pt_obj: 'ForLoopPT',
                        measurements: Optional[Sequence[MeasurementWindow]] = None) -> Iterable['ProgramBuilder']:
         with self.with_sequence(measurements):
             top_frame = self._stack[-1]

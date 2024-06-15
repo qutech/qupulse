@@ -130,4 +130,11 @@ class SimpleExpression(Generic[NumVal]):
         return self
 
 
-_lambdify_modules.append({'SimpleExpression': SimpleExpression})
+#alibi class to allow instance check?
+@dataclass
+class SimpleExpressionStepped(SimpleExpression):
+    step_nesting_level: int
+    rng: range
+
+
+_lambdify_modules.append({'SimpleExpression': SimpleExpression, 'SimpleExpressionStepped': SimpleExpressionStepped})

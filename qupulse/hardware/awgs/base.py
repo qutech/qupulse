@@ -19,7 +19,7 @@ from qupulse.utils.types import ChannelID
 from qupulse.program.linspace import LinSpaceNode, LinSpaceArbitraryWaveform, to_increment_commands, Command, \
     Increment, Set as LSPSet, LoopLabel, LoopJmp, Wait, Play, DEFAULT_INCREMENT_RESOLUTION, DepDomain
 from qupulse.program.loop import Loop
-from qupulse.program.waveforms import Waveform
+from qupulse.program.waveforms import Waveform, WaveformCollection
 from qupulse.comparable import Comparable
 from qupulse.utils.types import TimeType
 
@@ -234,8 +234,18 @@ class ProgramEntry:
             elif program_type is _ProgramType.Linspace:
                     #not so clean
                     #TODO: also marker handling not optimal
-                    waveforms = OrderedDict((command.waveform, None)
-                                        for command in self._transformed_commands if isinstance(command,Play)).keys()
+                    waveforms_d = OrderedDict()
+                    for command in self._transformed_commands:
+                        if not isinstance(command,Play):
+                            continue
+                        if isinstance(command.waveform,Waveform):
+                            waveforms_d[command.waveform] = None
+                        elif isinstance(command.waveform,WaveformCollection):
+                            for w in command.waveform.flatten():
+                                waveforms_d[w] = None
+                        else:
+                            raise NotImplementedError()
+                    waveforms = waveforms_d.keys()
             else:
                 raise NotImplementedError()
                     

@@ -66,9 +66,14 @@ class ProgramBuilder(Protocol):
         it is not empty."""
 
     def with_iteration(self, index_name: str, rng: range,
+                       pt_obj: 'ForLoopPT', #hack this in for now.
+                       # can be placed more suitably, like in pulsemetadata later on, but need some working thing now.
                        measurements: Optional[Sequence[MeasurementWindow]] = None) -> Iterable['ProgramBuilder']:
         pass
-
+    
+    def evaluate_nested_stepping(self, scope: Scope, parameter_names: set[str]) -> bool:
+        return False
+    
     def to_program(self) -> Optional[Program]:
         """Further addition of new elements might fail after finalizing the program."""
 
