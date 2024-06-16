@@ -80,6 +80,8 @@ class StepRegister(metaclass=InstanceCounterMeta):
 
 GeneralizedChannel = Union[DepDomain,ChannelID,StepRegister]
 
+# is there any way to cast the numpy cumprod to int?
+int_type = Union[np.int32,int]
 
 class ResolutionDependentValue(Generic[NumVal]):
     
@@ -91,7 +93,7 @@ class ResolutionDependentValue(Generic[NumVal]):
         self.bases = bases
         self.multiplicities = multiplicities
         self.offset = offset
-        self.__is_time_or_int = all(isinstance(b,(TimeType,int)) for b in bases) and isinstance(offset,(TimeType,int))
+        self.__is_time_or_int = all(isinstance(b,(TimeType,int_type)) for b in bases) and isinstance(offset,(TimeType,int_type))
  
     #this is not to circumvent float errors in python, but rounding errors from awg-increment commands.
     #python float are thereby accurate enough if no awg with a 500 bit resolution is invented.
@@ -245,7 +247,7 @@ class LinSpaceArbitraryWaveformIndexed(LinSpaceNodeChannelSpecific):
     
     @property
     def step_channels(self) -> Optional[Tuple[StepRegister]]:
-        return tuple(self.index_factors.keys()) if self.index_factors else None
+        return tuple(self.index_factors.keys()) if self.index_factors else ()
 
 @dataclass
 class LinSpaceRepeat(LinSpaceNode):
@@ -399,7 +401,7 @@ class LinSpaceBuilder(ProgramBuilder):
         #should be sufficient to test the first wf, as all should have the same trafo
         waveform_propertyextractor = waveform
         while isinstance(waveform_propertyextractor,WaveformCollection):
-            waveform_propertyextractor = waveform.waveform_collection[0] 
+            waveform_propertyextractor = waveform_propertyextractor.waveform_collection[0] 
         
         if isinstance(waveform_propertyextractor,TransformingWaveform):
             #test for transformations that contain SimpleExpression
@@ -566,8 +568,8 @@ class LinSpaceBuilder(ProgramBuilder):
             
             if len(remaining_ranges) == 0:
                 inner_scope = build_parameters.overwrite(dict(fixed_elements))
-                #by now, no SimpleExpressionStepped should remain here.
-                assert not any(isinstance(v,SimpleExpressionStepped) for v in inner_scope.values())
+                #by now, no SimpleExpressionStepped should remain here that is relevant for the current loop.
+                assert not any(isinstance(v,SimpleExpressionStepped) for k,v in inner_scope.items() if k in parameter_names)
                 waveform = build_func(inner_scope,channel_mapping=channel_mapping)
                 if global_transformation:
                     waveform = TransformingWaveform.from_transformation(waveform, global_transformation)
@@ -693,12 +695,12 @@ class LoopJmp:
 class Play:
     waveform: Union[Waveform,WaveformCollection]
     play_channels: Tuple[ChannelID]
-    step_channels: Optional[Tuple[StepRegister]] = None
+    step_channels: Tuple[StepRegister] = ()
     #actually did the name
     keys_by_domain_by_ch: Dict[ChannelID,Dict[DepDomain,DepKey]] = None
     def __post_init__(self):
         if self.keys_by_domain_by_ch is None:
-            self.keys_by_domain_by_ch = {ch: {} for ch in self.channels}
+            self.keys_by_domain_by_ch = {ch: {} for ch in self.play_channels+self.step_channels}
     
 
 Command = Union[Increment, Set, LoopLabel, LoopJmp, Wait, Play]
@@ -963,7 +965,7 @@ class _TranslationState:
             self._add_indexed_play_node(node)
         
         elif isinstance(node, LinSpaceArbitraryWaveform):
-            self.commands.append(Play(node.waveform, node.channels))
+            self.commands.append(Play(node.waveform, node.play_channels))
 
         else:
             raise TypeError("The node type is not handled", type(node), node)

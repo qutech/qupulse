@@ -1314,8 +1314,8 @@ class WaveformCollection():
     def flatten(self) -> Tuple[Waveform]:
         def flatten_tuple(nested_tuple):
             for item in nested_tuple:
-                if isinstance(item, tuple):
-                    yield from flatten_tuple(item)
+                if isinstance(item, type(self)):
+                    yield from flatten_tuple(item.waveform_collection)
                 else:
                     yield item
-        return flatten_tuple(self.waveform_collection)
+        return tuple(flatten_tuple(self.waveform_collection))
