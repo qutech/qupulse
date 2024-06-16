@@ -314,18 +314,22 @@ class LinSpaceBuilder(ProgramBuilder):
     def _get_rng(self, idx_name: str) -> range:
         return self._get_ranges()[idx_name]
 
-    def inner_scope(self, scope: Scope, pt_obj: 'ForLoopPT') -> Scope:
+    def inner_scope(self, scope: Scope, pt_obj: Optional['ForLoopPT']=None) -> Scope:
         """This function is necessary to inject program builder specific parameter implementations into the build
         process."""
         if self._ranges:
             name, rng = self._ranges[-1]
-            if pt_obj in self._to_stepping_repeat or pt_obj.identifier in self._to_stepping_repeat \
-                or pt_obj.loop_index in self._to_stepping_repeat:
+            if pt_obj and (pt_obj in self._to_stepping_repeat or pt_obj.identifier in self._to_stepping_repeat \
+                or pt_obj.loop_index in self._to_stepping_repeat):
                     # the nesting level should be simply the amount of this type in the scope.
                     nest = len(tuple(v for v in scope.values() if isinstance(v,SimpleExpressionStepped)))
                     return scope.overwrite({name:SimpleExpressionStepped(
                         base=0,offsets={name: 1},step_nesting_level=nest+1,rng=rng)})
-            return scope.overwrite({name: SimpleExpression(base=0, offsets={name: 1})})
+            else:
+                if isinstance(scope.get(name,None),SimpleExpressionStepped):
+                    return scope
+                else:
+                    return scope.overwrite({name: SimpleExpression(base=0, offsets={name: 1})})
         else:
             return scope
 
@@ -383,7 +387,7 @@ class LinSpaceBuilder(ProgramBuilder):
                                bases=bases,
                                factors=factors,
                                duration_base=duration_base,
-                               duration_factors=tuple(duration_factors),
+                               duration_factors=tuple(duration_factors) if duration_factors else None,
                                )
 
         self._stack[-1].append(set_cmd)
