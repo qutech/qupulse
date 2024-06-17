@@ -13,7 +13,7 @@ from qupulse import ChannelID, MeasurementWindow
 from qupulse.parameter_scope import Scope, MappedScope, FrozenDict
 from qupulse.program import (ProgramBuilder, HardwareTime, HardwareVoltage, Waveform, RepetitionCount, TimeType,
                              SimpleExpression)
-from qupulse.program.waveforms import MultiChannelWaveform
+from qupulse.program.waveforms import MultiChannelWaveform, TransformingWaveform, ConstantWaveform, SequenceWaveform
 
 # this resolution is used to unify increments
 # the increments themselves remain floats
@@ -198,9 +198,26 @@ class LinSpaceBuilder(ProgramBuilder):
     def with_sequence(self,
                       measurements: Optional[Sequence[MeasurementWindow]] = None) -> ContextManager['ProgramBuilder']:
         yield self
-
+        
+    @contextlib.contextmanager
     def new_subprogram(self, global_transformation: 'Transformation' = None) -> ContextManager['ProgramBuilder']:
-        raise NotImplementedError('Not implemented yet (postponed)')
+        
+        inner_builder = LinSpaceBuilder(self._idx_to_name)
+        yield inner_builder
+        inner_program = inner_builder.to_program()
+
+        if inner_program is not None:
+            #measurements not yet included
+            # measurements = [(name, begin, length)
+            #                 for name, (begins, lengths) in inner_program.get_measurement_windows().items()
+            #                 for begin, length in zip(begins, lengths)]
+            # self._top.add_measurements(measurements)
+            waveform = to_waveform(inner_program,self._idx_to_name)
+            if global_transformation is not None:
+                waveform = TransformingWaveform.from_transformation(waveform, global_transformation)
+            self.play_arbitrary_waveform(waveform)
+        
+        # raise NotImplementedError('Not implemented yet (postponed)')
 
     def with_iteration(self, index_name: str, rng: range,
                        measurements: Optional[Sequence[MeasurementWindow]] = None) -> Iterable['ProgramBuilder']:
@@ -412,3 +429,28 @@ def to_increment_commands(linspace_nodes: Sequence[LinSpaceNode]) -> List[Comman
     state.add_node(linspace_nodes)
     return state.commands
 
+
+def to_waveform(program: Sequence[LinSpaceNode], channels: Tuple[ChannelID]) -> Waveform:
+    
+    SUPPORTED_NODES = {LinSpaceArbitraryWaveform,LinSpaceHold}
+    SUPPORTED_INITIAL_NODES = {LinSpaceArbitraryWaveform,LinSpaceHold}
+    
+    assert all(type(node) in SUPPORTED_NODES for node in program), 'some node not (yet) supported for single waveform'
+    assert type(program[0]) in SUPPORTED_INITIAL_NODES, 'initial node not (yet) supported for single waveform'
+    
+    sequence = []
+    for node in program:
+        if type(node)==LinSpaceArbitraryWaveform:
+            sequence.append(node.waveform)
+        elif type(node)==LinSpaceHold:
+            assert node.duration_factors is None, 'NotImplemented'
+            assert all(factor is None for factor in node.factors), 'NotImplemented'
+            #the channels should be sorted accordingly so we can do this.
+            sequence.append(ConstantWaveform.from_mapping(node.duration, dict(zip(channels, node.bases))))
+        else:
+            raise NotImplementedError()
+    
+    sequenced_waveform = SequenceWaveform.from_sequence(
+        sequence
+        )
+    return sequenced_waveform
