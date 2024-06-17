@@ -17,9 +17,9 @@ from enum import Enum
 from qupulse.hardware.util import get_sample_times, not_none_indices
 from qupulse.utils.types import ChannelID
 from qupulse.program.linspace import LinSpaceNode, LinSpaceArbitraryWaveform, to_increment_commands, Command, \
-    Increment, Set as LSPSet, LoopLabel, LoopJmp, Wait, Play
+    Increment, Set as LSPSet, LoopLabel, LoopJmp, Wait, Play, DEFAULT_INCREMENT_RESOLUTION, DepDomain
 from qupulse.program.loop import Loop
-from qupulse.program.waveforms import Waveform
+from qupulse.program.waveforms import Waveform, WaveformCollection
 from qupulse.comparable import Comparable
 from qupulse.utils.types import TimeType
 
@@ -191,6 +191,7 @@ class ProgramEntry:
                  voltage_transformations: Tuple[Optional[Callable], ...],
                  sample_rate: TimeType,
                  waveforms: Sequence[Waveform] = None,
+                 # voltage_resolution: Optional[float] = None,
                  program_type: _ProgramType = _ProgramType.Loop):
         """
 
@@ -204,6 +205,8 @@ class ProgramEntry:
             sample_rate:
             waveforms: These waveforms are sampled and stored in _waveforms. If None the waveforms are extracted from
             loop
+            # voltage_resolution: voltage resolution for LinSpaceProgram, i.e. 2**(-16) for 16 bit AWG
+            program_type: type of program from _ProgramType, determined by the ProgramBuilder used.
         """
         assert len(channels) == len(amplitudes) == len(offsets) == len(voltage_transformations)
 
@@ -218,8 +221,11 @@ class ProgramEntry:
         self._program_type = program_type
         self._program = program
         
+        # self._voltage_resolution = voltage_resolution
+        
         if program_type == _ProgramType.Linspace:
-            self._transformed_commands = self._transform_linspace_commands(to_increment_commands(program))
+            #!!! the voltage resolution may not be adequately represented if voltage transformations are not None?
+            self._transformed_commands = self._transform_linspace_commands(to_increment_commands(program,))
         
         if waveforms is None:
             if program_type is _ProgramType.Loop:
@@ -228,8 +234,18 @@ class ProgramEntry:
             elif program_type is _ProgramType.Linspace:
                     #not so clean
                     #TODO: also marker handling not optimal
-                    waveforms = OrderedDict((command.waveform, None)
-                                        for command in self._transformed_commands if isinstance(command,Play)).keys()
+                    waveforms_d = OrderedDict()
+                    for command in self._transformed_commands:
+                        if not isinstance(command,Play):
+                            continue
+                        if isinstance(command.waveform,Waveform):
+                            waveforms_d[command.waveform] = None
+                        elif isinstance(command.waveform,WaveformCollection):
+                            for w in command.waveform.flatten():
+                                waveforms_d[w] = None
+                        else:
+                            raise NotImplementedError()
+                    waveforms = waveforms_d.keys()
             else:
                 raise NotImplementedError()
                     
@@ -267,20 +283,30 @@ class ProgramEntry:
     
     def _transform_linspace_commands(self, command_list: List[Command]) -> List[Command]:
         # all commands = Union[Increment, Set, LoopLabel, LoopJmp, Wait, Play]
-        trafos_by_channel_idx = list(self._channel_transformations().values())
-
+        # TODO: voltage resolution
+        
+        # trafos_by_channel_idx = list(self._channel_transformations().values())
+        # increment_domains_to_transform = {DepDomain.VOLTAGE, DepDomain.WF_SCALE, DepDomain.WF_OFFSET}
+        
         for command in command_list:
             if isinstance(command, (LoopLabel, LoopJmp, Play, Wait)):
                 # play is handled by transforming the sampled waveform
                 continue
             elif isinstance(command, Increment):
-                ch_trafo = trafos_by_channel_idx[command.channel]
+                if command.key.domain is not DepDomain.VOLTAGE:
+                    #for sweeps of wf-scale and wf-offset, the channel amplitudes/offsets are already considered in the wf sampling.
+                    continue
+                ch_trafo = self._channel_transformations()[command.channel]
                 if ch_trafo.voltage_transformation:
                     raise RuntimeError("Cannot apply a voltage transformation to a linspace increment command")
                 command.value /= ch_trafo.amplitude
             elif isinstance(command, LSPSet):
-                ch_trafo = trafos_by_channel_idx[command.channel]
+                if command.key.domain is not DepDomain.VOLTAGE:
+                    #for sweeps of wf-scale and wf-offset, the channel amplitudes/offsets are already considered in the wf sampling.
+                    continue
+                ch_trafo = self._channel_transformations()[command.channel]
                 if ch_trafo.voltage_transformation:
+                    # for the case of swept parameters, this is defaulted to identity
                     command.value = float(ch_trafo.voltage_transformation(command.value))
                 command.value -= ch_trafo.offset
                 command.value /= ch_trafo.amplitude
