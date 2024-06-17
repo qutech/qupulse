@@ -435,9 +435,11 @@ class ArithmeticPulseTemplateTest(unittest.TestCase):
         to_single_waveform = {'something_else'}
         program_builder = mock.Mock()
 
-        expected_transformation = mock.Mock(spec=IdentityTransformation())
+        with self.assertWarns(DeprecationWarning):
+            expected_transformation = mock.Mock(spec=IdentityTransformation())
 
-        inner_trafo = mock.Mock(spec=IdentityTransformation())
+        with self.assertWarns(DeprecationWarning):
+            inner_trafo = mock.Mock(spec=IdentityTransformation())
         inner_trafo.chain.return_value = expected_transformation
 
         with mock.patch.object(rhs, '_create_program') as inner_create_program:
@@ -593,7 +595,10 @@ class ArithmeticPulseTemplateTest(unittest.TestCase):
         channel_mapping = dict(a='u', b='v')
 
         inner_wf = DummyWaveform(duration=6, defined_channels={'a'})
-        trafo = mock.Mock(spec=IdentityTransformation())
+        with self.assertWarns(DeprecationWarning):
+            # mock will inspect alsod eprecated attributes
+            # TODO: remove assert as soon as attribute is removed
+            trafo = mock.Mock(spec=IdentityTransformation())
 
         arith = ArithmeticPulseTemplate(pt, '-', 6)
 

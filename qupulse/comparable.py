@@ -5,11 +5,15 @@
 """This module defines the abstract Comparable class."""
 from abc import abstractmethod
 from typing import Hashable, Any
+import warnings
 
 from qupulse.utils.types import DocStringABCMeta
 
 
 __all__ = ["Comparable"]
+
+
+warnings.warn("qupulse.comparable is deprecated since 0.11 and will be removed in 0.12", DeprecationWarning)
 
 
 class Comparable(metaclass=DocStringABCMeta):

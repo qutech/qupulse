@@ -21,17 +21,14 @@ from weakref import WeakValueDictionary, ref
 import numpy as np
 
 from qupulse import ChannelID
-from qupulse.program.transformation import Transformation
-from qupulse.utils import checked_int_cast, isclose
-from qupulse.utils.types import TimeType, time_from_float
 from qupulse.utils.performance import is_monotonic
-from qupulse.comparable import Comparable
 from qupulse.expressions import ExpressionScalar
 from qupulse.pulses.interpolation import InterpolationStrategy
 from qupulse.utils import checked_int_cast, isclose
-from qupulse.utils.types import TimeType, time_from_float, FrozenDict
+from qupulse.utils.types import TimeType, time_from_float
 from qupulse.program.transformation import Transformation
 from qupulse.utils import pairwise
+
 
 class ConstantFunctionPulseTemplateWarning(UserWarning):
     """  This warning indicates a constant waveform is constructed from a FunctionPulseTemplate """
@@ -56,7 +53,7 @@ def _to_time_type(duration: Real) -> TimeType:
         return time_from_float(float(duration), absolute_error=PULSE_TO_WAVEFORM_ERROR)
 
 
-class Waveform(Comparable, metaclass=ABCMeta):
+class Waveform(metaclass=ABCMeta):
     """Represents an instantiated PulseTemplate which can be sampled to retrieve arrays of voltage
     values for the hardware."""
 
@@ -146,6 +143,18 @@ class Waveform(Comparable, metaclass=ABCMeta):
             else:
                 output_array[:] = constant_value
             return output_array
+
+    def __hash__(self):
+        if self.__class__.__base__ is not Waveform:
+            raise NotImplementedError("Waveforms __hash__ and __eq__ implementation requires direct inheritance")
+        return hash(tuple(getattr(self, slot) for slot in self.__slots__)) ^ hash(self._duration)
+
+    def __eq__(self, other):
+        slots = self.__slots__
+        if slots is getattr(other, '__slots__', None):
+            return self._duration == other._duration and all(getattr(self, slot) == getattr(other, slot) for slot in slots)
+        # The other class might be more lenient
+        return NotImplemented
 
     @property
     @abstractmethod
@@ -356,6 +365,8 @@ class TableWaveform(Waveform):
 
     @property
     def compare_key(self) -> Any:
+        warnings.warn("Waveform.compare_key is deprecated since 0.11 and will be removed in 0.12",
+                      DeprecationWarning, stacklevel=2)
         return self._channel_id, self._table
 
     def unsafe_sample(self,
@@ -440,6 +451,8 @@ class ConstantWaveform(Waveform):
 
     @property
     def compare_key(self) -> Tuple[Any, ...]:
+        warnings.warn("Waveform.compare_key is deprecated since 0.11 and will be removed in 0.12",
+                      DeprecationWarning, stacklevel=2)
         return self._duration, self._amplitude, self._channel
 
     def unsafe_sample(self,
@@ -512,6 +525,8 @@ class FunctionWaveform(Waveform):
 
     @property
     def compare_key(self) -> Any:
+        warnings.warn("Waveform.compare_key is deprecated since 0.11 and will be removed in 0.12",
+                      DeprecationWarning, stacklevel=2)
         return self._channel_id, self._expression, self._duration
 
     @property
@@ -642,6 +657,8 @@ class SequenceWaveform(Waveform):
 
     @property
     def compare_key(self) -> Tuple[Waveform]:
+        warnings.warn("Waveform.compare_key is deprecated since 0.11 and will be removed in 0.12",
+                      DeprecationWarning, stacklevel=2)
         return self._sequenced_waveforms
 
     @property
@@ -790,7 +807,8 @@ class MultiChannelWaveform(Waveform):
 
     @property
     def compare_key(self) -> Any:
-        # sort with channels
+        warnings.warn("Waveform.compare_key is deprecated since 0.11 and will be removed in 0.12",
+                      DeprecationWarning, stacklevel=2)
         return self._sub_waveforms
 
     def unsafe_sample(self,
@@ -859,6 +877,8 @@ class RepetitionWaveform(Waveform):
 
     @property
     def compare_key(self) -> Tuple[Any, int]:
+        warnings.warn("Waveform.compare_key is deprecated since 0.11 and will be removed in 0.12",
+                      DeprecationWarning, stacklevel=2)
         return self._body.compare_key, self._repetition_count
 
     def unsafe_get_subset_for_channels(self, channels: AbstractSet[ChannelID]) -> Waveform:
@@ -891,6 +911,14 @@ class TransformingWaveform(Waveform):
         # cache data of inner channels based identified and invalidated by the sample times
         self._cached_data = None
         self._cached_times = lambda: None
+
+    def __hash__(self):
+        return hash((self._inner_waveform, self._transformation))
+
+    def __eq__(self, other):
+        if getattr(other, '__slots__', None) is self.__slots__:
+            return self._inner_waveform == other._inner_waveform and self._transformation == other._transformation
+        return NotImplemented
 
     @classmethod
     def from_transformation(cls, inner_waveform: Waveform, transformation: Transformation) -> Waveform:
@@ -934,6 +962,8 @@ class TransformingWaveform(Waveform):
 
     @property
     def compare_key(self) -> Tuple[Waveform, Transformation]:
+        warnings.warn("Waveform.compare_key is deprecated since 0.11 and will be removed in 0.12",
+                      DeprecationWarning, stacklevel=2)
         return self.inner_waveform, self.transformation
 
     def unsafe_get_subset_for_channels(self, channels: Set[ChannelID]) -> 'SubsetWaveform':
@@ -983,6 +1013,8 @@ class SubsetWaveform(Waveform):
 
     @property
     def compare_key(self) -> Tuple[frozenset, Waveform]:
+        warnings.warn("Waveform.compare_key is deprecated since 0.11 and will be removed in 0.12",
+                      DeprecationWarning, stacklevel=2)
         return self.defined_channels, self.inner_waveform
 
     def unsafe_get_subset_for_channels(self, channels: Set[ChannelID]) -> Waveform:
@@ -1134,6 +1166,8 @@ class ArithmeticWaveform(Waveform):
 
     @property
     def compare_key(self) -> Tuple[str, Waveform, Waveform]:
+        warnings.warn("Waveform.compare_key is deprecated since 0.11 and will be removed in 0.12",
+                      DeprecationWarning, stacklevel=2)
         return self._arithmetic_operator, self._lhs, self._rhs
 
 
@@ -1194,6 +1228,8 @@ class FunctorWaveform(Waveform):
 
     @property
     def compare_key(self) -> Tuple[Waveform, FrozenSet]:
+        warnings.warn("Waveform.compare_key is deprecated since 0.11 and will be removed in 0.12",
+                      DeprecationWarning, stacklevel=2)
         return self._inner_waveform, frozenset(self._functor.items())
 
 
@@ -1235,6 +1271,8 @@ class ReversedWaveform(Waveform):
 
     @property
     def compare_key(self) -> Hashable:
+        warnings.warn("Waveform.compare_key is deprecated since 0.11 and will be removed in 0.12",
+                      DeprecationWarning, stacklevel=2)
         return self._inner.compare_key
 
     def reversed(self) -> 'Waveform':

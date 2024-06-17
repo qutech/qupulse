@@ -207,7 +207,10 @@ class MultiChannelWaveformTest(unittest.TestCase):
 
         dwf_c_valid = DummyWaveform(duration=2.2, defined_channels={'C'})
         waveform_flat = MultiChannelWaveform.from_parallel((waveform, dwf_c_valid))
-        self.assertEqual(len(waveform_flat.compare_key), 3)
+        self.assertEqual(
+            MultiChannelWaveform([dwf_a, dwf_b, dwf_c_valid]),
+            waveform_flat
+        )
 
     def test_unsafe_sample(self) -> None:
         sample_times = numpy.linspace(98.5, 103.5, num=11)
@@ -330,10 +333,17 @@ class RepetitionWaveformTest(unittest.TestCase):
         body_wf = DummyWaveform(defined_channels={'a'})
         self.assertIs(RepetitionWaveform(body_wf, 2).defined_channels, body_wf.defined_channels)
 
-    def test_compare_key(self):
-        body_wf = DummyWaveform(defined_channels={'a'})
-        wf = RepetitionWaveform(body_wf, 2)
-        self.assertEqual(wf.compare_key, (body_wf.compare_key, 2))
+    def test_equality(self):
+        body_wf_1 = DummyWaveform(defined_channels={'a'})
+        wf_1 = RepetitionWaveform(body_wf_1, 2)
+        body_wf_2 = DummyWaveform(defined_channels={'a'})
+        wf_2 = RepetitionWaveform(body_wf_2, 2)
+        wf_3 = RepetitionWaveform(body_wf_1, 3)
+        wf_1_equal = RepetitionWaveform(body_wf_1, 2)
+        self.assertEqual(wf_1_equal, wf_1)
+        self.assertNotEqual(wf_1, wf_2)
+        self.assertNotEqual(wf_1, wf_3)
+        self.assertEqual({wf_1, wf_2, wf_3}, {wf_1, wf_2, wf_3, wf_1_equal})
 
     def test_unsafe_get_subset_for_channels(self):
         body_wf = DummyWaveform(defined_channels={'a', 'b'})
@@ -395,12 +405,11 @@ class SequenceWaveformTest(unittest.TestCase):
 
         swf1 = SequenceWaveform((dwf_ab, dwf_ab))
         self.assertEqual(swf1.duration, 2*dwf_ab.duration)
-        self.assertEqual(len(swf1.compare_key), 2)
+        self.assertEqual(swf1.sequenced_waveforms, (dwf_ab, dwf_ab))
 
         swf2 = SequenceWaveform((swf1, dwf_ab))
         self.assertEqual(swf2.duration, 3 * dwf_ab.duration)
-
-        self.assertEqual(len(swf2.compare_key), 2)
+        self.assertEqual(swf2.sequenced_waveforms, (swf1, dwf_ab))
 
     def test_from_sequence(self):
         dwf = DummyWaveform(duration=1.1, defined_channels={'A'})
@@ -478,12 +487,12 @@ class SequenceWaveformTest(unittest.TestCase):
         sub_wf = wf.unsafe_get_subset_for_channels(subset)
         self.assertIsInstance(sub_wf, SequenceWaveform)
 
-        self.assertEqual(len(sub_wf.compare_key), 2)
-        self.assertEqual(sub_wf.compare_key[0].defined_channels, subset)
-        self.assertEqual(sub_wf.compare_key[1].defined_channels, subset)
+        self.assertEqual(len(sub_wf.sequenced_waveforms), 2)
+        self.assertEqual(sub_wf.sequenced_waveforms[0].defined_channels, subset)
+        self.assertEqual(sub_wf.sequenced_waveforms[1].defined_channels, subset)
 
-        self.assertEqual(sub_wf.compare_key[0].duration, TimeType.from_float(2.2))
-        self.assertEqual(sub_wf.compare_key[1].duration, TimeType.from_float(3.3))
+        self.assertEqual(sub_wf.sequenced_waveforms[0].duration, TimeType.from_float(2.2))
+        self.assertEqual(sub_wf.sequenced_waveforms[1].duration, TimeType.from_float(3.3))
 
     def test_repr(self):
         cwf_2_a = ConstantWaveform(duration=1.1, amplitude=2.2, channel='A')
@@ -714,7 +723,8 @@ class TransformingWaveformTest(unittest.TestCase):
 
         self.assertIs(trafo_wf.inner_waveform, inner_wf)
         self.assertIs(trafo_wf.transformation, trafo)
-        self.assertEqual(trafo_wf.compare_key, (inner_wf, trafo))
+        with self.assertWarns(DeprecationWarning):
+            self.assertEqual(trafo_wf.compare_key, (inner_wf, trafo))
         self.assertIs(trafo_wf.duration, inner_wf.duration)
         self.assertIs(trafo_wf.defined_channels, output_channels)
         trafo.get_output_channels.assert_called_once_with(inner_wf.defined_channels)
@@ -804,7 +814,8 @@ class SubsetWaveformTest(unittest.TestCase):
         subset_wf = SubsetWaveform(inner_wf, {'a', 'c'})
 
         self.assertIs(subset_wf.inner_waveform, inner_wf)
-        self.assertEqual(subset_wf.compare_key, (frozenset(['a', 'c']), inner_wf))
+        with self.assertWarns(DeprecationWarning):
+            self.assertEqual(subset_wf.compare_key, (frozenset(['a', 'c']), inner_wf))
         self.assertIs(subset_wf.duration, inner_wf.duration)
         self.assertEqual(subset_wf.defined_channels, {'a', 'c'})
 
@@ -891,8 +902,8 @@ class ArithmeticWaveformTest(unittest.TestCase):
         self.assertIs(rhs, arith.rhs)
         self.assertEqual('-', arith.arithmetic_operator)
         self.assertEqual(lhs.duration, arith.duration)
-
-        self.assertEqual(('-', lhs, rhs), arith.compare_key)
+        with self.assertWarns(DeprecationWarning):
+            self.assertEqual(('-', lhs, rhs), arith.compare_key)
 
     def test_unsafe_get_subset_for_channels(self):
         lhs = DummyWaveform(duration=1.5, defined_channels={'a', 'b', 'c'})
@@ -944,10 +955,12 @@ class FunctionWaveformTest(unittest.TestCase):
         wf1b = FunctionWaveform(ExpressionScalar('2*t'), 3, channel='A')
         wf3 = FunctionWaveform(ExpressionScalar('2*t+2'), 3, channel='A')
         wf4 = FunctionWaveform(ExpressionScalar('2*t'), 4, channel='A')
+        wf5 = FunctionWaveform(ExpressionScalar('2*t'), 3, channel='B')
         self.assertEqual(wf1a, wf1a)
         self.assertEqual(wf1a, wf1b)
         self.assertNotEqual(wf1a, wf3)
         self.assertNotEqual(wf1a, wf4)
+        self.assertNotEqual(wf1a, wf5)
 
     def test_defined_channels(self) -> None:
         wf = FunctionWaveform(ExpressionScalar('t'), 4, channel='A')
@@ -1056,7 +1069,7 @@ class FunctorWaveformTests(unittest.TestCase):
                              wf.unsafe_get_subset_for_channels({'A'}))
             inner_subset.assert_called_once_with({'A'})
 
-    def test_compare_key(self):
+    def test_comparison(self):
         inner_wf_1 = DummyWaveform(defined_channels={'A', 'B'})
         inner_wf_2 = DummyWaveform(defined_channels={'A', 'B'})
         functors_1 = dict(A=np.positive, B=np.negative)
@@ -1067,7 +1080,8 @@ class FunctorWaveformTests(unittest.TestCase):
         wf21 = FunctorWaveform(inner_wf_2, functors_1)
         wf22 = FunctorWaveform(inner_wf_2, functors_2)
 
-        self.assertEqual((inner_wf_1, frozenset(functors_1.items())), wf11.compare_key)
+        with self.assertWarns(DeprecationWarning):
+            self.assertEqual((inner_wf_1, frozenset(functors_1.items())), wf11.compare_key)
         self.assertEqual(wf11, wf11)
         self.assertEqual(wf11, FunctorWaveform(inner_wf_1, functors_1))
 
@@ -1083,7 +1097,8 @@ class ReversedWaveformTest(unittest.TestCase):
 
         self.assertEqual(dummy_wf.duration, reversed_wf.duration)
         self.assertEqual(dummy_wf.defined_channels, reversed_wf.defined_channels)
-        self.assertEqual(dummy_wf.compare_key, reversed_wf.compare_key)
+        with self.assertWarns(DeprecationWarning):
+            self.assertEqual(dummy_wf.compare_key, reversed_wf.compare_key)
         self.assertNotEqual(reversed_wf, dummy_wf)
 
     def test_reversed_sample(self):
