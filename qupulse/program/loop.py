@@ -25,7 +25,7 @@ from qupulse.utils.numeric import smallest_factor_ge
 from qupulse.utils.tree import Node
 from qupulse.utils.types import TimeType, MeasurementWindow
 
-__all__ = ['Loop', 'make_compatible', 'MakeCompatibleWarning', 'to_waveform']
+__all__ = ['Loop', 'make_compatible', 'MakeCompatibleWarning', 'to_waveform', 'LoopBuilder']
 
 
 DurationStructure = Tuple[int, Union[TimeType, 'DurationStructure']]
