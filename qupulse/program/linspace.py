@@ -86,8 +86,8 @@ int_type = Union[np.int32,int]
 class ResolutionDependentValue(Generic[NumVal]):
     
     def __init__(self,
-                 bases: Sequence[NumVal],
-                 multiplicities: Sequence[int],
+                 bases: Tuple[NumVal],
+                 multiplicities: Tuple[int],
                  offset: NumVal):
     
         self.bases = bases
@@ -675,6 +675,9 @@ class Increment:
     channel: Optional[GeneralizedChannel]
     value: Union[ResolutionDependentValue,Tuple[ResolutionDependentValue]]
     key: DepKey
+    
+    def __hash__(self):
+        return hash((self.channel,self.value,self.key))
 
 
 @dataclass
@@ -683,12 +686,16 @@ class Set:
     value: Union[ResolutionDependentValue,Tuple[ResolutionDependentValue]]
     key: DepKey = dataclasses.field(default_factory=lambda: DepKey((),DepDomain.NODEP))
 
+    def __hash__(self):
+        return hash((self.channel,self.value,self.key))
 
 @dataclass
 class Wait:
     duration: Optional[TimeType]
     key_by_domain: Dict[DepDomain,DepKey] = dataclasses.field(default_factory=lambda: {})
 
+    def __hash__(self):
+        return hash((self.duration,frozenset(self.key_by_domain.items())))
 
 @dataclass
 class LoopJmp:
@@ -702,10 +709,15 @@ class Play:
     step_channels: Tuple[StepRegister] = ()
     #actually did the name
     keys_by_domain_by_ch: Dict[ChannelID,Dict[DepDomain,DepKey]] = None
+    
     def __post_init__(self):
         if self.keys_by_domain_by_ch is None:
             self.keys_by_domain_by_ch = {ch: {} for ch in self.play_channels+self.step_channels}
     
+    def __hash__(self):
+        return hash((self.waveform,self.play_channels,self.step_channels,
+                     frozenset((k,frozenset(d.items())) for k,d in self.keys_by_domain_by_ch.items())))
+
 
 Command = Union[Increment, Set, LoopLabel, LoopJmp, Wait, Play]
 
