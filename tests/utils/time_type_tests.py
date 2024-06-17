@@ -1,81 +1,12 @@
-import sys
 import unittest
-import builtins
-import contextlib
-import importlib
 import fractions
 import random
-import os
-
-from unittest import mock
-
-try:
-    import gmpy2
-except ImportError:
-    gmpy2 = None
 
 import numpy as np
 import sympy
+import gmpy2
 
-import qupulse.utils.types as qutypes
-
-
-MOCK_GMPY2_AS_MISSING = bool(os.getenv("QUPULSE_TESTS_MOCK_GMPY2_AS_MISSING"))
-
-
-@contextlib.contextmanager
-def mock_missing_module(module_name: str):
-    exit_stack = contextlib.ExitStack()
-
-    if module_name in sys.modules:
-        # temporarily remove gmpy2 from the imported modules
-
-        temp_modules = sys.modules.copy()
-        del temp_modules[module_name]
-        exit_stack.enter_context(mock.patch.dict(sys.modules, temp_modules))
-
-    original_import = builtins.__import__
-
-    def mock_import(name, *args, **kwargs):
-        if name == module_name:
-            raise ImportError(name)
-        else:
-            return original_import(name, *args, **kwargs)
-
-    exit_stack.enter_context(mock.patch('builtins.__import__', mock_import))
-
-    with exit_stack:
-        yield
-
-
-@unittest.skipIf(gmpy2 and not MOCK_GMPY2_AS_MISSING, "Not explicitly included. "
-                                                      "Define QUPULSE_TESTS_MOCK_GMPY2_AS_MISSING to include.")
-class TestTimeTypeDevFallback(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        with mock_missing_module('gmpy2'):
-            cls.fallback_qutypes = importlib.reload(qutypes)
-
-    def test_fraction_fallback(self):
-        self.assertIs(fractions.Fraction, self.fallback_qutypes.TimeType._InternalType)
-
-    def test_fraction_time_from_fraction_fallback(self):
-        assert_from_fraction_works(self, self.fallback_qutypes.TimeType)
-
-    def test_fraction_time_from_float_exact_fallback(self):
-        assert_from_float_exact_works(self, self.fallback_qutypes.TimeType)
-
-    def test_fraction_time_from_float_with_precision_fallback(self):
-        assert_fraction_time_from_float_with_precision_works(self, self.fallback_qutypes.TimeType)
-
-    def test_from_float_no_extra_args_fallback(self):
-        assert_from_float_no_extra_args_works(self, self.fallback_qutypes.TimeType)
-
-    def test_try_from_any_fallback(self):
-        assert_try_from_any_works(self, self.fallback_qutypes.TimeType)
-
-    def test_comparisons_work_fallback(self):
-        assert_comparisons_work(self, self.fallback_qutypes.TimeType)
+from qupulse.utils.types import TimeType, time_from_float
 
 
 def assert_from_fraction_works(test: unittest.TestCase, time_type):
@@ -155,9 +86,7 @@ def assert_try_from_any_works(test: unittest.TestCase, time_type):
 
     for_array_tests = []
 
-    signed_int_types = [int, sympy.Integer, np.int8, np.int16, np.int32, np.int64, DuckInt, DuckIntFloat]
-    if gmpy2:
-        signed_int_types.append(gmpy2.mpz)
+    signed_int_types = [int, sympy.Integer, np.int8, np.int16, np.int32, np.int64, DuckInt, DuckIntFloat, gmpy2.mpz]
 
     for s_t in signed_int_types:
         for val in (1, 17, -17):
@@ -231,41 +160,41 @@ def assert_comparisons_work(test: unittest.TestCase, time_type):
 
 
 class TestTimeType(unittest.TestCase):
-    """The fallback test is here for convenience while developing and only triggered if the environment variable is set.
-    The fallback is also tested by the CI explicitly"""
+    """Tests the TimeType class. The layout of this test is in this way for historic reasons, i.e. to allow testing
+    different internal representations for the time type. Right now only gmpy.mpq is implemented and tested."""
 
     def test_non_finite_float(self):
         with self.assertRaisesRegex(ValueError, 'Cannot represent'):
-            qutypes.TimeType.from_float(float('inf'))
+            TimeType.from_float(float('inf'))
         with self.assertRaisesRegex(ValueError, 'Cannot represent'):
-            qutypes.TimeType.from_float(float('-inf'))
+            TimeType.from_float(float('-inf'))
         with self.assertRaisesRegex(ValueError, 'Cannot represent'):
-            qutypes.TimeType.from_float(float('nan'))
+            TimeType.from_float(float('nan'))
 
     def test_fraction_time_from_fraction(self):
-        assert_from_fraction_works(self, qutypes.TimeType)
+        assert_from_fraction_works(self, TimeType)
 
     def test_fraction_time_from_float_exact(self):
-        assert_from_float_exact_works(self, qutypes.TimeType)
+        assert_from_float_exact_works(self, TimeType)
 
     def test_fraction_time_from_float_with_precision(self):
-        assert_fraction_time_from_float_with_precision_works(self, qutypes.TimeType)
+        assert_fraction_time_from_float_with_precision_works(self, TimeType)
 
     def test_from_float_no_extra_args(self):
-        assert_from_float_exact_works(self, qutypes.TimeType)
+        assert_from_float_exact_works(self, TimeType)
 
     def test_from_float_exceptions(self):
         with self.assertRaisesRegex(ValueError, '> 0'):
-            qutypes.time_from_float(.8, -1)
+            time_from_float(.8, -1)
 
         with self.assertRaisesRegex(ValueError, '<= 1'):
-            qutypes.time_from_float(.8, 2)
+            time_from_float(.8, 2)
 
     def test_try_from_any(self):
-        assert_try_from_any_works(self, qutypes.TimeType)
+        assert_try_from_any_works(self, TimeType)
 
     def test_comparisons_work(self):
-        assert_comparisons_work(self, qutypes.TimeType)
+        assert_comparisons_work(self, TimeType)
 
 
 def get_some_floats(seed=42, n=1000):
@@ -274,7 +203,7 @@ def get_some_floats(seed=42, n=1000):
 
 
 def get_from_float(fs):
-    return [qutypes.time_from_float(f) for f in fs]
+    return [time_from_float(f) for f in fs]
 
 
 def do_additions(xs, ys):

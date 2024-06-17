@@ -2,9 +2,7 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-import fractions
 import functools
-import warnings
 import weakref
 import logging
 import numbers
@@ -14,7 +12,7 @@ from collections import OrderedDict
 import tabor_control.device
 import numpy as np
 
-from qupulse.utils.types import ChannelID
+from qupulse.utils.types import ChannelID, TimeType
 from qupulse.program.loop import Loop, make_compatible
 from qupulse.hardware.util import voltage_to_uint16, traced
 from qupulse.hardware.awgs.base import AWG, AWGAmplitudeOffsetHandling
@@ -470,7 +468,7 @@ class TaborChannelPair(AWG):
         make_compatible(program,
                         minimal_waveform_length=192,
                         waveform_quantum=16,
-                        sample_rate=fractions.Fraction(sample_rate, 10**9))
+                        sample_rate=TimeType.from_fraction(sample_rate, 10**9))
 
         if name in self._known_programs:
             if force:
