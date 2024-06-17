@@ -107,6 +107,15 @@ html = """
   subprocess.run(['sphinx-build', '-b', 'html', 'doc/source', 'doc/build/html', '-D', 'version=%s' % version, '-D', 'release=%s' % version])"
 """
 
+[tool.hatch.envs.changelog]
+detached = true
+dependencies = [
+  "towncrier",
+]
+
+[tool.hatch.envs.changelog.scripts]
+draft = "towncrier build --version main --draft"
+release = "towncrier build --yes --version {args}"
 
 [tool.towncrier]
 directory = "changes.d"

@@ -38,7 +38,7 @@ Alternatively, the current development version of qupulse can be installed by ex
 ```sh
 python -m pip install -e git+https://github.com/qutech/qupulse.git#egg=qupulse[default]
 ```
-which will clone the github repository to `./src/qupulse` and do an editable/development install. 
+which will clone the github repository to `./src/qupulse` and do an editable/development install.
 
 ### Requirements and dependencies
 qupulse requires at least Python 3.8 and is tested on 3.8, 3.9 and 3.10. It relies on some external Python packages as dependencies. 
@@ -62,6 +62,15 @@ The repository primarily consists of the folders `qupulse` (toolkit core code) a
 - `_program` contains general and hardware specific representations of instantiated (parameter free) pulses. It is private because there is no stability guarantee.
 
 Contents of `tests` mirror the structure of `qupulse`. For every `<module>` somewhere in `qupulse` there should exist a `<module>Tests.py` in the corresponding subdirectory of `tests`.
+
+## Development
+
+`qupulse` uses `hatch` as development tool which provides a convenient interface for most development tasks. The following should work.
+
+ - `hatch build`: Build wheel and source tarball
+ - `hatch version X.X.X`: Set version
+ - `hatch run docs:html`: Build documentation (requires pandoc)
+ - `hatch run changelog:draft` and `hatch run changelog:release` to preview or update the changelog.
 
 ## License
 
