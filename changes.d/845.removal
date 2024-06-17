@@ -1,0 +1,1 @@
+Fallback for a missing `gmpy2` via `fractions` was removed.

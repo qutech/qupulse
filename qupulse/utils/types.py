@@ -14,6 +14,7 @@ import operator
 
 import numpy
 import sympy
+import gmpy2
 
 try:
     from frozendict import frozendict
@@ -29,16 +30,6 @@ __all__ = ["MeasurementWindow", "ChannelID", "HashableNumpyArray", "TimeType", "
 
 MeasurementWindow = typing.Tuple[str, numbers.Real, numbers.Real]
 ChannelID = typing.Union[str, int]
-
-try:
-    import gmpy2
-    qupulse_numeric.FractionType = gmpy2.mpq
-
-except ImportError:
-    gmpy2 = None
-
-    warnings.warn('gmpy2 not found. Using fractions.Fraction as fallback. Install gmpy2 for better performance.'
-                  'time_from_float might produce slightly different results')
 
 
 def _with_other_as_time_type(fn):
@@ -57,17 +48,16 @@ def _with_other_as_time_type(fn):
 
 
 class TimeType:
-    """This type represents a rational number with arbitrary precision.
-
-    Internally it uses :func:`gmpy2.mpq` (if available) or :class:`fractions.Fraction`
-    """
     __slots__ = ('_value',)
 
-    _InternalType = fractions.Fraction if gmpy2 is None else type(gmpy2.mpq())
-    _to_internal = fractions.Fraction if gmpy2 is None else gmpy2.mpq
+    _InternalType = type(gmpy2.mpq())
+    _to_internal = gmpy2.mpq
 
     def __init__(self, value: typing.Union[numbers.Rational, int] = 0., denominator: typing.Optional[int] = None):
-        """
+        """This type represents a rational number with arbitrary precision.
+
+        Internally it uses :func:`gmpy2.mpq` which is considered an implementation detail.
+
         Args:
             value: interpreted as Rational if denominator is None. interpreted as numerator otherwise
             denominator: Denominator of the Fraction if not None
