@@ -42,6 +42,67 @@ class SingleRampTest(TestCase):
         self.assertEqual(self.commands, commands)
 
 
+class PrePostDepTest(TestCase):
+    def setUp(self):
+        hold = ConstantPT(10 ** 6, {'a': '-1. + idx * 0.01'})
+        hold_random = ConstantPT(10 ** 5, {'a': -.4})
+        # self.pulse_template = (hold_random@(hold_random@hold).with_repetition(10)@hold_random@hold)\
+        self.pulse_template = (hold_random@(hold).with_repetition(10))\
+            .with_iteration('idx', 200)
+
+        self.program = LinSpaceIter(
+            length=200,
+            body=(
+                LinSpaceHold(bases=(-.4),factors=None,duration_base=TimeType(10**6),duration_factors=None),
+                LinSpaceRepeat(
+                LinSpaceHold(bases=(-1.,),factors=((0.01,),),duration_base=TimeType(10**6),duration_factors=None),
+                10),
+                # LinSpaceHold(bases=(-.4),factors=None,duration_base=TimeType(10**6),duration_factors=None),
+                # LinSpaceHold(bases=(-1.,),factors=((0.01,),),duration_base=TimeType(10**6),duration_factors=None)
+            ),)
+        
+
+        key = DepKey.from_voltages((0.01,), DEFAULT_INCREMENT_RESOLUTION)
+
+        self.commands = [
+            [Set(channel=0, value=-0.4, key=DepKey(factors=())),
+             Wait(duration=TimeType(100000, 1)),
+             #here is what currently happens:
+             # Set(channel=0, value=-1.0, key=DepKey(factors=(10000000,))),
+             # Wait(duration=TimeType(1000000, 1)),
+             # LoopLabel(idx=0, count=9),
+             # Wait(duration=TimeType(1000000, 1)),
+             # LoopJmp(idx=0),
+             #however, i think this is what should happen (maybe also with an additional "Set" before,
+             #which might cause complications if omitted in other contexts like AWG amplitude:
+             LoopLabel(idx=0, count=10),
+             Set(channel=0, value=-1.0, key=DepKey(factors=(10000000,))),
+             Wait(duration=TimeType(1000000, 1)),
+             LoopJmp(idx=0),
+             
+             LoopLabel(idx=1, count=199),
+             Set(channel=0, value=-0.4, key=DepKey(factors=())),
+             Wait(duration=TimeType(100000, 1)),
+             Increment(channel=0, value=0.01, dependency_key=DepKey(factors=(10000000,))),
+             Wait(duration=TimeType(1000000, 1)),
+             LoopLabel(idx=2, count=9),
+             #also here, an increment 0 may be helpful (at least to be able to force).
+             Increment(channel=0, value=0, dependency_key=DepKey(factors=(10000000,))),
+             Wait(duration=TimeType(1000000, 1)),
+             LoopJmp(idx=2),
+             LoopJmp(idx=1)]
+        ]
+
+    def test_program(self):
+        program_builder = LinSpaceBuilder(('a',))
+        program = self.pulse_template.create_program(program_builder=program_builder)
+        self.assertEqual([self.program], program)
+
+    def test_commands(self):
+        commands = to_increment_commands([self.program])
+        self.assertEqual(self.commands, commands)
+
+
 class PlainCSDTest(TestCase):
     def setUp(self):
         hold = ConstantPT(10**6, {'a': '-1. + idx_a * 0.01', 'b': '-.5 + idx_b * 0.02'})
