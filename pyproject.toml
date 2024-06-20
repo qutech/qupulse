@@ -31,7 +31,9 @@ dependencies = [
     "lazy_loader",
     "numpy",
     "sympy>=1.1.1",
-    "gmpy2",
+    # This is required because there is no 3.12 compatible gmpy2 stable release as of 2024.06.20
+    "gmpy2;python_version<'3.12'",
+    "gmpy2>=2.2.0rc1;python_version>='3.12'"
 ]
 
 [project.optional-dependencies]
