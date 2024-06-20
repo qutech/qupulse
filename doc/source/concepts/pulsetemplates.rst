@@ -8,7 +8,7 @@ qupulse represents pulses as abstract pulse templates. A pulse template can be u
 There are multiple types of different pulse template classes, briefly explained in the following.
 
 :class:`.TablePulseTemplate`, :class:`.PointPulseTemplate` and :class:`.FunctionPulseTemplate` are used to define the atomic building blocks of pulses in the following ways: :class:`.TablePulseTemplate` and :class:`.PointPulseTemplate` allow the user to specify pairs of time and voltage values and choose an interpolation strategy between neighbouring points. Both templates support multiple channels but :class:`.TablePulseTemplate` allows for different time values for different channels meaning that the channels can change their voltages at different times. :class:`.PointPulseTemplate` restricts this to switches at the same time by interpreting the voltage as a vector and provides a more convenient interface for this case.
-:class:`.FunctionPulseTemplate` accepts any mathematical function that maps time to voltage values. Internally it uses :class:`.Expression` for function evaluation.
+:class:`.FunctionPulseTemplate` accepts any mathematical function that maps time to voltage values. Internally it uses :class:`qupulse.expressions.Expression` for function evaluation.
 
 All other pulse template classes are then used to construct arbitrarily complex pulse templates by combining existing ones into new structures [#tree]_:
 :class:`.SequencePulseTemplate` enables the user to specify a sequence of existing pulse templates (subtemplates) and modify parameter values using a mapping function.
