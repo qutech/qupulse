@@ -45,6 +45,7 @@ All examples are provided as static text in this documentation and, additionally
     :name: hardware_examples
 
     02CreatePrograms
+    04ZurichInstrumentsSetup
 
 The ``/doc/source/examples`` directory also contains some outdated examples for features and functionality that has been changed. These examples start with an underscore i.e. ``_*.ipynb`` and are currently left only for reference purposes.
 If you are just learning how to get around in qupulse please ignore them.

@@ -97,4 +97,4 @@ Read :ref:`program` and :ref:`hardware`.
 Setup an experiment
 ^^^^^^^^^^^^^^^^^^^
 
-This section is under construction. There is currently an outdated example :ref:`/examples/_HardwareSetup.ipynb`
+This process is not fully documented yet. qupulse gives you tools for very flexible setup configurations. However, there is an example setup with Zurich Instruments devices in :ref:`/examples/04ZurichInstrumentsSetup.ipynb`.
