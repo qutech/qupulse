@@ -1,0 +1,1 @@
+Remove private and unused frozendict fallback implementations `_FrozenDictByInheritance` and `_FrozenDictByWrapping`.
