@@ -107,6 +107,9 @@ html = """
   version = result.stdout.strip(); \
   subprocess.run(['sphinx-build', '-b', 'html', 'doc/source', 'doc/build/html', '-D', 'version=%s' % version, '-D', 'release=%s' % version])"
 """
+clean= """
+python -c "import shutil; shutil.rmtree('doc/build')"
+"""
 
 [tool.hatch.envs.changelog]
 detached = true
