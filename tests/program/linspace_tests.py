@@ -74,7 +74,7 @@ class PlainCSDTest(TestCase):
 
             LoopLabel(1, 99),
 
-            Increment(0, -2.0, key_0),
+            Increment(0, -1.99, key_0),
             Increment(1, 0.02, key_1),
             Wait(TimeType(10 ** 6)),
 
@@ -131,8 +131,8 @@ class TiltedCSDTest(TestCase):
 
             LoopLabel(1, 99),
 
-            Increment(0, 1e-3 + -200 * 1e-2, key_0),
-            Increment(1, 0.02 + -200 * -3e-3, key_1),
+            Increment(0, 1e-3 + -199 * 1e-2, key_0),
+            Increment(1, 0.02 + -199 * -3e-3, key_1),
             Wait(TimeType(10 ** 6)),
 
             LoopLabel(2, 199),
@@ -223,7 +223,7 @@ class SingletLoadProcessing(TestCase):
             Set(0, -0.4),
             Set(1, -0.3),
             Wait(TimeType(10 ** 5)),
-            Increment(0, -2.0, key_0),
+            Increment(0, -1.99, key_0),
             Increment(1, 0.02, key_1),
             Wait(TimeType(10 ** 6)),
             Set(0, 0.05),

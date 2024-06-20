@@ -341,7 +341,7 @@ class _TranslationState:
         self.add_node(node.body)
 
         if node.length > 1:
-            self.iterations[-1] = node.length
+            self.iterations[-1] = node.length - 1
             label, jmp = self.new_loop(node.length - 1)
             self.commands.append(label)
             self.add_node(node.body)
