@@ -82,6 +82,7 @@ include = [
 
 [tool.hatch.envs.docs]
 dependencies = [
+  "qupulse[default,zurich-instruments]",
   "sphinx",
   "nbsphinx",
   "sphinx-rtd-theme"
