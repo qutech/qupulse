@@ -8,7 +8,7 @@ dynamic = ["version"]
 description = "A Quantum compUting PULse parametrization and SEquencing framework"
 readme = "README.md"
 license = "GPL-3.0-or-later"
-requires-python = ">=3.8"
+requires-python = ">=3.10"
 authors = [
     { name = "Quantum Technology Group and Chair of Software Engineering, RWTH Aachen University" },
 ]
@@ -65,8 +65,7 @@ tests = [
     "pytest_benchmark",
 ]
 zurich-instruments = [
-    "qupulse-hdawg-legacy;python_version<'3.9'",
-    "qupulse-hdawg;python_version>='3.9'",
+    "qupulse-hdawg",
 ]
 
 [project.urls]
