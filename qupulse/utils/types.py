@@ -15,18 +15,12 @@ import operator
 import numpy
 import sympy
 import gmpy2
-
-try:
-    from frozendict import frozendict
-except ImportError:
-    warnings.warn("The frozendict package is not installed. We currently also ship a fallback frozendict which "
-                  "will be removed in a future release.", category=DeprecationWarning)
-    frozendict = None
+from frozendict import frozendict
 
 import qupulse.utils.numeric as qupulse_numeric
 
 __all__ = ["MeasurementWindow", "ChannelID", "HashableNumpyArray", "TimeType", "time_from_float", "DocStringABCMeta",
-           "SingletonABCMeta", "SequenceProxy", "frozendict"]
+           "SingletonABCMeta", "SequenceProxy"]
 
 MeasurementWindow = typing.Tuple[str, numbers.Real, numbers.Real]
 ChannelID = typing.Union[str, int]
@@ -399,121 +393,7 @@ _KT_hash = typing.TypeVar('_KT_hash', bound=typing.Hashable)  # Key type.
 _T_co_hash = typing.TypeVar('_T_co_hash', bound=typing.Hashable, covariant=True)  # Any type covariant containers.
 
 FrozenMapping = typing.Mapping[_KT_hash, _T_co_hash]
-
-
-class _FrozenDictByInheritance(dict):
-    """This is non mutable, hashable dict. It violates the Liskov substitution principle but is faster than wrapping.
-    It is not used by default and may be removed in the future.
-    """
-    def __setitem__(self, key, value):
-        raise TypeError('FrozenDict is immutable')
-
-    def __delitem__(self, key):
-        raise TypeError('FrozenDict is immutable')
-
-    def update(self, *args, **kwargs):
-        raise TypeError('FrozenDict is immutable')
-
-    def setdefault(self, *args, **kwargs):
-        raise TypeError('FrozenDict is immutable')
-
-    def clear(self):
-        raise TypeError('FrozenDict is immutable')
-
-    def pop(self, *args, **kwargs):
-        raise TypeError('FrozenDict is immutable')
-
-    def popitem(self, *args, **kwargs):
-        raise TypeError('FrozenDict is immutable')
-
-    def copy(self):
-        return self
-
-    def to_dict(self) -> typing.Dict[_KT_hash, _T_co_hash]:
-        return super().copy()
-
-    def __hash__(self):
-        # faster than functools.reduce(operator.xor, map(hash, self.items())) but takes more memory
-        # TODO: investigate caching
-        return hash(frozenset(self.items()))
-
-
-class _FrozenDictByWrapping(FrozenMapping):
-    """Immutable dict like type.
-
-    There are the following possibilities in pure python:
-     - subclass dict (violates the Liskov substitution principle)
-     - wrap dict (slow construction and method indirection)
-     - abuse MappingProxyType (hard to add hash and make mutation difficult)
-
-
-
-    Wrapper around builtin dict without the mutating methods.
-
-    Hot path methods in __slots__ are the bound methods of the dict object. The other methods are wrappers.
-
-    Why not subclass dict and overwrite mutating methods:
-        roughly the same speed for __slot__ methods (a bit slower than native dict)
-        dict subclass always implements MutableMapping which makes type annotations useless
-        caching the hash value is slightly slower for the subclass
-
-    Only downside: This wrapper class needs to implement __init__ and copy the __slot__ methods which is an overhead of
-                    ~10 i.e. 250ns for empty subclass init vs. 4µs for empty wrapper init
-    """
-    # made concessions in code style due to performance
-    _HOT_PATH_METHODS = ('keys', 'items', 'values', 'get', '__getitem__')
-    _PRIVATE_ATTRIBUTES = ('_hash', '_dict')
-    __slots__ = _HOT_PATH_METHODS + _PRIVATE_ATTRIBUTES
-
-    def __new__(cls, *args, **kwds):
-        """Overwriting __new__ saves a factor of two for initialization. This is the relevant line from
-        Generic.__new__"""
-        return object.__new__(cls)
-
-    def __init__(self, *args, **kwargs):
-        inner_dict = dict(*args, **kwargs)
-        self._dict = inner_dict  # type: typing.Dict[_KT_hash, _T_co_hash]
-        self._hash = None
-
-        self.__getitem__ = inner_dict.__getitem__
-        self.keys = inner_dict.keys
-        self.items = inner_dict.items
-        self.values = inner_dict.values
-        self.get = inner_dict.get
-
-    def __contains__(self, item: _KT_hash) -> bool:
-        return item in self._dict
-
-    def __iter__(self) -> typing.Iterator[_KT_hash]:
-        return iter(self._dict)
-
-    def __len__(self) -> int:
-        return len(self._dict)
-
-    def __repr__(self):
-        return '%s(%r)' % (self.__class__.__name__, self._dict)
-
-    def __hash__(self) -> int:
-        # use the local variable h to minimize getattr calls to minimum and reduce caching overhead
-        h = self._hash
-        if h is None:
-            self._hash = h = functools.reduce(operator.xor, map(hash, self.items()), 0xABCD0)
-        return h
-
-    def __eq__(self, other: typing.Mapping):
-        return other == self._dict
-
-    def copy(self):
-        return self
-
-    def to_dict(self) -> typing.Dict[_KT_hash, _T_co_hash]:
-        return self._dict.copy()
-
-
-if frozendict is None:
-    FrozenDict = _FrozenDictByWrapping
-else:
-    FrozenDict = frozendict
+FrozenDict = frozendict
 
 
 class SequenceProxy(collections.abc.Sequence):
@@ -550,5 +430,3 @@ class SequenceProxy(collections.abc.Sequence):
                     and all(x == y for x, y in zip(self, other)))
         else:
             return NotImplemented
-
-
