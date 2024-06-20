@@ -41,7 +41,7 @@ python -m pip install -e git+https://github.com/qutech/qupulse.git#egg=qupulse[d
 which will clone the github repository to `./src/qupulse` and do an editable/development install.
 
 ### Requirements and dependencies
-qupulse requires at least Python 3.8 and is tested on 3.8, 3.9 and 3.10. It relies on some external Python packages as dependencies. 
+qupulse requires at least Python 3.10 and is tested on 3.10, 3.11 and 3.12. It relies on some external Python packages as dependencies. 
 We intentionally did not restrict versions of dependencies in the install scripts to not unnecessarily prevent usage of newer releases of dependencies that might be compatible. However, if qupulse does encounter problems with a particular dependency version please file an issue. 
 
 The backend for TaborAWGs requires packages that can be found [here](https://git.rwth-aachen.de/qutech/python-TaborDriver).

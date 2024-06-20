@@ -1,0 +1,1 @@
+Remove python 3.8 and 3.9 support. Version 3.10 is now the minimal supported version.
