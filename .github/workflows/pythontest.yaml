@@ -15,6 +15,7 @@ on:
      - 'tests/**'
      - 'setup.*'
      - 'pyproject.toml'
+     - '.github/workflows/*'
 
 jobs:
   test:
