@@ -470,7 +470,7 @@ class LinSpaceVM:
                 # ignore jump
                 self.current_command += 1
         elif isinstance(cmd, LoopLabel):
-            self.label_counts[cmd.idx] = cmd.count
+            self.label_counts[cmd.idx] = cmd.count - 1
             self.current_command += 1
         else:
             self.change_state(cmd)
