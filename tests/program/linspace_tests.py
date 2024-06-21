@@ -32,6 +32,10 @@ class SingleRampTest(TestCase):
             LoopJmp(0)
         ]
 
+        self.output = [
+            (TimeType(10**6 * idx), [sum([-1.0] + [0.01] * idx)]) for idx in range(200)
+        ]
+
     def test_program(self):
         program_builder = LinSpaceBuilder(('a',))
         program = self.pulse_template.create_program(program_builder=program_builder)
@@ -40,6 +44,12 @@ class SingleRampTest(TestCase):
     def test_commands(self):
         commands = to_increment_commands([self.program])
         self.assertEqual(self.commands, commands)
+
+    def test_output(self):
+        vm = LinSpaceVM(1)
+        vm.set_commands(commands=self.commands)
+        vm.run()
+        self.assertEqual(self.output, vm.history)
 
 
 class PlainCSDTest(TestCase):
