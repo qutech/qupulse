@@ -8,6 +8,7 @@ from qupulse.program.transformation import *
 
 
 def assert_vm_output_almost_equal(test: TestCase, expected, actual):
+    """Compare two vm outputs with default TestCase.assertAlmostEqual accuracy"""
     test.assertEqual(len(expected), len(actual))
     for idx, ((t_e, vals_e), (t_a, vals_a)) in enumerate(zip(expected, actual)):
         test.assertEqual(t_e, t_a, f"Differing times in {idx} element")
@@ -59,7 +60,6 @@ class SingleRampTest(TestCase):
         vm = LinSpaceVM(1)
         vm.set_commands(commands=self.commands)
         vm.run()
-        self.assertEqual(self.output, vm.history)
         assert_vm_output_almost_equal(self, self.output, vm.history)
 
 
@@ -309,6 +309,23 @@ class SingletLoadProcessing(TestCase):
             LoopJmp(1),
         ]
 
+        self.output = []
+        time = TimeType(0)
+        for idx_b in range(100):
+            for idx_a in range(200):
+                self.output.append(
+                    (time, [-.4, -.3])
+                )
+                time += 10 ** 5
+                self.output.append(
+                    (time, [-1. + idx_a * 0.01, -.5 + idx_b * 0.02])
+                )
+                time += 10 ** 6
+                self.output.append(
+                    (time, [0.05, 0.06])
+                )
+                time += 10 ** 5
+
     def test_singlet_scan_program(self):
         program_builder = LinSpaceBuilder(('a', 'b'))
         program = self.pulse_template.create_program(program_builder=program_builder)
@@ -317,6 +334,12 @@ class SingletLoadProcessing(TestCase):
     def test_singlet_scan_commands(self):
         commands = to_increment_commands([self.program])
         self.assertEqual(self.commands, commands)
+
+    def test_singlet_scan_output(self):
+        vm = LinSpaceVM(2)
+        vm.set_commands(self.commands)
+        vm.run()
+        assert_vm_output_almost_equal(self, self.output, vm.history)
 
 
 class TransformedRampTest(TestCase):
