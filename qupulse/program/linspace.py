@@ -499,7 +499,7 @@ class LinSpaceVM:
         self.time = TimeType(0)
         self.registers = tuple({} for _ in range(channels))
 
-        self.history: List[Tuple[TimeType, Tuple[float, ...]]] = []
+        self.history: List[Tuple[TimeType, List[float]]] = []
 
         self.commands = None
         self.label_targets = None
@@ -523,9 +523,13 @@ class LinSpaceVM:
                 self.time += dt
                 t += dt
         elif isinstance(cmd, Wait):
-            self.history.append(
-                (self.time, self.current_values.copy())
-            )
+            if self.history and self.history[-1][1] == self.current_values:
+                # do not create noop entries
+                pass
+            else:
+                self.history.append(
+                    (self.time, self.current_values.copy())
+                )
             self.time += cmd.duration
         elif isinstance(cmd, Set):
             self.current_values[cmd.channel] = cmd.value
