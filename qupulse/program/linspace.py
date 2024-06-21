@@ -341,7 +341,7 @@ class _TranslationState:
         self.add_node(node.body)
 
         if node.length > 1:
-            self.iterations[-1] = node.length
+            self.iterations[-1] = node.length - 1
             label, jmp = self.new_loop(node.length - 1)
             self.commands.append(label)
             self.add_node(node.body)
@@ -411,4 +411,73 @@ def to_increment_commands(linspace_nodes: Sequence[LinSpaceNode]) -> List[Comman
     state = _TranslationState()
     state.add_node(linspace_nodes)
     return state.commands
+
+
+class LinSpaceVM:
+    def __init__(self, channels: int):
+        self.current_values = [np.nan] * channels
+        self.time = TimeType(0)
+        self.registers = tuple({} for _ in range(channels))
+
+        self.history: List[Tuple[TimeType, Tuple[float, ...]]] = []
+
+        self.commands = None
+        self.label_targets = None
+        self.label_counts = None
+        self.current_command = None
+
+    def change_state(self, cmd: Union[Set, Increment, Wait, Play]):
+        if isinstance(cmd, Play):
+            raise NotImplementedError("TODO: Implement arbitrary waveform simulation")
+        elif isinstance(cmd, Wait):
+            self.history.append(
+                (self.time, self.current_values.copy())
+            )
+            self.time += cmd.duration
+        elif isinstance(cmd, Set):
+            self.current_values[cmd.channel] = cmd.value
+            self.registers[cmd.channel][cmd.key] = cmd.value
+        elif isinstance(cmd, Increment):
+            value = self.registers[cmd.channel][cmd.dependency_key]
+            value += cmd.value
+            self.registers[cmd.channel][cmd.dependency_key] = value
+            self.current_values[cmd.channel] = value
+        else:
+            raise NotImplementedError(cmd)
+
+    def set_commands(self, commands: Sequence[Command]):
+        self.commands = []
+        self.label_targets = {}
+        self.label_counts = {}
+        self.current_command = None
+
+        for cmd in commands:
+            self.commands.append(cmd)
+            if isinstance(cmd, LoopLabel):
+                # a loop label signifies a reset count followed by the actual label that targets the following command
+                assert cmd.idx not in self.label_targets
+                self.label_targets[cmd.idx] = len(self.commands)
+
+        self.current_command = 0
+
+    def step(self):
+        cmd = self.commands[self.current_command]
+        if isinstance(cmd, LoopJmp):
+            if self.label_counts[cmd.idx] > 0:
+                self.label_counts[cmd.idx] -= 1
+                self.current_command = self.label_targets[cmd.idx]
+            else:
+                # ignore jump
+                self.current_command += 1
+        elif isinstance(cmd, LoopLabel):
+            self.label_counts[cmd.idx] = cmd.count - 1
+            self.current_command += 1
+        else:
+            self.change_state(cmd)
+            self.current_command += 1
+
+    def run(self):
+        while self.current_command < len(self.commands):
+            self.step()
+
 
