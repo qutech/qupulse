@@ -38,7 +38,7 @@ All examples are provided as static text in this documentation and, additionally
     03SnakeChargeScan
     03FreeInductionDecayExample
     03GateConfigurationExample
-    03DynamicNuclearPolarisation
+    04DynamicNuclearPolarisation
 
 .. toctree::
     :caption: Pulse playback related examples

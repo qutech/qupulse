@@ -42,6 +42,7 @@ autologging = [
 ]
 default = [
     "pandas",
+    "scipy",
     "qupulse[tests,docs,plotting,autologging,faster-sampling]",
 ]
 docs = [
@@ -82,6 +83,7 @@ include = [
 ]
 
 [tool.hatch.envs.docs]
+installer = "uv"
 dependencies = [
   "qupulse[default,zurich-instruments]",
   "sphinx",
@@ -111,6 +113,7 @@ html = """
 clean= """
 python -c "import shutil; shutil.rmtree('doc/build')"
 """
+clean-notebooks = "jupyter nbconvert --ClearMetadataPreprocessor.enabled=True --to=notebook --execute --inplace --log-level=ERROR doc/source/examples/00*.ipynb doc/source/examples/01*.ipynb doc/source/examples/02*.ipynb doc/source/examples/03*.ipynb"
 
 [tool.hatch.envs.changelog]
 detached = true
