@@ -111,6 +111,7 @@ html = """
 clean= """
 python -c "import shutil; shutil.rmtree('doc/build')"
 """
+clean-notebooks = "jupyter nbconvert --ClearOutputPreprocessor.enabled=True --ClearMetadataPreprocessor.enabled=True --to=notebook --inplace --log-level=ERROR doc/source/examples/*.ipynb"
 
 [tool.hatch.envs.changelog]
 detached = true
