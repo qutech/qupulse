@@ -1257,7 +1257,7 @@ class ReversedWaveform(Waveform):
         else:
             inner_output_array = output_array[::-1]
             inner_output_array = self._inner.unsafe_sample(channel, inner_sample_times, output_array=inner_output_array)
-            if inner_output_array.base not in (output_array, output_array.base):
+            if id(inner_output_array.base) not in (id(output_array), id(output_array.base)):
                 # TODO: is there a guarantee by numpy we never end up here?
                 output_array[:] = inner_output_array[::-1]
             return output_array
