@@ -1,5 +1,9 @@
 import unittest
 
+import numpy as np
+
+from qupulse.pulses import ConstantPT, FunctionPT
+from qupulse.plotting import render
 from qupulse.pulses.time_reversal_pulse_template import TimeReversalPulseTemplate
 from qupulse.utils.types import TimeType
 from qupulse.expressions import ExpressionScalar
@@ -24,6 +28,19 @@ class TimeReversalPulseTemplateTests(unittest.TestCase):
         self.assertEqual(reversed_pt.defined_channels, inner.defined_channels)
 
         self.assertEqual(reversed_pt.identifier, 'reverse')
+
+    def test_time_reversal_program(self):
+        inner = ConstantPT(4, {'a': 3}) @ FunctionPT('sin(t)', 5, channel='a')
+        manual_reverse = FunctionPT('sin(5 - t)', 5, channel='a') @ ConstantPT(4, {'a': 3})
+        time_reversed = TimeReversalPulseTemplate(inner)
+
+        program = time_reversed.create_program()
+        manual_program = manual_reverse.create_program()
+
+        t, data, _ = render(program, 9 / 10)
+        _, manual_data, _ = render(manual_program, 9 / 10)
+
+        np.testing.assert_allclose(data['a'], manual_data['a'])
 
 
 class TimeReversalPulseTemplateSerializationTests(unittest.TestCase, SerializableTests):
