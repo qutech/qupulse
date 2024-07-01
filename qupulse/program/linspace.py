@@ -44,6 +44,9 @@ class LinSpaceNode:
     def dependencies(self) -> Mapping[int, set]:
         raise NotImplementedError
 
+    def reversed(self, level: int):
+        raise NotImplementedError
+
 
 @dataclass
 class LinSpaceHold(LinSpaceNode):
@@ -60,12 +63,33 @@ class LinSpaceHold(LinSpaceNode):
                 for idx, factors in enumerate(self.factors)
                 if factors}
 
+    def reversed(self, level: int):
+        factors = []
+        for ch_factors in self.factors:
+            if ch_factors is None or len(ch_factors) <= level:
+                factors.append(ch_factors)
+            else:
+                reversed_factors = ch_factors[:level] + tuple(-f for f in ch_factors[level:])
+                factors.append(reversed_factors)
+
+        if self.duration_factors is not None and len(self.duration_factors) <= level:
+            duration_factors = self.duration_factors
+        else:
+            duration_factors = self.duration_factors[:level] + tuple(-f for f in self.duration_factors[level:])
+        return LinSpaceHold(self.bases, factors, duration_base=self.duration_base, duration_factors=duration_factors)
+
 
 @dataclass
 class LinSpaceArbitraryWaveform(LinSpaceNode):
     """This is just a wrapper to pipe arbitrary waveforms through the system."""
     waveform: Waveform
     channels: Tuple[ChannelID, ...]
+
+    def reversed(self, level: int):
+        return LinSpaceArbitraryWaveform(
+            waveform=self.waveform.reversed(),
+            channels=self.channels,
+        )
 
 
 @dataclass
@@ -80,6 +104,9 @@ class LinSpaceRepeat(LinSpaceNode):
             for idx, deps in node.dependencies().items():
                 dependencies.setdefault(idx, set()).update(deps)
         return dependencies
+
+    def reversed(self, level: int):
+        return LinSpaceRepeat(tuple(node.reversed(level) for node in reversed(self.body)), self.count)
 
 
 @dataclass
@@ -99,6 +126,9 @@ class LinSpaceIter(LinSpaceNode):
                 if shortened != {()}:
                     dependencies.setdefault(idx, set()).update(shortened)
         return dependencies
+
+    def reversed(self, level: int):
+        return LinSpaceIter(tuple(node.reversed() for node in reversed(self.body)), self.length)
 
 
 class LinSpaceBuilder(ProgramBuilder):
@@ -213,6 +243,13 @@ class LinSpaceBuilder(ProgramBuilder):
         self._ranges.pop()
         if cmds:
             self._stack[-1].append(LinSpaceIter(body=tuple(cmds), length=len(rng)))
+
+    def time_reversed(self) -> ContextManager['LinSpaceBuilder']:
+        self._stack.append([])
+        yield self
+        inner = self._stack.pop()
+        level = len(self._ranges)
+        self._stack[-1].extend(node.reversed(level) for node in reversed(inner))
 
     def to_program(self) -> Optional[Sequence[LinSpaceNode]]:
         if self._root():
