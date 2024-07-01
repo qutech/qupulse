@@ -49,7 +49,7 @@ The backend for TaborAWGs requires packages that can be found [here](https://git
 The data acquisition backend for AlazarTech cards needs a package that unfortunately is not open source (yet). If you need it or have questions contact <simon.humpohl@rwth-aachen.de>.
 
 ## Documentation
-You can find documentation on how to use this library on [readthedocs](https://qupulse.readthedocs.io/en/latest/) and [IPython notebooks with examples in this repo](doc/source/examples). You can build it locally with `python setup.py build_sphinx`.
+You can find documentation on how to use this library on [readthedocs](https://qupulse.readthedocs.io/en/latest/) and [IPython notebooks with examples in this repo](doc/source/examples). You can build it locally with `hatch run docs:html`.
 
 ### Folder Structure
 The repository primarily consists of the folders `qupulse` (toolkit core code) and `tests` (toolkit core tests). Additional parts of the project reside in `MATLAB` (MATLAB interface) and `doc` (configuration and source files to build documentation)  
@@ -70,6 +70,7 @@ Contents of `tests` mirror the structure of `qupulse`. For every `<module>` some
  - `hatch build`: Build wheel and source tarball
  - `hatch version X.X.X`: Set version
  - `hatch run docs:html`: Build documentation (requires pandoc)
+ - `hatch run docs:clean-notebooks` to execute all example notebooks that start with 00-03 and clean all metadata. 
  - `hatch run changelog:draft` and `hatch run changelog:release` to preview or update the changelog.
 
 ## License
