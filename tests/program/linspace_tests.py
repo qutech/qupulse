@@ -14,7 +14,7 @@ def assert_vm_output_almost_equal(test: TestCase, expected, actual):
         test.assertEqual(t_e, t_a, f"Differing times in {idx} element")
         test.assertEqual(len(vals_e), len(vals_a), f"Differing channel count in {idx} element")
         for ch, (val_e, val_a) in enumerate(zip(vals_e, vals_a)):
-            test.assertAlmostEqual(val_e, val_a, msg=f"Differing values in {idx} element channel {ch}")
+            test.assertAlmostEqual(val_e, val_a, msg=f"Differing values in {idx} of {len(expected)} element channel {ch}")
 
 
 class SingleRampTest(TestCase):
