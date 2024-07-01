@@ -164,6 +164,9 @@ class ProgramBuilder(Protocol):
                        measurements: Optional[Sequence[MeasurementWindow]] = None) -> Iterable['ProgramBuilder']:
         pass
 
+    def time_reversed(self) -> ContextManager['ProgramBuilder']:
+        pass
+
     def to_program(self) -> Optional[Program]:
         """Further addition of new elements might fail after finalizing the program."""
 
