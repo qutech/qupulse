@@ -9,33 +9,12 @@ import numpy
 
 from qupulse.hardware.dacs.dac_base import DAC
 
-from atssimple import acquire_sample_rates_time_windows
+from atssimple import acquire_sample_rates_time_windows, ATSSimpleCard
 
 logger = logging.getLogger(__name__)
 
 
-def _acquire_subprocess(
-    in_queue, out_queue, channel_mask, samples_per_second, board_ids
-) -> None:
-    """
-    Acquire using atssimple from sample_windows from a queue and push output into
-    another queue.
-
-    See atssimple.acquire_sample_rates_time_windows() doc for more information.
-    """
-
-    sample_windows = in_queue.get()
-    res = acquire_sample_rates_time_windows(
-        sample_rates=sample_windows,
-        return_samples_in_seconds=True,
-        channel_mask=channel_mask,
-        samples_per_second=samples_per_second,
-        board_ids=board_ids,
-    )
-    out_queue.put(res)
-
-
-class ATSSimpleCard(DAC):
+class ATSSimpleCard(ATSSimpleCard):
     def __init__(
         self,
         board_ids: Tuple[int, int] = (1, 1),
@@ -58,7 +37,10 @@ class ATSSimpleCard(DAC):
                 0b1000 = Channel D
         """
 
-        self._board_ids = board_ids
+        super().__init__(
+            acquisition_function=acquire_sample_rates_time_windows, board_ids=board_ids
+        )
+
         self.samples_per_second = samples_per_second
         self.channel_mask = channel_mask
 
@@ -68,9 +50,6 @@ class ATSSimpleCard(DAC):
         self._armed_sample_windows = None
         self._armed_window_names = None
 
-        self._window_queue = queue.Queue()
-        self._result_queue = queue.Queue()
-        self._acquisition_process = None
         self._results_raw = None
         self._samples_raw = None
 
@@ -176,30 +155,6 @@ class ATSSimpleCard(DAC):
 
         self.registered_programs[program_name]["operations"] = operations
 
-    def _start_acquisition(
-        self, sample_windows, channel_mask, samples_per_second, board_ids
-    ):
-        """
-        Perform Acquisition in another thread.
-        """
-
-        self._window_queue = queue.Queue()
-        self._result_queue = queue.Queue()
-
-        self._window_queue.put(sample_windows)
-        self._acquisition_process = threading.Thread(
-            target=_acquire_subprocess,
-            args=(
-                self._window_queue,
-                self._result_queue,
-                channel_mask,
-                samples_per_second,
-                board_ids,
-            ),
-        )
-
-        self._acquisition_process.start()
-
     def arm_program(self, program_name: str) -> None:
         if not program_name in self.registered_programs.keys():
             raise ValueError(f'"{program_name}" not registered!')
@@ -252,11 +207,11 @@ class ATSSimpleCard(DAC):
         self._samples_raw = {}
 
         # Start Acquisition
-        self._start_acquisition(
-            self._armed_sample_windows,
-            self.channel_mask,
-            self.samples_per_second,
-            self._board_ids,
+        self.start_acquisition(
+            sample_rates=self._armed_sample_windows,
+            channel_mask=self.channel_mask,
+            samples_per_second=self.samples_per_second,
+            return_samples_in_seconds=True,
         )
 
         # Additional wait to get acquisition ready before continuing
