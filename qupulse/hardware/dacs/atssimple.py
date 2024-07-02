@@ -1,8 +1,6 @@
-from typing import Iterable, Dict, Tuple
+from typing import Iterable, Dict, Tuple, Union
 import logging
 
-import threading
-import queue
 import time
 
 import numpy
@@ -20,6 +18,7 @@ class ATSSimpleCard(ATSSimpleCard):
         board_ids: Tuple[int, int] = (1, 1),
         samples_per_second: float = 125_000_000,
         channel_mask: int = 0b1111,
+        voltage_range: Union[float, Tuple[float, float, float, float]] = 1.0,
     ):
         """
         QuPulse DAC interface for ATSSimple.
@@ -35,6 +34,8 @@ class ATSSimpleCard(ATSSimpleCard):
                 0b0010 = Channel B
                 0b0100 = Channel C
                 0b1000 = Channel D
+            voltage_range, float or 4-tuple of floats (optional, default: 1.0):
+                The voltage ranges of each channel.
         """
 
         super().__init__(
@@ -43,6 +44,7 @@ class ATSSimpleCard(ATSSimpleCard):
 
         self.samples_per_second = samples_per_second
         self.channel_mask = channel_mask
+        self.voltage_range = voltage_range
 
         self.current_program = None
         self.registered_programs = {}
@@ -211,6 +213,7 @@ class ATSSimpleCard(ATSSimpleCard):
             sample_rates=self._armed_sample_windows,
             channel_mask=self.channel_mask,
             samples_per_second=self.samples_per_second,
+            voltage_range=self.voltage_range,
             return_samples_in_seconds=True,
         )
 
