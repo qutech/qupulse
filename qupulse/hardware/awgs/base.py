@@ -293,15 +293,18 @@ class ProgramEntry:
                 # play is handled by transforming the sampled waveform
                 continue
             elif isinstance(command, Increment):
-                if command.key.domain is not DepDomain.VOLTAGE:
+                if command.key.domain is not DepDomain.VOLTAGE or \
+                    command.channel not in self._channels:
                     #for sweeps of wf-scale and wf-offset, the channel amplitudes/offsets are already considered in the wf sampling.
                     continue
+                
                 ch_trafo = self._channel_transformations()[command.channel]
                 if ch_trafo.voltage_transformation:
                     raise RuntimeError("Cannot apply a voltage transformation to a linspace increment command")
                 command.value /= ch_trafo.amplitude
             elif isinstance(command, LSPSet):
-                if command.key.domain is not DepDomain.VOLTAGE:
+                if command.key.domain is not DepDomain.VOLTAGE or \
+                    command.channel not in self._channels:
                     #for sweeps of wf-scale and wf-offset, the channel amplitudes/offsets are already considered in the wf sampling.
                     continue
                 ch_trafo = self._channel_transformations()[command.channel]
