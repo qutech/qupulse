@@ -94,6 +94,7 @@ class HardwareSetup:
                          program: Loop,
                          run_callback=lambda: None,
                          update: bool = False,
+                         channels = None,
                          measurements: Mapping[str, Tuple[np.ndarray, np.ndarray]] = None) -> None:
         """Register a program under a given name at the hardware setup. The program will be uploaded to the
         participating AWGs and DACs. The run callback is used for triggering the program after arming.
@@ -109,7 +110,8 @@ class HardwareSetup:
         if not callable(run_callback):
             raise TypeError('The provided run_callback is not callable')
 
-        channels = next(program.get_depth_first_iterator()).waveform.defined_channels
+        if channels is None:
+            channels = next(program.get_depth_first_iterator()).waveform.defined_channels
         if channels - set(self._channel_map.keys()):
             raise KeyError('The following channels are unknown to the HardwareSetup: {}'.format(
                 channels - set(self._channel_map.keys())))
