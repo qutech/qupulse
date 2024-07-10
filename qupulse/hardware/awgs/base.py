@@ -300,7 +300,8 @@ class ProgramEntry:
                 
                 ch_trafo = self._channel_transformations()[command.channel]
                 if ch_trafo.voltage_transformation:
-                    raise RuntimeError("Cannot apply a voltage transformation to a linspace increment command")
+                    if ch_trafo.voltage_transformation(1.0) != 1.0:
+                        raise RuntimeError("Cannot apply a voltage transformation to a linspace increment command")
                 command.value /= ch_trafo.amplitude
             elif isinstance(command, LSPSet):
                 if command.key.domain is not DepDomain.VOLTAGE or \
@@ -310,7 +311,7 @@ class ProgramEntry:
                 ch_trafo = self._channel_transformations()[command.channel]
                 if ch_trafo.voltage_transformation:
                     # for the case of swept parameters, this is defaulted to identity
-                    command.value = float(ch_trafo.voltage_transformation(command.value))
+                    command.value = ch_trafo.voltage_transformation(command.value)
                 command.value -= ch_trafo.offset
                 command.value /= ch_trafo.amplitude
             else:        

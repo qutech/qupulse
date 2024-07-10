@@ -135,6 +135,9 @@ class ResolutionDependentValue(Generic[NumVal]):
     
     def __truediv__(self,other):
         return self.__mul__(1/other)
+
+    def __float__(self):
+        return float(self(resolution=None))
     
     
     
@@ -347,8 +350,8 @@ class LinSpaceBuilder(ProgramBuilder):
         duration_factors = None
         
         for ch_name,value in voltages.items():
-            if isinstance(value, float):
-                bases[ch_name] = value
+            if isinstance(value, (float, int)):
+                bases[ch_name] = float(value)
                 factors[ch_name] = None
                 continue
             offsets = value.offsets
