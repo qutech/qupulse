@@ -65,7 +65,7 @@ class SimpleExpression(Generic[NumVal]):
         return self.__add__(-other)
 
     def __rsub__(self, other):
-        (-self).__add__(other)
+        return (-self).__add__(other)
 
     def __neg__(self):
         return SimpleExpression(-self.base, {name: -value for name, value in self.offsets.items()})
