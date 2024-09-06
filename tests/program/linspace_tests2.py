@@ -11,15 +11,17 @@ class SingleRampTest(TestCase):
         hold = ConstantPT(10 ** 6, {'a': '-1. + idx * 0.01'})
         self.pulse_template = hold.with_iteration('idx', 200)
 
-        self.program = LinSpaceIter(
+        self.program = LinSpaceTopLevel(LinSpaceIter(
+            to_be_stepped=False,
             length=200,
             body=(LinSpaceHold(
+                channels=('a','b'),
                 bases=(-1.,),
                 factors=((0.01,),),
                 duration_base=TimeType(10**6),
                 duration_factors=None
             ),)
-        )
+        ))
 
         key = DepKey.from_voltages((0.01,), DEFAULT_INCREMENT_RESOLUTION)
 
@@ -38,7 +40,9 @@ class SingleRampTest(TestCase):
         self.assertEqual([self.program], program)
 
     def test_commands(self):
-        commands = to_increment_commands(self.program)
+        program_builder = LinSpaceBuilder()
+        program = self.pulse_template.create_program(program_builder=program_builder)
+        commands = to_increment_commands(program)
         self.assertEqual(self.commands, commands)
 
 
@@ -85,10 +89,10 @@ class SequencedIterationTest(TestCase):
             ConstantPT(2*10 ** 5, {'b': 'idx_b*0.01',}),            
             )
     
-        pt = (random_constant @ dependent_constant2 @ (wait.with_iteration('idx_a', rep_factor*10*2)) \
+        pt = (dependent_constant @ dependent_constant2 @ (wait.with_iteration('idx_a', rep_factor*10*2)) \
               @ dependent_constant2).with_iteration('idx_b', rep_factor*10)\
 
-        self.pulse_template = pt
+        self.pulse_template = MappingPT(pt,parameter_mapping=dict(y_gain=0.3,))
         
     def test_program(self):
         program_builder = LinSpaceBuilder()
@@ -110,7 +114,7 @@ class AmplitudeSweepTest(TestCase):
         amp_pt = "amp*1/8"*FunctionPT("sin(t/1000)","t_sin",channel='a')
         
         pt = (normal_pt@amp_pt@normal_pt@amp_pt@amp_pt@normal_pt).with_iteration('amp', rep_factor)
-        self.pulse_template = pt
+        self.pulse_template = MappingPT(pt,parameter_mapping=dict(t_sin=64e2,))
         
     def test_program(self):
         program_builder = LinSpaceBuilder()
@@ -139,7 +143,7 @@ class SteppedRepetitionTest(TestCase):
               .with_repetition(rep_factor)@amp_inner.with_iteration('amp', rep_factor))\
               .with_iteration('amp2', rep_factor).with_iteration('freq', rep_factor).with_iteration('idx_a',rep_factor)
        
-        self.pulse_template = pt
+        self.pulse_template = MappingPT(pt,parameter_mapping=dict(t_sin=64e2,idx_t=1,))
         
     def test_program(self):
         program_builder = LinSpaceBuilder(to_stepping_repeat={'amp','amp2','off','freq'},)
@@ -154,7 +158,7 @@ class SteppedRepetitionTest(TestCase):
         
 
 class CombinedSweepTest(TestCase):
-    def setUp(self,rep_factor=2):
+    def setUp(self,base_time=1e2,rep_factor=2):
 
         wait = ConstantPT(f'64*{base_time}*1e1*(1+idx_t)', {'a': f'-1. + idx_a * 0.5/{rep_factor}', 'b': f'-.5 + idx_a * 0.8/{rep_factor}'})
         normal_pt = ParallelConstantChannelPT(FunctionPT("sin(t/2000)","t_sin",channel='a'),{'b':-0.2})
@@ -164,13 +168,16 @@ class CombinedSweepTest(TestCase):
             .with_iteration('amp', rep_factor)\
             .with_iteration('idx_a', rep_factor)\
             .with_iteration('idx_t', rep_factor)
-        self.pulse_template = pt
+            
+        self.pulse_template = MappingPT(pt,parameter_mapping=dict(t_sin=64e2,))
         
     def test_program(self):
         program_builder = LinSpaceBuilder()
         self._program_to_test = self.pulse_template.create_program(program_builder=program_builder)
         
     def test_commands(self):
+        program_builder = LinSpaceBuilder()
+        self._program_to_test = self.pulse_template.create_program(program_builder=program_builder)
         commands = to_increment_commands(self._program_to_test)
         # so far just a test to see if the program creation works at all.
         # self.assertEqual([self.program], program)
