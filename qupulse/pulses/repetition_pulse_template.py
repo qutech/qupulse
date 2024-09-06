@@ -135,7 +135,9 @@ class RepetitionPulseTemplate(LoopPulseTemplate, ParameterConstrainer, Measureme
 
             for repetition_program_builder in program_builder.with_repetition(repetition_definition,
                                                                               measurements=measurements):
-                self.body._create_program(scope=repetition_program_builder.inner_scope(scope, pt_obj=self),
+                self.body._create_program(
+                    #scope=repetition_program_builder.inner_scope(scope, pt_obj=self),
+                    scope=scope, #there should not be any replacements with SimpleExpression here, so this is unnecessary
                                           measurement_mapping=measurement_mapping,
                                           channel_mapping=channel_mapping,
                                           global_transformation=global_transformation,
