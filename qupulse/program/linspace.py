@@ -140,7 +140,9 @@ class ResolutionDependentValue(Generic[NumVal]):
     def __float__(self):
         return float(self(resolution=None))
     
-    
+    def __str__(self):
+        return f"RDP of {sum(b*m for b,m in zip(self.bases,self.multiplicities)) + self.offset}"
+        
     
 @dataclass(frozen=True)
 class DepKey:
@@ -868,7 +870,9 @@ class Increment:
     
     def __hash__(self):
         return hash((self.channel,self.value,self.key))
-
+    
+    def __str__(self):
+        return "Increment("+",".join([f"{k}="+v.__str__() for k,v in vars(self).items()])+")"
 
 @dataclass
 class Set:
@@ -878,7 +882,10 @@ class Set:
 
     def __hash__(self):
         return hash((self.channel,self.value,self.key))
-
+    
+    def __str__(self):
+        return "Increment("+",".join([f"{k}="+v.__str__() for k,v in vars(self).items()])+")"
+    
 @dataclass
 class Wait:
     duration: Optional[TimeType]
