@@ -2,12 +2,13 @@ import abc
 import contextlib
 import dataclasses
 import numpy as np
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Mapping, Optional, Sequence, ContextManager, Iterable, Tuple, Union, Dict, List, Iterator, Generic,\
     Set as TypingSet, Callable
 from enum import Enum
 from itertools import dropwhile, count
 from numbers import Real, Number
+from collections import defaultdict
 
 
 from qupulse import ChannelID, MeasurementWindow
@@ -170,13 +171,64 @@ class DepKey:
 
 
 @dataclass
+class DummyMeasurementMemory:
+    measurements: List[MeasurementWindow] = field(default_factory=lambda: [])
+    
+    def add_measurements(self, measurements: List[MeasurementWindow]):
+        self.measurements.extend(measurements)
+
+
+@dataclass
 class LinSpaceNode:
     """AST node for a program that supports linear spacing of set points as well as nested sequencing and repetitions"""
-        
+    
+    _cached_body_duration: TimeType|None = field(default=None, kw_only=True)
+    _measurement_memory: DummyMeasurementMemory|None = field(default_factory=lambda:DummyMeasurementMemory(), kw_only=True)
+    
     def dependencies(self) -> Mapping[GeneralizedChannel, set]:
         # doing this as a set _should_ get rid of non-active deps that are one level above?
         #!!! 
         raise NotImplementedError
+        
+    @property
+    def body_duration(self) -> TimeType:
+        raise NotImplementedError
+        
+    def _get_measurement_windows(self) -> Mapping[str, np.ndarray]:
+        """Private implementation of get_measurement_windows with a slightly different data format for easier tiling.
+        Returns:
+             A dictionary (measurement_name -> array) with begin == array[:, 0] and length == array[:, 1]
+        """
+        raise NotImplementedError
+
+    def get_measurement_windows(self) -> Dict[str, Tuple[np.ndarray, np.ndarray]]:
+        """Iterates over all children and collect the begin and length arrays of each measurement window.
+        Returns:
+            A dictionary (measurement_name -> (begin, length)) with begin and length being :class:`numpy.ndarray`
+        """
+        return {mw_name: (begin_length_list[:, 0], begin_length_list[:, 1])
+                for mw_name, begin_length_list in self._get_measurement_windows().items()}
+
+
+@dataclass
+class LinSpaceTopLevel(LinSpaceNode):
+    
+    body: Tuple[LinSpaceNode, ...]
+    
+    @property
+    def body_duration(self) -> TimeType:
+        if self._cached_body_duration is None:
+            self._cached_body_duration = self.duration_base
+        return self._cached_body_duration
+    
+    def _get_measurement_windows(self,) -> Mapping[str, np.ndarray]:
+        """Private implementation of get_measurement_windows with a slightly different data format for easier tiling.
+        Returns:
+              A dictionary (measurement_name -> array) with begin == array[:, 0] and length == array[:, 1]
+        """
+        return _get_measurement_windows_loop(self._measurement_memory.measurements,1,self.body)
+    
+    
 
 @dataclass
 class LinSpaceNodeChannelSpecific(LinSpaceNode):
@@ -187,7 +239,14 @@ class LinSpaceNodeChannelSpecific(LinSpaceNode):
     def play_channels(self) -> Tuple[ChannelID, ...]:
         return tuple(ch for ch in self.channels if isinstance(ch,ChannelID))
     
-
+    def _get_measurement_windows(self,) -> Mapping[str, np.ndarray]:
+        """Private implementation of get_measurement_windows with a slightly different data format for easier tiling.
+        Returns:
+              A dictionary (measurement_name -> array) with begin == array[:, 0] and length == array[:, 1]
+        """
+        return _get_measurement_windows_leaf(self._measurement_memory.measurements)
+    
+    
 @dataclass
 class LinSpaceHold(LinSpaceNodeChannelSpecific):
     """Hold voltages for a given time. The voltages and the time may depend on the iteration index."""
@@ -209,6 +268,14 @@ class LinSpaceHold(LinSpaceNodeChannelSpecific):
                 DepDomain.TIME_LIN: {DepDomain.TIME_LIN:self.duration_factors},
                 }
     
+    @property
+    def body_duration(self) -> TimeType:
+        if self.duration_factors:
+            raise NotImplementedError
+        if self._cached_body_duration is None:
+            self._cached_body_duration = self.duration_base
+        return self._cached_body_duration
+    
 
 @dataclass
 class LinSpaceArbitraryWaveform(LinSpaceNodeChannelSpecific):
@@ -217,6 +284,12 @@ class LinSpaceArbitraryWaveform(LinSpaceNodeChannelSpecific):
     
     def dependencies(self):
         return {}
+    
+    @property
+    def body_duration(self) -> TimeType:
+        if self._cached_body_duration is None:
+            self._cached_body_duration = self.waveform.duration
+        return self._cached_body_duration
     
 
 @dataclass
@@ -251,6 +324,13 @@ class LinSpaceArbitraryWaveformIndexed(LinSpaceNodeChannelSpecific):
     @property
     def step_channels(self) -> Optional[Tuple[StepRegister]]:
         return tuple(self.index_factors.keys()) if self.index_factors else ()
+    
+    @property
+    def body_duration(self) -> TimeType:
+        if self._cached_body_duration is None:
+            self._cached_body_duration = self.waveform.duration
+        return self._cached_body_duration
+    
 
 @dataclass
 class LinSpaceRepeat(LinSpaceNode):
@@ -265,8 +345,21 @@ class LinSpaceRepeat(LinSpaceNode):
                 for ch, deps in ch_to_deps.items():
                     dependencies.setdefault(dom,{}).setdefault(ch, set()).update(deps)
         return dependencies
-
-
+    
+    @property
+    def body_duration(self) -> TimeType:
+        if self._cached_body_duration is None:
+            self._cached_body_duration = self.count*sum(b.body_duration for b in self.body)
+        return self._cached_body_duration
+    
+    def _get_measurement_windows(self,) -> Mapping[str, np.ndarray]:
+        """Private implementation of get_measurement_windows with a slightly different data format for easier tiling.
+        Returns:
+              A dictionary (measurement_name -> array) with begin == array[:, 0] and length == array[:, 1]
+        """
+        return _get_measurement_windows_loop(self._measurement_memory.measurements,self.count,self.body)
+    
+    
 @dataclass
 class LinSpaceIter(LinSpaceNode):
     """Iteration in linear space are restricted to range 0 to length.
@@ -287,6 +380,84 @@ class LinSpaceIter(LinSpaceNode):
                     if shortened != {()}:
                         dependencies.setdefault(dom,{}).setdefault(ch, set()).update(shortened)
         return dependencies
+    
+    @property
+    def body_duration(self) -> TimeType:
+        if self._cached_body_duration is None:
+            self._cached_body_duration = self.length*sum(b.body_duration for b in self.body)
+        return self._cached_body_duration
+    
+    def _get_measurement_windows(self,) -> Mapping[str, np.ndarray]:
+        """Private implementation of get_measurement_windows with a slightly different data format for easier tiling.
+        Returns:
+              A dictionary (measurement_name -> array) with begin == array[:, 0] and length == array[:, 1]
+        """
+        return _get_measurement_windows_loop(self._measurement_memory.measurements,self.length,self.body)
+
+    
+
+def _get_measurement_windows_leaf(measurements: List[MeasurementWindow]) -> Mapping[str, np.ndarray]:
+    """Private implementation of get_measurement_windows with a slightly different data format for easier tiling.
+    Returns:
+          A dictionary (measurement_name -> array) with begin == array[:, 0] and length == array[:, 1]
+    """
+    temp_meas_windows = defaultdict(list)
+    if measurements:
+        for (mw_name, begin, length) in measurements:
+            temp_meas_windows[mw_name].append((begin, length))
+
+        for mw_name, begin_length_list in temp_meas_windows.items():
+            temp_meas_windows[mw_name] = np.asarray(begin_length_list, dtype=float)
+
+    return temp_meas_windows
+
+
+def _get_measurement_windows_loop(measurements: List[MeasurementWindow], count: int,
+                                  body: List[LinSpaceNode]) -> Mapping[str, np.ndarray]:
+    """Private implementation of get_measurement_windows with a slightly different data format for easier tiling.
+    Returns:
+          A dictionary (measurement_name -> array) with begin == array[:, 0] and length == array[:, 1]
+    """
+    temp_meas_windows = defaultdict(list)
+    if measurements:
+        for (mw_name, begin, length) in measurements:
+            temp_meas_windows[mw_name].append((begin, length))
+
+        for mw_name, begin_length_list in temp_meas_windows.items():
+            temp_meas_windows[mw_name] = [np.asarray(begin_length_list, dtype=float)]
+
+    offset = TimeType(0)
+    for child in body:
+        for mw_name, begins_length_array in child._get_measurement_windows().items():
+            begins_length_array[:, 0] += float(offset)
+            temp_meas_windows[mw_name].append(begins_length_array)
+        offset += child.body_duration
+
+    body_duration = float(offset)
+
+    # formatting like this for easier debugging
+    result = {}
+
+    # repeat and add repetition based offset
+    for mw_name, begin_length_list in temp_meas_windows.items():
+        result[mw_name] = _repeat_loop_measurements(begin_length_list, count, body_duration)
+
+    return result
+
+
+def _repeat_loop_measurements(begin_length_list: List[np.ndarray],
+                              repetition_count: int,
+                              body_duration: float
+                              ) -> np.ndarray:
+    temp_begin_length_array = np.concatenate(begin_length_list)
+
+    begin_length_array = np.tile(temp_begin_length_array, (repetition_count, 1))
+
+    shaped_begin_length_array = np.reshape(begin_length_array, (repetition_count, -1, 2))
+
+    shaped_begin_length_array[:, :, 0] += (np.arange(repetition_count) * body_duration)[:, np.newaxis]
+
+    return begin_length_array
 
 
 class LinSpaceBuilder(ProgramBuilder):
@@ -310,7 +481,8 @@ class LinSpaceBuilder(ProgramBuilder):
         self._stack = [[]]
         self._ranges = []
         self._to_stepping_repeat = to_stepping_repeat
-
+        self._meas_queue = []
+        
     def _root(self):
         return self._stack[0]
 
@@ -394,6 +566,9 @@ class LinSpaceBuilder(ProgramBuilder):
                                )
 
         self._stack[-1].append(set_cmd)
+        if measurements:=self._meas_queue.pop():
+            self._stack[-1][-1]._measurement_memory.add_measurements(measurements)
+        
 
     def play_arbitrary_waveform(self, waveform: Union[Waveform,WaveformCollection],
                                 stepped_var_list: Optional[List[Tuple[str,SimpleExpressionStepped]]] = None):
@@ -402,7 +577,10 @@ class LinSpaceBuilder(ProgramBuilder):
         # other sweepable things may need different approaches.
         if not isinstance(waveform,(TransformingWaveform,WaveformCollection)):
             assert stepped_var_list is None
-            return self._stack[-1].append(LinSpaceArbitraryWaveform(waveform=waveform,channels=waveform.defined_channels,))
+            ret = self._stack[-1].append(LinSpaceArbitraryWaveform(waveform=waveform,channels=waveform.defined_channels,))
+            if measurements:=self._meas_queue.pop():
+                self._stack[-1][-1]._measurement_memory.add_measurements(measurements)
+            return ret
         
             
         #should be sufficient to test the first wf, as all should have the same trafo
@@ -422,7 +600,10 @@ class LinSpaceBuilder(ProgramBuilder):
         
         #fast track
         if not dependent_trafo_vals_flag and not isinstance(waveform,WaveformCollection):
-            return self._stack[-1].append(LinSpaceArbitraryWaveform(waveform=waveform,channels=waveform.defined_channels,))
+            ret = self._stack[-1].append(LinSpaceArbitraryWaveform(waveform=waveform,channels=waveform.defined_channels,))
+            if measurements:=self._meas_queue.pop():
+                self._stack[-1][-1]._measurement_memory.add_measurements(measurements)
+            return ret
     
         ranges = self._get_ranges()
         ranges_list = list(ranges)
@@ -501,7 +682,7 @@ class LinSpaceBuilder(ProgramBuilder):
 
         # assert ba        
 
-        return self._stack[-1].append(LinSpaceArbitraryWaveformIndexed(
+        ret = self._stack[-1].append(LinSpaceArbitraryWaveformIndexed(
             waveform=waveform,
             channels=waveform_propertyextractor.defined_channels.union(set(index_factors.keys())),
             scale_bases=scale_bases,
@@ -510,10 +691,14 @@ class LinSpaceBuilder(ProgramBuilder):
             offset_factors=offset_factors,
             index_factors=index_factors,
             ))
+        if measurements:=self._meas_queue.pop():
+            self._stack[-1][-1]._measurement_memory.add_measurements(measurements)
+        return ret
 
     def measure(self, measurements: Optional[Sequence[MeasurementWindow]]):
-        """Ignores measurements"""
-        pass
+        # """Ignores measurements"""
+        
+        self._meas_queue.append(measurements)
 
     def with_repetition(self, repetition_count: RepetitionCount,
                         measurements: Optional[Sequence[MeasurementWindow]] = None) -> Iterable['ProgramBuilder']:
@@ -610,8 +795,9 @@ class LinSpaceBuilder(ProgramBuilder):
             self.hold_voltage(potential_waveform.duration, constant_values)
     
     def to_program(self) -> Optional[Sequence[LinSpaceNode]]:
+        assert not self._meas_queue
         if self._root():
-            return self._root()
+            return [LinSpaceTopLevel(self._root())]
 
 
 def collect_scaling_and_offset_per_channel(channels: Sequence[ChannelID],
@@ -967,6 +1153,7 @@ class _TranslationState:
             
     def add_node(self, node: Union[LinSpaceNode, Sequence[LinSpaceNode]]):
         """Translate a (sequence of) linspace node(s) to commands and add it to the internal command list."""
+
         if isinstance(node, Sequence):
             for lin_node in node:
                 self.add_node(lin_node)
@@ -996,6 +1183,6 @@ def to_increment_commands(linspace_nodes: Sequence[LinSpaceNode],
     """translate the given linspace node tree to a minimal sequence of set and increment commands as well as loops."""
     # if resolution: raise NotImplementedError('wrongly assumed resolution. need to fix')
     state = _TranslationState()
-    state.add_node(linspace_nodes)
+    state.add_node(linspace_nodes[0].body)
     return state.commands
 
