@@ -155,9 +155,10 @@ class DepKey:
     
     @classmethod
     def from_domain(cls, factors, resolution, domain):
-        # remove trailing zeros
-        while factors and factors[-1] == 0:
-            factors = factors[:-1]
+        # # remove trailing zeros
+        #why was this done in the first place? this seems to introduce more bugs than it solves
+        # while factors and factors[-1] == 0:
+        #     factors = factors[:-1]
         return cls(tuple(int(round(factor / resolution)) for factor in factors),
                    domain)
     
