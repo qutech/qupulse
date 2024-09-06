@@ -567,8 +567,8 @@ class LinSpaceBuilder(ProgramBuilder):
                                )
 
         self._stack[-1].append(set_cmd)
-        if measurements:=self._meas_queue.pop():
-            self._stack[-1][-1]._measurement_memory.add_measurements(measurements)
+        if self._meas_queue:
+            self._stack[-1][-1]._measurement_memory.add_measurements(self._meas_queue.pop())
         
 
     def play_arbitrary_waveform(self, waveform: Union[Waveform,WaveformCollection],
@@ -579,8 +579,8 @@ class LinSpaceBuilder(ProgramBuilder):
         if not isinstance(waveform,(TransformingWaveform,WaveformCollection)):
             assert stepped_var_list is None
             ret = self._stack[-1].append(LinSpaceArbitraryWaveform(waveform=waveform,channels=waveform.defined_channels,))
-            if measurements:=self._meas_queue.pop():
-                self._stack[-1][-1]._measurement_memory.add_measurements(measurements)
+            if self._meas_queue:
+                self._stack[-1][-1]._measurement_memory.add_measurements(self._meas_queue.pop())
             return ret
         
             
@@ -602,8 +602,8 @@ class LinSpaceBuilder(ProgramBuilder):
         #fast track
         if not dependent_trafo_vals_flag and not isinstance(waveform,WaveformCollection):
             ret = self._stack[-1].append(LinSpaceArbitraryWaveform(waveform=waveform,channels=waveform.defined_channels,))
-            if measurements:=self._meas_queue.pop():
-                self._stack[-1][-1]._measurement_memory.add_measurements(measurements)
+            if self._meas_queue:
+                self._stack[-1][-1]._measurement_memory.add_measurements(self._meas_queue.pop())
             return ret
     
         ranges = self._get_ranges()
@@ -692,8 +692,8 @@ class LinSpaceBuilder(ProgramBuilder):
             offset_factors=offset_factors,
             index_factors=index_factors,
             ))
-        if measurements:=self._meas_queue.pop():
-            self._stack[-1][-1]._measurement_memory.add_measurements(measurements)
+        if self._meas_queue:
+            self._stack[-1][-1]._measurement_memory.add_measurements(self._meas_queue.pop())
         return ret
 
     def measure(self, measurements: Optional[Sequence[MeasurementWindow]]):
