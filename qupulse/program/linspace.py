@@ -91,8 +91,8 @@ class ResolutionDependentValue(Generic[NumVal]):
                  multiplicities: Tuple[int],
                  offset: NumVal):
     
-        self.bases = bases
-        self.multiplicities = multiplicities
+        self.bases = tuple(bases)
+        self.multiplicities = tuple(multiplicities)
         self.offset = offset
         self.__is_time_or_int = all(isinstance(b,(TimeType,int_type)) for b in bases) and isinstance(offset,(TimeType,int_type))
  
@@ -142,7 +142,15 @@ class ResolutionDependentValue(Generic[NumVal]):
     
     def __str__(self):
         return f"RDP of {sum(b*m for b,m in zip(self.bases,self.multiplicities)) + self.offset}"
-        
+    
+    def __repr__(self):
+        return "RDP("+",".join([f"{k}="+v.__str__() for k,v in vars(self).items()])+")"
+    
+    def __eq__(self,o):
+        if not isinstance(o,ResolutionDependentValue):
+            return False
+        return self.__dict__ == o.__dict__
+    
     
 @dataclass(frozen=True)
 class DepKey:
@@ -800,7 +808,7 @@ class LinSpaceBuilder(ProgramBuilder):
     def to_program(self) -> Optional[Sequence[LinSpaceNode]]:
         assert not self._meas_queue
         if self._root():
-            return [LinSpaceTopLevel(self._root())]
+            return [LinSpaceTopLevel(body=tuple(self._root())),]
 
 
 def collect_scaling_and_offset_per_channel(channels: Sequence[ChannelID],
