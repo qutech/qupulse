@@ -11,25 +11,25 @@ class SingleRampTest(TestCase):
         hold = ConstantPT(10 ** 6, {'a': '-1. + idx * 0.01'})
         self.pulse_template = hold.with_iteration('idx', 200)
 
-        self.program = LinSpaceTopLevel(LinSpaceIter(
+        self.program = LinSpaceTopLevel(body=(LinSpaceIter(
             to_be_stepped=False,
             length=200,
             body=(LinSpaceHold(
-                channels=('a','b'),
-                bases=(-1.,),
-                factors=((0.01,),),
+                channels=('a',),
+                bases={'a': -1.0},
+                factors={'a': (0.01,)},
                 duration_base=TimeType(10**6),
                 duration_factors=None
             ),)
-        ))
+        ),))
 
         key = DepKey.from_voltages((0.01,), DEFAULT_INCREMENT_RESOLUTION)
 
         self.commands = [
-            Set(0, -1.0, key),
+            Set('a',ResolutionDependentValue((),(),-1.0),key=key),
             Wait(TimeType(10 ** 6)),
             LoopLabel(0, 199),
-            Increment(0, 0.01, key),
+            Increment('a',ResolutionDependentValue((0.01,),(1,),0.0),key=key),
             Wait(TimeType(10 ** 6)),
             LoopJmp(0)
         ]
@@ -42,8 +42,8 @@ class SingleRampTest(TestCase):
     def test_commands(self):
         program_builder = LinSpaceBuilder()
         program = self.pulse_template.create_program(program_builder=program_builder)
-        commands = to_increment_commands(program)
-        self.assertEqual(self.commands, commands)
+        self.commands_to_test = to_increment_commands(program)
+        self.assertEqual(self.commands, self.commands_to_test)
 
 
 class TimeSweepTest(TestCase):
