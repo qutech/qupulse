@@ -104,8 +104,45 @@ class SequencedIterationTest(TestCase):
         commands = to_increment_commands(self._program_to_test)
         # so far just a test to see if the program creation works at all.
         # self.assertEqual([self.program], program)
+    
+
+class SequencedIterationTest(TestCase):
+    def setUp(self,base_time=1e2,rep_factor=2):
+        wait = AtomicMultiChannelPT(
+            ConstantPT(f'64*{base_time}*1e1', {'a': '-1. + idx_a * 0.01 + y_gain', }),
+            ConstantPT(f'64*{base_time}*1e1', {'b': '-.5 + idx_b * 0.02'})
+            )
         
+        dependent_constant = AtomicMultiChannelPT(
+            ConstantPT(10 ** 5, {'a': -.3}),
+            ConstantPT(10 ** 5, {'b': 'idx_b*0.02',}),            
+            )
         
+        dependent_constant2 = AtomicMultiChannelPT(
+            ConstantPT(2*10 ** 5, {'a': '-.3+idx_b*0.01'}),
+            ConstantPT(2*10 ** 5, {'b': 'idx_b*0.01',}),
+            measurements=[('c',0,10**5)]    
+            )
+    
+        pt = (dependent_constant @ dependent_constant2 @ (wait.with_iteration('idx_a', rep_factor*10*2)) \
+              @ dependent_constant2).with_iteration('idx_b', rep_factor*10)\
+        
+        step_len = 10**5*5 + rep_factor*10*2*64*base_time*1e1
+            
+        self.measurements = {
+            'c': (
+                np.repeat(np.arange(0.,(rep_factor*10)*step_len,step_len),2)+np.array([10**5,step_len-2*10**5]*rep_factor*10),
+                np.ones(rep_factor*10*2)*10**5
+                )
+            }
+            
+        self.pulse_template = MappingPT(pt,parameter_mapping=dict(y_gain=0.3,))
+        
+    def test_measurements(self):
+        program_builder = LinSpaceBuilder()
+        self._program_to_test = self.pulse_template.create_program(program_builder=program_builder)
+        self.assertIsNone(np.testing.assert_array_equal(self._program_to_test[0].get_measurement_windows()['c'], self.measurements['c']))
+
 
 class AmplitudeSweepTest(TestCase):
     def setUp(self,rep_factor=2):
