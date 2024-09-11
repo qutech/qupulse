@@ -151,6 +151,9 @@ class ResolutionDependentValue(Generic[NumVal]):
             return False
         return self.__dict__ == o.__dict__
     
+    def __hash__(self):
+        return hash((self.bases,self.offset,self.multiplicities,self.__is_time_or_int))
+    
     
 @dataclass(frozen=True)
 class DepKey:
