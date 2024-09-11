@@ -895,7 +895,7 @@ class Set:
         return hash((self.channel,self.value,self.key))
     
     def __str__(self):
-        return "Increment("+",".join([f"{k}="+v.__str__() for k,v in vars(self).items()])+")"
+        return "Set("+",".join([f"{k}="+v.__str__() for k,v in vars(self).items()])+")"
     
 @dataclass
 class Wait:
