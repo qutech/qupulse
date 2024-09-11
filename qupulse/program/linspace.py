@@ -82,7 +82,7 @@ class StepRegister(metaclass=InstanceCounterMeta):
 GeneralizedChannel = Union[DepDomain,ChannelID,StepRegister]
 
 # is there any way to cast the numpy cumprod to int?
-int_type = Union[np.int32,int]
+int_type = Union[np.int64,np.int32,int]
 
 class ResolutionDependentValue(Generic[NumVal]):
     
