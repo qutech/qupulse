@@ -1527,8 +1527,8 @@ class ConversionTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 convert_stored_pulse_in_storage('hugos_parent', source_backend, destination_backend)
 
-            self.assertEquals('already_existing_data', destination_backend['hugo'])
-            self.assertEquals(1, len(destination_backend.stored_items))
+            self.assertEqual('already_existing_data', destination_backend['hugo'])
+            self.assertEqual(1, len(destination_backend.stored_items))
 
     def test_convert_stored_pulse_in_storage_dest_not_empty_no_id_overlap(self) -> None:
         with warnings.catch_warnings():
@@ -1548,7 +1548,7 @@ class ConversionTests(unittest.TestCase):
             destination_backend.put('ilse', 'already_existing_data')
             convert_stored_pulse_in_storage('hugos_parent', source_backend, destination_backend)
 
-            self.assertEquals('already_existing_data', destination_backend['ilse'])
+            self.assertEqual('already_existing_data', destination_backend['ilse'])
             pulse_storage = PulseStorage(destination_backend)
             deserialized = pulse_storage['hugos_parent']
             self.assertEqual(serializable, deserialized)
@@ -1607,8 +1607,8 @@ class ConversionTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 convert_pulses_in_storage(source_backend, destination_backend)
 
-            self.assertEquals('already_existing_data', destination_backend['hugo'])
-            self.assertEquals(1, len(destination_backend.stored_items))
+            self.assertEqual('already_existing_data', destination_backend['hugo'])
+            self.assertEqual(1, len(destination_backend.stored_items))
 
     def test_convert_stored_pulses_dest_not_empty_no_id_overlap(self) -> None:
         with warnings.catch_warnings():

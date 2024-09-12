@@ -8,9 +8,10 @@ This section is supposed to help you understand how qupulse sees AWGs and by ext
 When a program is uploaded to an arbitrary waveform generator (AWG) it needs to brought in a form that the hardware
 understands.
 Most AWGs consist of three significant parts:
- * The actual digital to analog converter (DAC) that outputs samples at a (semi-) fixed rate [1]_
- * A sequencer which tells the DAC what to do
- * Waveform memory which contains sampled waveforms in a format that the DAC understands
+
+* The actual digital to analog converter (DAC) that outputs samples at a (semi-) fixed rate [1]_,
+* a sequencer which tells the DAC what to do,
+* waveform memory which contains sampled waveforms in a format that the DAC understands.
 
 The sequencer feeds the data from the waveform memory to the DAC in the correct order.
 Uploading a qupulse pulse to an AWG requires to sample the program, upload waveforms to the memory

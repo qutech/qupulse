@@ -65,7 +65,7 @@ class SimpleExpression(Generic[NumVal]):
         return self.__add__(-other)
 
     def __rsub__(self, other):
-        (-self).__add__(other)
+        return (-self).__add__(other)
 
     def __neg__(self):
         return SimpleExpression(-self.base, {name: -value for name, value in self.offsets.items()})
@@ -162,6 +162,9 @@ class ProgramBuilder(Protocol):
 
     def with_iteration(self, index_name: str, rng: range,
                        measurements: Optional[Sequence[MeasurementWindow]] = None) -> Iterable['ProgramBuilder']:
+        pass
+
+    def time_reversed(self) -> ContextManager['ProgramBuilder']:
         pass
 
     def to_program(self) -> Optional[Program]:

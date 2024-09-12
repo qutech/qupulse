@@ -38,18 +38,18 @@ Alternatively, the current development version of qupulse can be installed by ex
 ```sh
 python -m pip install -e git+https://github.com/qutech/qupulse.git#egg=qupulse[default]
 ```
-which will clone the github repository to `./src/qupulse` and do an editable/development install. 
+which will clone the github repository to `./src/qupulse` and do an editable/development install.
 
 ### Requirements and dependencies
-qupulse requires at least Python 3.8 and is tested on 3.8, 3.9 and 3.10. It relies on some external Python packages as dependencies. 
+qupulse requires at least Python 3.10 and is tested on 3.10, 3.11 and 3.12. It relies on some external Python packages as dependencies. 
 We intentionally did not restrict versions of dependencies in the install scripts to not unnecessarily prevent usage of newer releases of dependencies that might be compatible. However, if qupulse does encounter problems with a particular dependency version please file an issue. 
 
-The backend for TaborAWGs requires packages that can be found [here](https://git.rwth-aachen.de/qutech/python-TaborDriver). As a shortcut you can install it from the python interpreter via `qupulse.hardware.awgs.install_requirements('tabor')`.
+The backend for TaborAWGs requires packages that can be found [here](https://git.rwth-aachen.de/qutech/python-TaborDriver).
 
 The data acquisition backend for AlazarTech cards needs a package that unfortunately is not open source (yet). If you need it or have questions contact <simon.humpohl@rwth-aachen.de>.
 
 ## Documentation
-You can find documentation on how to use this library on [readthedocs](https://qupulse.readthedocs.io/en/latest/) and [IPython notebooks with examples in this repo](doc/source/examples). You can build it locally with `python setup.py build_sphinx`.
+You can find documentation on how to use this library on [readthedocs](https://qupulse.readthedocs.io/en/latest/) and [IPython notebooks with examples in this repo](doc/source/examples). You can build it locally with `hatch run docs:html`.
 
 ### Folder Structure
 The repository primarily consists of the folders `qupulse` (toolkit core code) and `tests` (toolkit core tests). Additional parts of the project reside in `MATLAB` (MATLAB interface) and `doc` (configuration and source files to build documentation)  
@@ -62,6 +62,16 @@ The repository primarily consists of the folders `qupulse` (toolkit core code) a
 - `_program` contains general and hardware specific representations of instantiated (parameter free) pulses. It is private because there is no stability guarantee.
 
 Contents of `tests` mirror the structure of `qupulse`. For every `<module>` somewhere in `qupulse` there should exist a `<module>Tests.py` in the corresponding subdirectory of `tests`.
+
+## Development
+
+`qupulse` uses `hatch` as development tool which provides a convenient interface for most development tasks. The following should work.
+
+ - `hatch build`: Build wheel and source tarball
+ - `hatch version X.X.X`: Set version
+ - `hatch run docs:html`: Build documentation (requires pandoc)
+ - `hatch run docs:clean-notebooks` to execute all example notebooks that start with 00-03 and clean all metadata. 
+ - `hatch run changelog:draft` and `hatch run changelog:release` to preview or update the changelog.
 
 ## License
 

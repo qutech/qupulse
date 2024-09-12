@@ -1,5 +1,129 @@
 [build-system]
-requires = ["setuptools", "wheel"]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "qupulse"
+dynamic = ["version"]
+description = "A Quantum compUting PULse parametrization and SEquencing framework"
+readme = "README.md"
+license = "GPL-3.0-or-later"
+requires-python = ">=3.10"
+authors = [
+    { name = "Quantum Technology Group and Chair of Software Engineering, RWTH Aachen University" },
+]
+keywords = [
+    "control",
+    "physics",
+    "pulse",
+    "quantum",
+    "qubit",
+]
+classifiers = [
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Topic :: Scientific/Engineering",
+]
+dependencies = [
+    "frozendict",
+    "lazy_loader",
+    "numpy",
+    "sympy>=1.1.1",
+    # This is required because there is no 3.12 compatible gmpy2 stable release as of 2024.06.20
+    "gmpy2;python_version<'3.12'",
+    "gmpy2>=2.2.0rc1;python_version>='3.12'"
+]
+
+[project.optional-dependencies]
+autologging = [
+    "autologging",
+]
+default = [
+    "pandas",
+    "scipy",
+    "qupulse[tests,docs,plotting,autologging,faster-sampling]",
+]
+docs = [
+    "ipykernel",
+    "nbsphinx",
+    "pyvisa",
+    "sphinx>=4",
+]
+faster-sampling = [
+    "numba",
+]
+plotting = [
+    "matplotlib",
+]
+tabor-instruments = [
+    "tabor_control>=0.1.1",
+]
+tektronix = [
+    "tek_awg>=0.2.1",
+]
+tests = [
+    "pytest",
+    "pytest_benchmark",
+]
+zurich-instruments = [
+    "qupulse-hdawg",
+]
+
+[project.urls]
+Homepage = "https://github.com/qutech/qupulse"
+
+[tool.hatch.version]
+path = "qupulse/__init__.py"
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/qupulse",
+]
+
+[tool.hatch.envs.docs]
+installer = "uv"
+dependencies = [
+  "qupulse[default,zurich-instruments]",
+  "sphinx",
+  "nbsphinx",
+  "sphinx-rtd-theme"
+]
+[tool.hatch.envs.docs.scripts]
+# This is a hack to achieve cross-platform version extraction until https://github.com/pypa/hatch/issues/1006
+build = """
+  python -c "import subprocess, os; \
+  result = subprocess.run(['hatch', 'version'], capture_output=True, text=True); \
+  version = result.stdout.strip(); \
+  subprocess.run(['sphinx-build', '-b', '{args:0}', 'doc/source', 'doc/build/{args:0}', '-d', 'doc/build/.doctrees', '-D', 'version=%s' % version, '-D', 'release=%s' % version])"
+"""
+latex = """
+  python -c "import subprocess, os; \
+  result = subprocess.run(['hatch', 'version'], capture_output=True, text=True); \
+  version = result.stdout.strip(); \
+  subprocess.run(['sphinx-build', '-b', 'latex', 'doc/source', 'doc/build/latex', '-D', 'version=%s' % version, '-D', 'release=%s' % version])"
+"""
+html = """
+  python -c "import subprocess, os; \
+  result = subprocess.run(['hatch', 'version'], capture_output=True, text=True); \
+  version = result.stdout.strip(); \
+  subprocess.run(['sphinx-build', '-b', 'html', 'doc/source', 'doc/build/html', '-D', 'version=%s' % version, '-D', 'release=%s' % version])"
+"""
+clean= """
+python -c "import shutil; shutil.rmtree('doc/build')"
+"""
+clean-notebooks = "jupyter nbconvert --ClearMetadataPreprocessor.enabled=True --to=notebook --execute --inplace --log-level=ERROR doc/source/examples/00*.ipynb doc/source/examples/01*.ipynb doc/source/examples/02*.ipynb doc/source/examples/03*.ipynb"
+
+[tool.hatch.envs.changelog]
+detached = true
+dependencies = [
+  "towncrier",
+]
+
+[tool.hatch.envs.changelog.scripts]
+draft = "towncrier build --version main --draft"
+release = "towncrier build --yes --version {args}"
 
 [tool.towncrier]
 directory = "changes.d"

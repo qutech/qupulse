@@ -70,11 +70,13 @@ class ArithmeticAtomicPulseTemplate(AtomicPulseTemplate):
                           "If they evaluate to different values on instantiation this will result in an error. "
                           "(%r != %r) for ALL inputs "
                           "(it may be unequal only for fringe cases)" % (lhs.duration, rhs.duration),
+                          stacklevel=2,
                           category=UnequalDurationWarningInArithmeticPT)
 
         if not silent_atomic and not (lhs._is_atomic() and rhs._is_atomic()):
             warnings.warn("ArithmeticAtomicPulseTemplate treats all operands as if they are atomic. "
                           "You can silence this warning by passing `silent_atomic=True` or by ignoring this category.",
+                          stacklevel=2,
                           category=ImplicitAtomicityInArithmeticPT)
 
         self._lhs = lhs

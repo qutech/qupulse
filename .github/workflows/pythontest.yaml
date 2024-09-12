@@ -15,6 +15,7 @@ on:
      - 'tests/**'
      - 'setup.*'
      - 'pyproject.toml'
+     - '.github/workflows/*'
 
 jobs:
   test:
@@ -22,7 +23,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.8", "3.9", "3.10"]
+        python-version: ["3.10", "3.11", "3.12"]
+        numpy-version: [">=1.24,<2.0", ">=2.0"]
     env:
       INSTALL_EXTRAS: tests,plotting,zurich-instruments,tektronix,tabor-instruments
 
@@ -32,17 +34,18 @@ jobs:
       uses: actions/checkout@v2
 
     - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v2
+      uses: actions/setup-python@v5
       with:
         python-version: ${{ matrix.python-version }}
-        # supported since 2.3
         cache: pip
-        cache-dependency-path: setup.cfg
 
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
         python -m pip install coverage coveralls
+
+    - name: Install numpy ${{ matrix.numpy-version }}
+      run: python -m pip install "numpy${{ matrix.numpy-version }}"
 
     - name: Install package
       run: |
