@@ -226,7 +226,7 @@ class ProgramEntry:
         if program_type == _ProgramType.Linspace:
             #!!! the voltage resolution may not be adequately represented if voltage transformations are not None?
             self._transformed_commands = self._transform_linspace_commands(to_increment_commands(program,))
-        
+            
         if waveforms is None:
             if program_type is _ProgramType.Loop:
                     waveforms = OrderedDict((node.waveform, None)

@@ -230,6 +230,12 @@ class LinSpaceNode:
 class LinSpaceTopLevel(LinSpaceNode):
     
     body: Tuple[LinSpaceNode, ...]
+    _play_marker_when_constant: bool
+    _defined_channels: TypingSet[ChannelID]
+    
+    @property
+    def play_marker_when_constant(self) -> bool:
+        return self._play_marker_when_constant
     
     @property
     def body_duration(self) -> TimeType:
@@ -244,6 +250,8 @@ class LinSpaceTopLevel(LinSpaceNode):
         """
         return _get_measurement_windows_loop(self._measurement_memory.measurements,1,self.body)
     
+    def get_defined_channels(self) -> TypingSet[ChannelID]:
+        return  self._defined_channels
     
 
 @dataclass
@@ -487,8 +495,9 @@ class LinSpaceBuilder(ProgramBuilder):
 
     def __init__(self,
                  # channels: Tuple[ChannelID, ...]
-                 to_stepping_repeat: TypingSet[Union[str,'ForLoopPT']] = set()
+                 to_stepping_repeat: TypingSet[Union[str,'ForLoopPT']] = set(),
                  # identifier, loop_index or ForLoopPT which is to be stepped.
+                 play_marker_when_constant: bool = False,
                  ):
         super().__init__()
         # self._name_to_idx = {name: idx for idx, name in enumerate(channels)}
@@ -497,6 +506,8 @@ class LinSpaceBuilder(ProgramBuilder):
         self._stack = [[]]
         self._ranges = []
         self._to_stepping_repeat = to_stepping_repeat
+        self._play_marker_when_constant = play_marker_when_constant
+        self._pt_channels = None
         self._meas_queue = []
         
     def _root(self):
@@ -810,10 +821,12 @@ class LinSpaceBuilder(ProgramBuilder):
             # and doesn't need to be stepped?
             self.hold_voltage(potential_waveform.duration, constant_values)
     
-    def to_program(self) -> Optional[Sequence[LinSpaceNode]]:
+    def to_program(self, defined_channels: TypingSet[ChannelID]) -> Optional[Sequence[LinSpaceNode]]:
         assert not self._meas_queue
         if self._root():
-            return LinSpaceTopLevel(body=tuple(self._root()))
+            return LinSpaceTopLevel(body=tuple(self._root()),
+                                    _play_marker_when_constant=self._play_marker_when_constant,
+                                    _defined_channels=defined_channels)
 
 
 def collect_scaling_and_offset_per_channel(channels: Sequence[ChannelID],

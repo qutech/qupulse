@@ -20,6 +20,7 @@ from qupulse.utils import is_integer
 from qupulse.utils.numeric import smallest_factor_ge
 from qupulse.utils.tree import Node
 from qupulse.utils.types import TimeType, MeasurementWindow
+from qupulse import ChannelID
 
 __all__ = ['Loop', 'make_compatible', 'MakeCompatibleWarning', 'to_waveform']
 
@@ -516,6 +517,9 @@ class Loop(Node):
                 (name, duration - (begin + length), length)
                 for name, begin, length in self._measurements
             ]
+            
+    def get_defined_channels(self) -> Set[ChannelID]:
+        return next(self.get_depth_first_iterator()).waveform.defined_channels
 
 
 def to_waveform(program: Loop) -> Waveform:
@@ -843,7 +847,8 @@ class LoopBuilder(ProgramBuilder):
                 waveform = TransformingWaveform.from_transformation(waveform, global_transformation)
             self.play_arbitrary_waveform(waveform)
 
-    def to_program(self) -> Optional[Loop]:
+    def to_program(self, defined_channels: Set[ChannelID]) -> Optional[Loop]:
+        #defined channels ignored as can be inferred from depth_iterator anyway
         if len(self._stack) != 1:
             warnings.warn("Creating program with active build stack.")
         if self._root.waveform or len(self._root.children) != 0:

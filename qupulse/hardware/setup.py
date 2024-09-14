@@ -111,7 +111,8 @@ class HardwareSetup:
             raise TypeError('The provided run_callback is not callable')
 
         if channels is None:
-            channels = next(program.get_depth_first_iterator()).waveform.defined_channels
+            # channels = next(program.get_depth_first_iterator()).waveform.defined_channels
+            channels = program.get_defined_channels()
         if channels - set(self._channel_map.keys()):
             raise KeyError('The following channels are unknown to the HardwareSetup: {}'.format(
                 channels - set(self._channel_map.keys())))

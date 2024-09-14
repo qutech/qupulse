@@ -1,5 +1,5 @@
 from typing import Optional, Union, Sequence, ContextManager, Mapping, Tuple, Generic, TypeVar, Iterable, Dict
-from typing import Protocol, runtime_checkable
+from typing import Protocol, runtime_checkable, Set
 
 from qupulse._program.waveforms import Waveform
 from qupulse.utils.types import MeasurementWindow, TimeType
@@ -7,7 +7,7 @@ from qupulse._program.volatile import VolatileRepetitionCount
 from qupulse.parameter_scope import Scope
 from qupulse.expressions import sympy as sym_expr
 from qupulse.expressions.simple import SimpleExpression
-
+from qupulse import ChannelID
 
 RepetitionCount = Union[int, VolatileRepetitionCount, SimpleExpression[int]]
 HardwareTime = Union[TimeType, SimpleExpression[TimeType]]
@@ -74,7 +74,7 @@ class ProgramBuilder(Protocol):
     def evaluate_nested_stepping(self, scope: Scope, parameter_names: set[str]) -> bool:
         return False
     
-    def to_program(self) -> Optional[Program]:
+    def to_program(self, defined_channels: Set[ChannelID]) -> Optional[Program]:
         """Further addition of new elements might fail after finalizing the program."""
 
 
