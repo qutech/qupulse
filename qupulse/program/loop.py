@@ -847,7 +847,7 @@ class LoopBuilder(ProgramBuilder):
                 waveform = TransformingWaveform.from_transformation(waveform, global_transformation)
             self.play_arbitrary_waveform(waveform)
 
-    def to_program(self, defined_channels: Set[ChannelID]) -> Optional[Loop]:
+    def to_program(self, defined_channels: Set[ChannelID]={}) -> Optional[Loop]:
         #defined channels ignored as can be inferred from depth_iterator anyway
         if len(self._stack) != 1:
             warnings.warn("Creating program with active build stack.")
