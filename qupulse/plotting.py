@@ -28,7 +28,7 @@ from qupulse.utils.types import ChannelID, MeasurementWindow, has_type_interface
 from qupulse.pulses.pulse_template import PulseTemplate
 from qupulse.program.waveforms import Waveform
 from qupulse.program.loop import Loop, to_waveform
-
+from qupulse.program.linspace import LinSpaceTopLevel
 
 __all__ = ["render", "plot", "PlottingNotPossibleException"]
 
@@ -37,7 +37,9 @@ def render(program: Union[Loop],
            sample_rate: Real = 10.0,
            render_measurements: bool = False,
            time_slice: Tuple[Real, Real] = None,
-           plot_channels: Optional[Set[ChannelID]] = None) -> Tuple[np.ndarray, Dict[ChannelID, np.ndarray],
+           plot_channels: Optional[Set[ChannelID]] = None,
+           individualize_times: bool = False,
+           ) -> Tuple[np.ndarray, Dict[ChannelID, np.ndarray],
                                                                     List[MeasurementWindow]]:
     """'Renders' a pulse program.
 
@@ -50,7 +52,7 @@ def render(program: Union[Loop],
             render_measurements: If True, the third return value is a list of measurement windows.
             time_slice: The time slice to be rendered. If None, the entire pulse will be shown.
             plot_channels: Only channels in this set are rendered. If None, all will.
-
+            individualize_times: return individual time-voltage array pairs for constant value cleanup
         Returns:
             A tuple (times, values, measurements). times is a numpy.ndarray of dimensions sample_count where
             containing the time values. voltages is a dictionary of one numpy.ndarray of dimensions sample_count per
@@ -100,8 +102,34 @@ def render(program: Union[Loop],
                 for ch in channels}
     for ch, ch_voltage in voltages.items():
         waveform.get_sampled(channel=ch, sample_times=times, output_array=ch_voltage)
-
+        
+        
+    if individualize_times:
+        # new_dict = {ch: (np.copy(times),volts) for ch,volts in voltages.items()}
+        new_dict = {}
+        for ch in channels:
+            new_dict[ch] = deduplicate_with_aux(voltages[ch],np.copy(times),)
+        return times, new_dict, measurements
+        
     return times, voltages, measurements
+
+
+def deduplicate_with_aux(arr, aux, threshold=1e-4):
+    # Calculate the absolute differences between consecutive elements
+    diffs = np.abs(np.diff(arr, prepend=arr[0]))
+    
+    # Use cumsum to track the cumulative differences
+    cumulative_diffs = np.cumsum(diffs)
+    
+    # Find indices where cumulative differences exceed the threshold
+    mask = np.concatenate(([True], np.where(np.diff(np.floor_divide(cumulative_diffs,threshold))>0)[0]+1))
+    
+    # Apply the mask to both the main and auxiliary arrays
+    dedup_arr = arr[mask]
+    dedup_aux = aux[mask]
+    
+    return dedup_aux, dedup_arr
+
 
 
 def _render_loop(loop: Loop,
@@ -132,6 +160,7 @@ def plot(pulse: Union[PulseTemplate, Loop],
          stepped: bool=True,
          maximum_points: int=10**6,
          time_slice: Tuple[Real, Real]=None,
+         individualize_times: bool = False,
          **kwargs) -> Any:  # pragma: no cover
     """Plots a pulse using matplotlib.
 
@@ -182,7 +211,8 @@ def plot(pulse: Union[PulseTemplate, Loop],
         times, voltages, measurements = render(program,
                                                sample_rate,
                                                render_measurements=bool(plot_measurements),
-                                               time_slice=time_slice)
+                                               time_slice=time_slice,
+                                               individualize_times=individualize_times)
     else:
         times, voltages, measurements = np.array([]), dict(), []
 
@@ -214,9 +244,15 @@ def plot(pulse: Union[PulseTemplate, Loop],
     for ch_name, voltage in voltages.items():
         label = 'channel {}'.format(ch_name)
         if stepped:
-            line, = axes.step(times, voltage, **{**dict(where='post', label=label), **kwargs})
+            if individualize_times:
+                line, = axes.step(voltage[0], voltage[1], **{**dict(where='post', label=label), **kwargs})
+            else:
+                line, = axes.step(times, voltage, **{**dict(where='post', label=label), **kwargs})
         else:
-            line, = axes.plot(times, voltage, **{**dict(label=label), **kwargs})
+            if individualize_times:
+                axes.plot(voltage[0], voltage[1], **{**dict(label=label), **kwargs})
+            else:
+                line, = axes.plot(times, voltage, **{**dict(label=label), **kwargs})
         legend_handles.append(line)
 
     if plot_measurements:
@@ -235,8 +271,8 @@ def plot(pulse: Union[PulseTemplate, Loop],
 
     axes.legend(handles=legend_handles)
 
-    max_voltage = max((max(channel, default=0) for channel in voltages.values()), default=0)
-    min_voltage = min((min(channel, default=0) for channel in voltages.values()), default=0)
+    max_voltage = max((max(channel if not individualize_times else channel[1], default=0) for channel in voltages.values()), default=0)
+    min_voltage = min((min(channel if not individualize_times else channel[1], default=0) for channel in voltages.values()), default=0)
 
     # add some margins in the presentation
     axes.set_xlim(-0.5+time_slice[0], time_slice[1] + 0.5)
