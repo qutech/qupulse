@@ -122,7 +122,7 @@ def deduplicate_with_aux(arr, aux, threshold=1e-4):
     cumulative_diffs = np.cumsum(diffs)
     
     # Find indices where cumulative differences exceed the threshold
-    mask = np.concatenate(([True], np.where(np.diff(np.floor_divide(cumulative_diffs,threshold))>0)[0]+1))
+    mask = np.concatenate(([0],np.where(np.diff(np.floor_divide(cumulative_diffs,threshold),prepend=cumulative_diffs[0])>0)[0],[-1]))
     
     # Apply the mask to both the main and auxiliary arrays
     dedup_arr = arr[mask]
