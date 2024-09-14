@@ -811,7 +811,7 @@ class LinSpaceBuilder(ProgramBuilder):
     def to_program(self) -> Optional[Sequence[LinSpaceNode]]:
         assert not self._meas_queue
         if self._root():
-            return [LinSpaceTopLevel(body=tuple(self._root())),]
+            return LinSpaceTopLevel(body=tuple(self._root()))
 
 
 def collect_scaling_and_offset_per_channel(channels: Sequence[ChannelID],
@@ -937,7 +937,7 @@ class DepState:
 
     def required_increment_from(self, previous: 'DepState',
                                 factors: Sequence[float]) -> ResolutionDependentValue:
-        assert len(self.iterations) == len(previous.iterations)
+        assert len(self.iterations) == len(previous.iterations) #or (all(self.iterations)==0 and all(previous.iterations)==0)
         assert len(self.iterations) == len(factors)
 
         # increment = self.base - previous.base
@@ -1199,12 +1199,12 @@ class _TranslationState:
             raise TypeError("The node type is not handled", type(node), node)
 
 
-def to_increment_commands(linspace_nodes: Sequence[LinSpaceNode],
+def to_increment_commands(linspace_nodes: LinSpaceTopLevel,
                           # resolution: float = DEFAULT_INCREMENT_RESOLUTION
                           ) -> List[Command]:
     """translate the given linspace node tree to a minimal sequence of set and increment commands as well as loops."""
     # if resolution: raise NotImplementedError('wrongly assumed resolution. need to fix')
     state = _TranslationState()
-    state.add_node(linspace_nodes[0].body)
+    state.add_node(linspace_nodes.body)
     return state.commands
 
