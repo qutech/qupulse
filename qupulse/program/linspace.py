@@ -215,8 +215,10 @@ class LinSpaceNode:
         """
         raise NotImplementedError
 
-    def get_measurement_windows(self) -> Dict[str, Tuple[np.ndarray, np.ndarray]]:
+    def get_measurement_windows(self, drop: bool = False) -> Dict[str, Tuple[np.ndarray, np.ndarray]]:
         """Iterates over all children and collect the begin and length arrays of each measurement window.
+        Args:
+            drop: NO EFFECT CURRENTLY
         Returns:
             A dictionary (measurement_name -> (begin, length)) with begin and length being :class:`numpy.ndarray`
         """
@@ -235,7 +237,7 @@ class LinSpaceTopLevel(LinSpaceNode):
             self._cached_body_duration = self.duration_base
         return self._cached_body_duration
     
-    def _get_measurement_windows(self,) -> Mapping[str, np.ndarray]:
+    def _get_measurement_windows(self) -> Mapping[str, np.ndarray]:
         """Private implementation of get_measurement_windows with a slightly different data format for easier tiling.
         Returns:
               A dictionary (measurement_name -> array) with begin == array[:, 0] and length == array[:, 1]
