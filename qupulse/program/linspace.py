@@ -1069,6 +1069,28 @@ class _TranslationState:
             self.plain_value.setdefault(channel,{})
             self.plain_value[channel][domain] = value
     
+    # def _add_repetition_node(self, node: LinSpaceRepeat):
+    #     pre_dep_state = self.get_dependency_state(node.dependencies())
+    #     label, jmp = self.new_loop(node.count)
+    #     initial_position = len(self.commands)
+    #     self.commands.append(label)
+    #     self.add_node(node.body)
+    #     post_dep_state = self.get_dependency_state(node.dependencies())
+    #     # the last index in the iterations may not be initialized in pre_dep_state if the outer loop only sets an index
+    #     # after this loop is in the sequence of the current level,
+    #     # meaning that an trailing 0 at the end of iterations of each depState in the post_dep_state
+    #     # should be ignored when comparing.
+    #     # zeros also should only mean a "Set" command, which is not harmful if executed multiple times.
+    #     # if pre_dep_state != post_dep_state:
+    #     if self.compare_ignoring_post_trailing_zeros(pre_dep_state,post_dep_state):
+    #         # hackedy
+    #         self.commands.pop(initial_position)
+    #         self.commands.append(label)
+    #         label.count -= 1
+    #         self.add_node(node.body)
+    #     self.commands.append(jmp)
+    
+    
     def _add_repetition_node(self, node: LinSpaceRepeat):
         pre_dep_state = self.get_dependency_state(node.dependencies())
         label, jmp = self.new_loop(node.count)
@@ -1082,7 +1104,11 @@ class _TranslationState:
         # should be ignored when comparing.
         # zeros also should only mean a "Set" command, which is not harmful if executed multiple times.
         # if pre_dep_state != post_dep_state:
-        if self.compare_ignoring_post_trailing_zeros(pre_dep_state,post_dep_state):
+        #EDIT: even this is not enough it seems; if a dependency from an outer
+        # loop is present that the repetition does not know about, this is still necessary.
+        # why not always in the first place?
+        # if self.compare_ignoring_post_trailing_zeros(pre_dep_state,post_dep_state):
+        if True:
             # hackedy
             self.commands.pop(initial_position)
             self.commands.append(label)
