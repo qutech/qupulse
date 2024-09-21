@@ -743,6 +743,22 @@ class LinSpaceBuilder(ProgramBuilder):
         yield self
 
     def new_subprogram(self, global_transformation: 'Transformation' = None) -> ContextManager['ProgramBuilder']:
+        
+        inner_builder = LinSpaceBuilder(self._to_stepping_repeat,self._play_marker_when_constant)
+        yield inner_builder
+        inner_program = inner_builder.to_program()
+        
+        # if inner_program is not None:
+    
+        # # measurements = [(name, begin, length)
+        #     #                 for name, (begins, lengths) in inner_program.get_measurement_windows().items()
+        #     #                 for begin, length in zip(begins, lengths)]
+        #     # self._top.add_measurements(measurements)
+        # waveform = to_waveform(inner_program,self._idx_to_name)
+        # if global_transformation is not None:
+        #     waveform = TransformingWaveform.from_transformation(waveform, global_transformation)
+        # self.play_arbitrary_waveform(waveform)
+    
         raise NotImplementedError('Not implemented yet (postponed)')
 
     def with_iteration(self, index_name: str, rng: range,
