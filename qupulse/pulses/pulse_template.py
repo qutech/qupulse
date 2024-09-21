@@ -376,7 +376,7 @@ class PulseTemplate(Serializable):
             return self
 
     def pad_to(self, to_new_duration: Union[ExpressionLike, Callable[[Expression], ExpressionLike]],
-               pt_kwargs: Mapping[str, Any] = None) -> 'PulseTemplate':
+               pt_kwargs: Mapping[str, Any] = {}) -> 'PulseTemplate':
         """Pad this pulse template to the given duration.
         The target duration can be numeric, symbolic or a callable that returns a new duration from the current
         duration.
@@ -398,23 +398,39 @@ class PulseTemplate(Serializable):
             pt_kwargs: Keyword arguments for the newly created sequence pulse template.
 
         Returns:
-            A pulse template that has the duration given by ``to_new_duration``. It can be ``self`` if the duration is
-            already as required. It is never ``self`` if ``pt_kwargs`` is non-empty.
+            A pulse template that has the duration given by ``to_new_duration``.
+            self if ConstantPT,
+            SingleWFTimeExtensionPulseTemplate otherwise.
         """
         from qupulse.pulses import ConstantPT, SequencePT
+        from qupulse.pulses.time_extension_pulse_template import SingleWFTimeExtensionPulseTemplate
         current_duration = self.duration
         if callable(to_new_duration):
             new_duration = to_new_duration(current_duration)
         else:
             new_duration = ExpressionScalar(to_new_duration)
         pad_duration = new_duration - current_duration
-        if not pt_kwargs and pad_duration == 0:
+        
+        # if not pt_kwargs and pad_duration == 0:
+        #     return self
+        
+        #shortcut
+        if isinstance(self,ConstantPT):
+            if pt_kwargs:
+                raise NotImplementedError()
+            self._duration = new_duration
             return self
-        pad_pt = ConstantPT(pad_duration, self.final_values)
-        if pt_kwargs:
-            return SequencePT(self, pad_pt, **pt_kwargs)
-        else:
-            return self @ pad_pt
+        
+        return SingleWFTimeExtensionPulseTemplate(self, new_duration, **pt_kwargs)
+        
+        # pad_duration = new_duration - current_duration
+        # if not pt_kwargs and pad_duration == 0:
+        #     return self
+        # pad_pt = ConstantPT(pad_duration, self.final_values)
+        # if pt_kwargs:
+        #     return SequencePT(self, pad_pt, **pt_kwargs)
+        # else:
+        #     return self @ pad_pt
 
     def __format__(self, format_spec: str):
         if format_spec == '':
