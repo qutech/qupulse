@@ -113,10 +113,10 @@ class TimeSweepTest():
 #%% Instantiate Checker
 
 # select exemplary pulse
-# pulse = ShortSingleRampTest(1e3+8)
+pulse = ShortSingleRampTest(1e3+8)
 # pulse = ShortSingleRampTestWithPlay()
 # pulse = SequencedRepetitionTest(1e3,4)
-pulse = SteppedRepetitionTest(1e2,3)
+# pulse = SteppedRepetitionTest(1e2,3)
 # pulse = TimeSweepTest(1e2,3)
 
 # Define a program builder to test program with:
