@@ -29,7 +29,7 @@ ha = HDAWGAlazar("DEVXXXX","USB",)
 
 class ShortSingleRampTest():
     def __init__(self, base_time=1e3):
-        hold = ConstantPT(base_time, {'ZI0_A': '-1. + idx * 0.01'})
+        hold = ConstantPT(base_time, {'a': '-1. + idx * 0.01'})
         pt = hold.with_iteration('idx', 200)
         self.pulse_template = MappingPT(pt,
                                         channel_mapping={'a':'ZI0_A',},
@@ -41,7 +41,7 @@ class ShortSingleRampTestWithPlay():
         # init = PointPT([(1.0,1e4)],channel_names=('ZI0_MARKER_FRONT',))
         init = FunctionPT('1.0+1e-9*t',base_time,channel='ZI0_A_MARKER_FRONT')#.pad_to(to_next_multiple(1.0,16,4),)
 
-        hold = ConstantPT(base_time, {'ZI0_A': '-1. + idx * 0.01'})#.pad_to(to_next_multiple(1.0,16,4))
+        hold = ConstantPT(base_time, {'a': '-1. + idx * 0.01'})#.pad_to(to_next_multiple(1.0,16,4))
         pt = ParallelConstantChannelPT(init,dict(ZI0_A=0.))@(ParallelConstantChannelPT(hold,dict(ZI0_A_MARKER_FRONT=0.)).with_iteration('idx', 200))
         self.pulse_template = MappingPT(pt,
                                         channel_mapping={'a':'ZI0_A',},
