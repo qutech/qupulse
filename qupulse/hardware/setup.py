@@ -1,11 +1,13 @@
 from typing import NamedTuple, Set, Callable, Dict, Tuple, Union, Iterable, Any, Mapping
 from collections import defaultdict
+from dataclasses import dataclass
 import warnings
 import numbers
 
 from qupulse.hardware.awgs.base import AWG
 from qupulse.hardware.dacs import DAC
 from qupulse.program.loop import Loop
+from qupulse.program.multi import MultiProgram
 
 from qupulse.utils.types import ChannelID
 
@@ -313,9 +315,111 @@ class HardwareSetup:
         return self._registered_programs
 
 
+@dataclass
+class RegisteredMultiProgram:
+    program: MultiProgram
+    measurement_windows: Dict[str, Tuple[np.ndarray, np.ndarray]]
+    run_callback: Callable
+    hw_setups_to_utilize: Set[HardwareSetup]
 
 
 
+class MetaHardwareSetup:
 
+    def __init__(self):
+        # self._channel_map: Dict[str, Set[ChannelID]] = dict()
+        self._setup_map: Dict[str, HardwareSetup] = dict()
+        
+        self._measurement_map: Dict[str, Set[MeasurementMask]] = dict() #TODO
 
+        self._registered_programs: Dict[str, RegisteredMultiProgram] = dict()
+        
+        
+    def register_program(self,
+                         name: str,
+                         program: MultiProgram,
+                         run_callback: Callable = lambda: None,
+                         update: bool = False,
+                         # measurements: Mapping[str, Tuple[np.ndarray, np.ndarray]] = None
+                         ) -> None:
+        
+        hw_setups_to_utilize = set()
+        
+        for s_ident,prog in program.program_map.items():
+            self.setup_map[s_ident].register_program(s_ident+'_'+name, prog,
+                                                     update=update,run_callback=lambda:None)
+            hw_setups_to_utilize.add(self.setup_map[s_ident])
+    
+        self._registered_programs[name] = RegisteredMultiProgram(program, {}, #meas todo
+                                                                         run_callback,
+                                                                         hw_setups_to_utilize)
+        
+        return
+    
+    
+    def remove_program(self): pass
+    def clear_programs(self): pass
 
+    @property
+    def known_hw_setups(self) -> Set[HardwareSetup]:
+        return set(self._setup_map.values())
+    
+    @property
+    def setup_map(self) -> Dict[str,HardwareSetup]:
+        return self._setup_map
+    
+    @property
+    def known_awgs(self) -> Set[AWG]:
+        return set().union(s.knwon_awgs for s in self._setup_map.values())
+
+    def arm_program(self, name: str) -> None:
+        """Assert program is in memory. Hardware will wait for trigger event"""
+        if name not in self._registered_programs:
+            raise KeyError('{} is not a registered program'.format(name))
+
+        *_, hw_setups_to_utilize = self._registered_programs[name]
+        for key,setup in self._setup_map.items():
+            if setup in hw_setups_to_utilize:
+                setup.arm_program(key+'_'+name)
+            else:
+                # The other AWGs should ignore the trigger
+                # awg.arm(None)
+                pass
+        # for dac in dacs_to_arm:
+        #     dac.arm_program(name)
+    @property 
+    def _channel_map(self) -> Dict[str, Set[ChannelID]]:
+        return {k: s.registered_channels.keys() for k,s in self._setup_map.items()}
+        
+    def run_program(self, name) -> None:
+        """Calls arm program and starts it using the run callback"""
+        self.arm_program(name)
+        self._registered_programs[name].run_callback()
+
+    def add_setup(self, identifier: str,
+                    setup: HardwareSetup,
+                    allow_multiple_registration: bool=False) -> None:
+        
+        assert identifier not in self._setup_map
+        assert setup not in self._setup_map.values()
+        
+        assert not any(s in self.known_awgs for s in setup.known_awgs)
+        
+        self._setup_map[identifier] = setup
+
+    def rm_setup(self, identifier: str) -> None:
+        self._setup_map.pop(identifier)
+
+    def all_registered_channels(self) -> Dict[ChannelID, Set[_SingleChannel]]:
+        return {k:v for setup in self._setup_map.values() for k,v in setup.registered_channels.items()}
+
+    # def update_parameters(self, name: str, parameters: Mapping[str, numbers.Real]):
+    #     *_, awgs, dacs = self._registered_programs[name]
+
+    #     for awg in self.known_awgs:
+    #         if awg in awgs:
+    #             awg.set_volatile_parameters(name, parameters)
+
+    @property
+    def registered_programs(self) -> Dict[str, RegisteredMultiProgram]:
+        return self._registered_programs
