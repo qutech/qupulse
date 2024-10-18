@@ -1,13 +1,17 @@
 from numbers import Real
-from typing import Dict, Optional, Set, Union, List, Iterable, Any, Sequence, Hashable
+from typing import Dict, Optional, Set, Union, List, Iterable, Any, Sequence, Hashable, Mapping, Generator
 
 from qupulse import ChannelID
 from qupulse.parameter_scope import Scope
 from qupulse.pulses.pulse_template import PulseTemplate, AtomicPulseTemplate
 from qupulse.pulses.constant_pulse_template import ConstantPulseTemplate as ConstantPT
-from qupulse.expressions import ExpressionLike, ExpressionScalar
+from qupulse.expressions import ExpressionLike, ExpressionScalar, Expression
 from qupulse._program.waveforms import ConstantWaveform
-from qupulse.program import ProgramBuilder
+from qupulse.program import ProgramBuilder, Program
+from qupulse.program.linspace import LinSpaceBuilder
+from qupulse.program.multi import MultiProgramBuilder
+from qupulse.utils import cached_property
+
 from qupulse.pulses.parameters import ConstraintLike
 from qupulse.pulses.measurement import MeasurementDefiner, MeasurementDeclaration
 from qupulse.serialization import Serializer, PulseRegistryType
@@ -18,6 +22,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from graphlib import TopologicalSorter, CycleError
 from intervaltree import Interval, IntervalTree
+from sympy import Max as spMax
+import sympy as sp
 
 class SpacerConstantPT(ConstantPT):
     pass
@@ -63,7 +69,7 @@ class ScheduledEvaluated(Scheduled):
     
             if scheduled.ref_point is REF_POINT.END:
                 start_time = reference_scheduled.end_time + rel_time
-            elif scheduled.ref_point is REF_POINT.STRAT:
+            elif scheduled.ref_point is REF_POINT.START:
                 start_time = reference_scheduled.start_time + rel_time
             else:
                 raise NotImplementedError()
@@ -109,7 +115,7 @@ class SchedulerPT(PulseTemplate, MeasurementDefiner):
          # self.__pad_pt = ConstantPT(new_duration-main_pt.duration, self.final_values)
          
          # as values []
-         self._scheduled = {k:set() for k in self._channel_subsets.keys()}
+         self._scheduled: Dict[str,Set[Scheduled]] = {k:set() for k in self._channel_subsets.keys()}
          
          # self._duration = ExpressionScalar.make(new_duration)
          self._duration = 0
@@ -129,6 +135,15 @@ class SchedulerPT(PulseTemplate, MeasurementDefiner):
                fill_post_gap_voltage: str = 'last',
                #or 'next' or 'zero'
                ) -> Scheduled:
+        
+        
+        self.__dict__.pop('parameter_names', None)
+        self.__dict__.pop('duration', None)
+        self.__dict__.pop('sorted_scheduled', None)
+        self.__dict__.pop('_start_points_by_subset', None)
+        self.__dict__.pop('initial_values', None)
+        self.__dict__.pop('final_values', None)
+        
         
         if isinstance(PulseTemplate, SchedulerPT):
             raise NotImplementedError('TBD')
@@ -156,18 +171,11 @@ class SchedulerPT(PulseTemplate, MeasurementDefiner):
         
         raise RuntimeError('should not have happened')
         
+    @property
+    def sorted_scheduled(self) -> Generator[Scheduled,None,None]:
         
-    def build_schedule(self,
-                       parameters: Scope,
-                          
-                       ) -> PulseTemplate:
-        
-        #evaluate all real timings
-        pts_by_channel_subset = {k:[] for k in self._channel_subsets.keys()}
-        timings_by_channel_subset = {k:IntervalTree() for k in self._channel_subsets.keys()}
         all_scheduled = set().union(*self._scheduled.values())
-        scheduled_to_evaluated_scheduled = {s: None for s in all_scheduled} | {None: None}
-        
+
         ts = TopologicalSorter()
         
         #sort for reference-resolving
@@ -182,6 +190,21 @@ class SchedulerPT(PulseTemplate, MeasurementDefiner):
         except CycleError as e:
             print('References must not be cyclic')
             raise e
+            
+        return sorted_scheduled
+    
+    def build_schedule(self,
+                       parameters: Scope,
+                          
+                       ) -> Dict[str,PulseTemplate]:
+        
+        #evaluate all real timings
+        pts_by_channel_subset = {k:[] for k in self._channel_subsets.keys()}
+        timings_by_channel_subset = {k:IntervalTree() for k in self._channel_subsets.keys()}
+        all_scheduled = set().union(*self._scheduled.values())
+        scheduled_to_evaluated_scheduled = {s: None for s in all_scheduled} | {None: None}
+        
+        sorted_scheduled = self.sorted_scheduled
         
         #iterate through to get absolute timing
         for scheduled in sorted_scheduled:
@@ -237,48 +260,92 @@ class SchedulerPT(PulseTemplate, MeasurementDefiner):
             pt @= sorted_scheduled[-1][2].pt
             
             pts_by_channel_subset[k] = pt
-            
+        
+        
         return pts_by_channel_subset
     
-    @property
+    @cached_property
     def parameter_names(self) -> Set[str]:
-        raise NotImplementedError()
-        # return self.__main_pt.parameter_names
+        parameter_names = set()
+        for subset_scheduled in self._scheduled.values():
+            for sched in subset_scheduled:
+                parameter_names = parameter_names.union(sched.pt.parameter_names)
+        return parameter_names
     
-    @property
-    def duration(self) -> ExpressionScalar:
-        """An expression for the duration of this PulseTemplate."""
-        raise NotImplementedError()
+    @cached_property
+    def _start_points_by_subset(self) -> Dict[Scheduled,ExpressionScalar]:
+        sorted_scheduled = self.sorted_scheduled
+        initial_scheduled = next(sorted_scheduled)
+        #pt.duration should always return ExpressionScalar
+        # duration = initial_scheduled.pt.duration
+        # duration = ExpressionScalar(0.)
+        start_points_by_scheduled = {initial_scheduled: ExpressionScalar(0.)}
+        
+        # sympy_max = ExpressionScalar(f'Max({a.underlying_expression},b.underlying_expression)')
+        
+        #remaining:
+        for scheduled in sorted_scheduled:
+            start_points_by_scheduled[scheduled] = start_points_by_scheduled[scheduled.reference] + scheduled.rel_time
 
-        # return self._duration
+            if scheduled.ref_point is REF_POINT.END:
+                start_points_by_scheduled[scheduled] += scheduled.reference.pt.duration
+                
+            elif scheduled.ref_point is REF_POINT.START:
+                pass
+            else:
+                raise NotImplementedError()
+        return start_points_by_scheduled
+                
+    @cached_property
+    def duration(self) -> ExpressionScalar:
+        # this is unsafe as no check for timing consistency is made
+        
+        start_points_by_scheduled = self._start_points_by_subset
+        
+        max_time = ExpressionScalar(spMax(*[start+s.pt.duration for s,start in start_points_by_scheduled.items()]))
+        
+        return max_time
+        
     
     @property
     def defined_channels(self) -> Set[ChannelID]:
-        raise NotImplementedError()
+        return set().union(chs for chs in self._channel_subsets)
+        
 
-        # return self.__main_pt.defined_channels
-    
     @property
     def integral(self) -> Dict[ChannelID, ExpressionScalar]:
         raise NotImplementedError()
 
-        
-        # unextended = self.__main_pt.integral
-        
-        # return  {ch: unextended_ch + (self.duration-self.__main_pt.duration)*self.__main_pt.final_values[ch] \
-        #          for ch,unextended_ch in unextended.items()}
 
-    @property
+
+    @cached_property
     def initial_values(self) -> Dict[ChannelID, ExpressionScalar]:
-        raise NotImplementedError()
+        
+        start_points_by_scheduled = self._start_points_by_subset
+        
+        initial_values = {}
+        
+        for key,ch_subset in self._channel_subsets.items():
+            subset_scheduled = {s:time for s,time in start_points_by_scheduled.items() if s.pt.defined_channels==ch_subset}
+            initial_values.update(get_symbolic_vals_with_conditions_from_dict(subset_scheduled,ch_subset=self._channel_subsets[key],
+                                                              min_val=True))
+        
+        return initial_values
+        
 
-        # return self.__main_pt.initial_values
-
-    @property
+    @cached_property
     def final_values(self) -> Dict[ChannelID, ExpressionScalar]:
-        raise NotImplementedError()
-
-        # return self.__main_pt.final_values
+        
+        start_points_by_scheduled = self._start_points_by_subset
+        
+        final_values = {}
+        
+        for key,ch_subset in self._channel_subsets.items():
+            subset_scheduled = {s:time for s,time in start_points_by_scheduled.items() if s.pt.defined_channels==ch_subset}
+            final_values.update(get_symbolic_vals_with_conditions_from_dict(subset_scheduled,ch_subset=self._channel_subsets[key],
+                                                              min_val=False))
+            
+        return final_values
     
     def get_serialization_data(self, serializer: Optional[Serializer]=None) -> Dict[str, Any]:
         raise NotImplementedError()
@@ -322,9 +389,45 @@ class SchedulerPT(PulseTemplate, MeasurementDefiner):
 
     measurement_names = MeasurementDefiner.measurement_names
     # measurement_names = None
+    
+    
+    
+    #need to overwrite?
+    def _create_program(self, *,
+                        scope: Mapping[str,Scope],
+                        measurement_mapping: Dict[str, Optional[str]],
+                        channel_mapping: Dict[ChannelID, Optional[ChannelID]],
+                        global_transformation: Optional[Transformation],
+                        to_single_waveform: Set[Union[str, 'PulseTemplate']],
+                        program_builder: ProgramBuilder):
+        """Generic part of create program. This method handles to_single_waveform and the configuration of the
+        transformer."""
+        if self.identifier in to_single_waveform or self in to_single_waveform:
+            raise NotImplementedError()
+            # with program_builder.new_subprogram(global_transformation=global_transformation) as inner_program_builder:
 
+            #     if not scope.get_volatile_parameters().keys().isdisjoint(self.parameter_names):
+            #         raise NotImplementedError('A pulse template that has volatile parameters cannot be transformed into a '
+            #                                   'single waveform yet.')
+
+            #     self._internal_create_program(scope=scope,
+            #                                   measurement_mapping=measurement_mapping,
+            #                                   channel_mapping=channel_mapping,
+            #                                   global_transformation=None,
+            #                                   to_single_waveform=to_single_waveform,
+            #                                   program_builder=inner_program_builder)
+
+        else:
+            self._internal_create_program(scope=scope,
+                                          measurement_mapping=measurement_mapping,
+                                          channel_mapping=channel_mapping,
+                                          to_single_waveform=to_single_waveform,
+                                          global_transformation=global_transformation,
+                                          program_builder=program_builder)
+    
+    
     def _internal_create_program(self, *,
-                                  scope: Scope,
+                                  scope: Scope|Dict[str,Scope],
                                   measurement_mapping: Dict[str, Optional[str]],
                                   channel_mapping: Dict[ChannelID, Optional[ChannelID]],
                                   global_transformation: Optional[Transformation],
@@ -332,4 +435,112 @@ class SchedulerPT(PulseTemplate, MeasurementDefiner):
                                   program_builder: ProgramBuilder) -> None:
         """Parameter constraints are validated in build_waveform because build_waveform is guaranteed to be called
         during sequencing"""
-        raise NotImplementedError()
+        # raise NotImplementedError()
+        
+        if not all(k==v or v is None for k,v in channel_mapping):
+            raise NotImplementedError()
+        
+        if not isinstance(program_builder,MultiProgramBuilder):
+            raise NotImplementedError()
+        
+        pt_dict = self.build_schedule(scope)
+        
+        if mode:=program_builder.stack[-1][0] in {"top","sequence"}:
+            for key,subset_program_builder in program_builder.stack[-1][1].items():
+                pt_dict[key]._create_program(scope=scope,
+                                             measurement_mapping=measurement_mapping,
+                                             channel_mapping=channel_mapping,
+                                             global_transformation=global_transformation,
+                                             to_single_waveform=to_single_waveform,
+                                             program_builder=subset_program_builder
+                                             )
+                                             
+        elif mode:=program_builder.stack[-1][0] in {"iteration","repetition"}:
+            for key,subset_program_builder in program_builder.stack[-1][1].items():
+                for itrep_builder in subset_program_builder:
+                    pt_dict[key]._create_program(scope=scope[key] if mode=="iteration" else scope,
+                                                 measurement_mapping=measurement_mapping,
+                                                 channel_mapping=channel_mapping,
+                                                 global_transformation=global_transformation,
+                                                 to_single_waveform=to_single_waveform,
+                                                 program_builder=itrep_builder
+                                                 )
+        
+        # elif program_builder.stack[-1][0] in {"sequence",}:
+        #     for key,subset_sequence_program_builder in program_builder.stack[-1][1].items():
+        #         pt_dict[key]._create_program(scope=scope,
+        #                                      measurement_mapping=measurement_mapping,
+        #                                      channel_mapping=channel_mapping,
+        #                                      global_transformation=global_transformation,
+        #                                      to_single_waveform=to_single_waveform,
+        #                                      program_builder=subset_sequence_program_builder
+        #                                      )
+        else:
+            raise NotImplementedError()
+
+
+def get_symbolic_vals_with_conditions_from_dict(start_time_by_scheduled: Dict[Scheduled, ExpressionScalar],
+                                                      ch_subset: Set[ChannelID],
+                                                      min_val:bool=True) -> Dict[ChannelID,ExpressionScalar]:
+    # conditions = []  # To store conditions for Piecewise
+    
+    conditions_by_channel = {ch:[] for ch in ch_subset}
+    
+    # List of objects and their expr1
+    scheduled_list = list(start_time_by_scheduled.keys())
+    
+    # Compare each expr1 with others and create conditions
+    for i, scheduled in enumerate(scheduled_list):
+        current_conditions = []
+        
+        # For each object, create conditions against all other objects
+        for j, other_scheduled in enumerate(scheduled_list):
+            if i != j:
+                if min_val:
+                    current_conditions.append(sp.Lt(start_time_by_scheduled[scheduled].underlying_expression,
+                                                    start_time_by_scheduled[other_scheduled].underlying_expression))
+                else:
+                    current_conditions.append(sp.Gt(start_time_by_scheduled[scheduled].underlying_expression+scheduled.pt.duration.underlying_expression,
+                                                    start_time_by_scheduled[other_scheduled].underlying_expression+other_scheduled.pt.duration.underlying_expression))
+        
+        # Combine all conditions (AND logic) for object i to be the smallest
+        combined_condition = sp.And(*current_conditions)
+        if min_val:
+            for ch in ch_subset:
+                if scheduled.pre_gap_volt is GAP_VOLT.DEFAULT:
+                    conditions_by_channel[ch].append((scheduled.pt.initial_values[ch].underlying_expression, combined_condition))
+                elif scheduled.pre_gap_volt is GAP_VOLT.ZERO:
+                    conditions_by_channel[ch].append((0, combined_condition))
+                else:
+                    raise NotImplementedError()
+        else:
+            for ch in ch_subset:
+                if scheduled.post_gap_volt is GAP_VOLT.LAST:
+                    conditions_by_channel[ch].append((scheduled.pt.final_values[ch].underlying_expression, combined_condition))
+                elif scheduled.post_gap_volt is GAP_VOLT.ZERO:
+                    conditions_by_channel[ch].append((0, combined_condition))
+                else:
+                    raise NotImplementedError()
+    
+    # If none of the conditions are met (i.e., for cases of equality), return the expr2 of the first object as default
+    default_condition = {}
+    if min_val:
+        for ch in ch_subset:
+            if scheduled.pre_gap_volt is GAP_VOLT.DEFAULT:
+                default_condition[ch] = (scheduled_list[0].pt.initial_values[ch].underlying_expression, True)
+            elif scheduled.pre_gap_volt is GAP_VOLT.ZERO:
+                default_condition[ch] = (0, True)
+            else:
+                raise NotImplementedError()
+    else:
+        for ch in ch_subset:
+            if scheduled.post_gap_volt is GAP_VOLT.LAST:
+                default_condition[ch] = (scheduled_list[0].pt.final_values[ch].underlying_expression, True)
+            elif scheduled.post_gap_volt is GAP_VOLT.ZERO:
+                default_condition[ch] = (0, True)
+            else:
+                raise NotImplementedError()
+    
+    
+    # Create and return the Piecewise expression
+    return {ch: ExpressionScalar(sp.Piecewise(*conditions_by_channel[ch], default_condition[ch])) for ch in ch_subset}

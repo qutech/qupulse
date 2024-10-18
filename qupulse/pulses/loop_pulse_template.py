@@ -72,6 +72,10 @@ class ForLoopPulseTemplate(LoopPulseTemplate, MeasurementDefiner, ParameterConst
             loop_range: Range to loop through
             identifier: Used for serialization
         """
+        # from qupulse.pulses.scheduler_pulse_template import SchedulerPT
+        # if isinstance(body,SchedulerPT):
+        #     raise NotImplementedError('access via .with_iteration')
+        
         LoopPulseTemplate.__init__(self, body=body, identifier=identifier)
         MeasurementDefiner.__init__(self, measurements=measurements)
         ParameterConstrainer.__init__(self, parameter_constraints=parameter_constraints)

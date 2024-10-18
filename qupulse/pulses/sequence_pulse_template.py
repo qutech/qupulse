@@ -60,6 +60,15 @@ class SequencePulseTemplate(PulseTemplate, ParameterConstrainer, MeasurementDefi
                 SequencePulseTemplate as tuples of the form (PulseTemplate, Dict(str -> str)).
             identifier (str): A unique identifier for use in serialization. (optional)
         """
+        # from qupulse.pulses.scheduler_pulse_template import SchedulerPT
+        # if any(isinstance(body,SchedulerPT) for body in subtemplates):
+        #     raise NotImplementedError('access via @')
+        
+        from qupulse.pulses.scheduler_pulse_template import SchedulerPT
+        assert not any(isinstance(body,SchedulerPT) for body in subtemplates) or\
+                   all(isinstance(body,SchedulerPT) for body in subtemplates),\
+                   NotImplementedError('None or all SchedulerPTs in sequence')
+        
         PulseTemplate.__init__(self, identifier=identifier)
         ParameterConstrainer.__init__(self, parameter_constraints=parameter_constraints)
         MeasurementDefiner.__init__(self, measurements=measurements)

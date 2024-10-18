@@ -50,6 +50,10 @@ class RepetitionPulseTemplate(LoopPulseTemplate, ParameterConstrainer, Measureme
                 constant integer value or as a parameter declaration.
             identifier (str): A unique identifier for use in serialization. (optional)
         """
+        # from qupulse.pulses.scheduler_pulse_template import SchedulerPT
+        # if isinstance(body,SchedulerPT):
+        #     raise NotImplementedError('access via .with_repetition or **')
+        
         if len(args) == 1 and parameter_constraints is None:
             warn('You used parameter_constraints as a positional argument. It will be keyword only in a future version.', DeprecationWarning)
         elif args:
