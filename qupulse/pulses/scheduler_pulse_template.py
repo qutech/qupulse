@@ -1,5 +1,5 @@
 from numbers import Real
-from typing import Dict, Optional, Set, Union, List, Iterable, Any, Sequence, Hashable, Mapping, Generator
+from typing import Dict, Optional, Set, Union, List, Iterable, Any, Sequence, Hashable, Mapping, Generator, Tuple
 
 from qupulse import ChannelID
 from qupulse.parameter_scope import Scope
@@ -105,21 +105,13 @@ class SchedulerPT(PulseTemplate, MeasurementDefiner):
          MeasurementDefiner.__init__(self, measurements=measurements)
          # AtomicPulseTemplate.__init__(self, identifier=identifier, measurements=measurements)
          
-         
-         
+
          self._channel_subsets = channel_subsets
          #no channel duplicates
          assert len(set().union(*channel_subsets.values())) == sum(len(v) for v in channel_subsets.values()),\
              'Only use disjoint subsets'
          
-         # self.__pad_pt = ConstantPT(new_duration-main_pt.duration, self.final_values)
-         
-         # as values []
          self._scheduled: Dict[str,Set[Scheduled]] = {k:set() for k in self._channel_subsets.keys()}
-         
-         # self._duration = ExpressionScalar.make(new_duration)
-         self._duration = 0
-         
          self._root: Scheduled  = None
          
          self._register(registry=registry)    
@@ -309,7 +301,7 @@ class SchedulerPT(PulseTemplate, MeasurementDefiner):
     
     @property
     def defined_channels(self) -> Set[ChannelID]:
-        return set().union(chs for chs in self._channel_subsets)
+        return set().union(*[chs for chs in self._channel_subsets.values()])
         
 
     @property
@@ -348,17 +340,24 @@ class SchedulerPT(PulseTemplate, MeasurementDefiner):
         return final_values
     
     def get_serialization_data(self, serializer: Optional[Serializer]=None) -> Dict[str, Any]:
-        raise NotImplementedError()
 
-        # if serializer is not None:
-        #     raise NotImplementedError("SingleWFTimeExtensionPulseTemplate does not implement legacy serialization.")
-        # data = super().get_serialization_data(serializer)
-        # data['main_pt'] = self.__main_pt
-        # data['new_duration'] = self.duration
-        # data['measurements']: self.measurement_declarations
+        if serializer is not None:
+            raise NotImplementedError("SchedulerPulseTemplate does not implement legacy serialization.")
         
-        # return data
+        data = super().get_serialization_data(serializer)
 
+        data['channel_subsets'] = self._channel_subsets
+        data['scheduled'] = self._scheduled
+        data['root'] = self._root
+        data['register'] = self._register
+                
+
+        if self.measurement_declarations:
+            raise NotImplementedError()
+            data['measurements'] = self.measurement_declarations
+
+        return data
+        
     @classmethod
     def deserialize(cls,
                     serializer: Optional[Serializer]=None,  # compatibility to old serialization routines, deprecated
@@ -427,7 +426,9 @@ class SchedulerPT(PulseTemplate, MeasurementDefiner):
     
     
     def _internal_create_program(self, *,
-                                  scope: Scope|Dict[str,Scope],
+                                  # scope: Scope|Dict[str,Scope],
+                                  scope: Scope|Tuple[Scope,'ForLoopPT'],
+
                                   measurement_mapping: Dict[str, Optional[str]],
                                   channel_mapping: Dict[ChannelID, Optional[ChannelID]],
                                   global_transformation: Optional[Transformation],
@@ -437,16 +438,16 @@ class SchedulerPT(PulseTemplate, MeasurementDefiner):
         during sequencing"""
         # raise NotImplementedError()
         
-        if not all(k==v or v is None for k,v in channel_mapping):
+        if not all(k==v or v is None for k,v in channel_mapping.items()):
             raise NotImplementedError()
         
         if not isinstance(program_builder,MultiProgramBuilder):
             raise NotImplementedError()
+
         
-        pt_dict = self.build_schedule(scope)
-        
-        if mode:=program_builder.stack[-1][0] in {"top","sequence"}:
-            for key,subset_program_builder in program_builder.stack[-1][1].items():
+        if (mode:=program_builder._stack[-1][0]) in {"top","sequence"}:
+            pt_dict = self.build_schedule({key:scope for key in self._channel_subsets.keys()})
+            for key,subset_program_builder in program_builder._stack[-1][1].items():
                 pt_dict[key]._create_program(scope=scope,
                                              measurement_mapping=measurement_mapping,
                                              channel_mapping=channel_mapping,
@@ -455,10 +456,11 @@ class SchedulerPT(PulseTemplate, MeasurementDefiner):
                                              program_builder=subset_program_builder
                                              )
                                              
-        elif mode:=program_builder.stack[-1][0] in {"iteration","repetition"}:
-            for key,subset_program_builder in program_builder.stack[-1][1].items():
+        elif (mode:=program_builder._stack[-1][0]) in {"iteration","repetition"}:
+            pt_dict = self.build_schedule(scope[0] if mode=="iteration" else {key:scope for key in self._channel_subsets.keys()})
+            for key,subset_program_builder in program_builder._stack[-1][1].items():
                 for itrep_builder in subset_program_builder:
-                    pt_dict[key]._create_program(scope=scope[key] if mode=="iteration" else scope,
+                    pt_dict[key]._create_program(scope=itrep_builder.inner_scope(*scope) if mode=="iteration" else scope,
                                                  measurement_mapping=measurement_mapping,
                                                  channel_mapping=channel_mapping,
                                                  global_transformation=global_transformation,
@@ -466,8 +468,8 @@ class SchedulerPT(PulseTemplate, MeasurementDefiner):
                                                  program_builder=itrep_builder
                                                  )
         
-        # elif program_builder.stack[-1][0] in {"sequence",}:
-        #     for key,subset_sequence_program_builder in program_builder.stack[-1][1].items():
+        # elif program_builder._stack[-1][0] in {"sequence",}:
+        #     for key,subset_sequence_program_builder in program_builder._stack[-1][1].items():
         #         pt_dict[key]._create_program(scope=scope,
         #                                      measurement_mapping=measurement_mapping,
         #                                      channel_mapping=channel_mapping,

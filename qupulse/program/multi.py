@@ -34,7 +34,9 @@ class MultiProgramBuilder(ProgramBuilder):
         
         super().__init__()
         self._program_builder_map = sub_program_builders
-
+        
+        self._stack = [('top',sub_program_builders)]
+        
     # def get_program_builder(self, key) -> NestedPBMapping:
     #     return self._program_builder_map.setdefault(key,deepcopy(self._program_builder_map[-1]))
     
@@ -59,8 +61,15 @@ class MultiProgramBuilder(ProgramBuilder):
     
     def inner_scope(self, scope: Scope, pt_obj: Optional['ForLoopPT']=None) -> Mapping[str,Scope]:
         #???
-        return {k: pb.inner_scope(scope,pt_obj) for k,pb in self.program_builder_map.items()}
-        
+        # if self._stack[-1][0] in {"top","sequence",}:
+        #     return {k: pb.inner_scope(scope,pt_obj) for k,pb in self._stack[-1][1].items()}
+        # elif self._stack[-1][0] in {"iteration","repetition"}:
+        #     return {k: pb.inner_scope(scope,pt_obj) for k,pb in self._stack[-1][1].items()}
+        # return None #DUMMY
+        return scope,pt_obj #DUMMY
+
+        # return {k: pb.inner_scope(scope,pt_obj) for k,pb in self.program_builder_map.items()}
+
         
 
     def hold_voltage(self, duration: HardwareTime, voltages: Mapping[str, HardwareVoltage]):
@@ -77,13 +86,13 @@ class MultiProgramBuilder(ProgramBuilder):
 
     def with_repetition(self, repetition_count: RepetitionCount,
                         measurements: Optional[Sequence[MeasurementWindow]] = None) -> Iterable['ProgramBuilder']:
-        self._stack.extend(('repetition',{k:pb.with_repetition(measurements) for k,pb in self.program_builder_map.items()}))
+        self._stack.append(('repetition',{k:pb.with_repetition(measurements) for k,pb in self.program_builder_map.items()}))
         yield self
         self._stack.pop()
         
     def with_sequence(self,
                       measurements: Optional[Sequence[MeasurementWindow]] = None) -> ContextManager['ProgramBuilder']:
-        self._stack.extend(('sequence',{k:pb.with_sequence(measurements) for k,pb in self.program_builder_map.items()}))
+        self._stack.append(('sequence',{k:pb.with_sequence(measurements) for k,pb in self.program_builder_map.items()}))
         yield self
         self._stack.pop()
 
@@ -96,7 +105,7 @@ class MultiProgramBuilder(ProgramBuilder):
                        pt_obj: 'ForLoopPT', #hack this in for now.
                        # can be placed more suitably, like in pulsemetadata later on, but need some working thing now.
                        measurements: Optional[Sequence[MeasurementWindow]] = None) -> Iterable['ProgramBuilder']:
-        self._stack.extend(('iteration',{k:pb.with_iteration(index_name,rng,pt_obj,measurements) for k,pb in self.program_builder_map}))
+        self._stack.append(('iteration',{k:pb.with_iteration(index_name,rng,pt_obj,measurements) for k,pb in self.program_builder_map.items()}))
         yield self
         self._stack.pop()
     
@@ -104,7 +113,9 @@ class MultiProgramBuilder(ProgramBuilder):
         return False
     
     def to_program(self, defined_channels: Set[ChannelID]) -> Optional[Dict[str,Program|Self]]:
-        
+        top = self._stack.pop()
+        assert top[0]=='top'
+        assert len(self._stack)==0
         return MultiProgram({k:sub.to_program(defined_channels) for k,sub in self.program_builder_map.items()})
         
         
