@@ -533,7 +533,9 @@ class AtomicPulseTemplate(PulseTemplate, MeasurementDefiner):
         ### measurements are directly added to parent_loop (to reflect behavior of Sequencer + MultiChannelProgram)
         assert not scope.get_volatile_parameters().keys() & self.parameter_names, "AtomicPT cannot be volatile"
         
-        
+        #fast track 0 duration?
+        if self.duration.evaluate_in_scope(scope)==0:
+            return
         # "hackedy":
         if program_builder.evaluate_nested_stepping(scope,self.parameter_names):
             program_builder.dispatch_to_stepped_wf_or_hold(build_func=self.build_waveform,
