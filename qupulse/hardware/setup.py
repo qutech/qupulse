@@ -370,7 +370,7 @@ class MetaHardwareSetup:
     
     @property
     def known_awgs(self) -> Set[AWG]:
-        return set().union(s.knwon_awgs for s in self._setup_map.values())
+        return set().union(*[s.known_awgs for s in self._setup_map.values()])
 
     def arm_program(self, name: str) -> None:
         """Assert program is in memory. Hardware will wait for trigger event"""
@@ -409,9 +409,10 @@ class MetaHardwareSetup:
 
     def rm_setup(self, identifier: str) -> None:
         self._setup_map.pop(identifier)
-
+        
+    @property
     def all_registered_channels(self) -> Dict[ChannelID, Set[_SingleChannel]]:
-        return {k:v for setup in self._setup_map.values() for k,v in setup.registered_channels.items()}
+        return {k:v for setup in self._setup_map.values() for k,v in setup.registered_channels().items()}
 
     # def update_parameters(self, name: str, parameters: Mapping[str, numbers.Real]):
     #     *_, awgs, dacs = self._registered_programs[name]
