@@ -30,12 +30,15 @@ class MultiProgramBuilder(ProgramBuilder):
     
     def __init__(self,
                  sub_program_builders: Dict[str,ProgramBuilder|Self],
+                 channel_subsets: Dict[str,Set[ChannelID]|Self],
                  ):
         
         super().__init__()
         self._program_builder_map = sub_program_builders
         
         self._stack = [('top',sub_program_builders)]
+        
+        self._channel_subsets = channel_subsets
         
     # def get_program_builder(self, key) -> NestedPBMapping:
     #     return self._program_builder_map.setdefault(key,deepcopy(self._program_builder_map[-1]))
@@ -116,7 +119,7 @@ class MultiProgramBuilder(ProgramBuilder):
         top = self._stack.pop()
         assert top[0]=='top'
         assert len(self._stack)==0
-        return MultiProgram({k:sub.to_program(defined_channels) for k,sub in self.program_builder_map.items()})
+        return MultiProgram({k:sub.to_program(self._channel_subsets[k]) for k,sub in self.program_builder_map.items()})
         
         
 class MultiProgram:
