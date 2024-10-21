@@ -1,6 +1,6 @@
 """This package contains utility functions and classes as well as custom sympy extensions(hacks)."""
 
-from typing import Union, Iterable, Any, Tuple, Mapping, Iterator, TypeVar, Sequence, AbstractSet, Optional, Callable
+from typing import Union, Iterable, Any, Tuple, Mapping, Iterator, TypeVar, Sequence, AbstractSet, Optional, Callable, Dict, Set, Self
 import itertools
 import re
 import numbers
@@ -159,3 +159,35 @@ def to_next_multiple(sample_rate: ExpressionLike, quantum: int,
     else:
         #still return 0 if duration==0
         return lambda duration: ExpressionScalar(f'{quantum}/({sample_rate})*Max({min_quanta},-(-{duration}*{sample_rate}//{quantum}))*Max(0, sign({duration}))')
+    
+    
+    
+def flatten_dict_to_sets(input_dict: Dict[str,Set[Any]|Self],
+                         ) -> Dict[str,Set[Any]|Any]:
+    def collect_leaves(d):
+        leaf_values = set()
+        for k, v in d.items():
+            if isinstance(v, dict):
+                # Recursively collect leaf values
+                leaf_values.update(collect_leaves(v))
+            elif isinstance(v, set):
+                # If it's a set, add its elements
+                leaf_values.update(v)
+            else:
+                # Add leaf value directly
+                leaf_values.add(v)
+        return leaf_values
+
+    result = {}
+    for top_key, value in input_dict.items():
+        if isinstance(value, dict):
+            # Collect leaf values from the nested dictionary
+            result[top_key] = collect_leaves(value)
+        elif isinstance(value, set):
+            # If the value is a set, keep it as is
+            result[top_key] = value
+        else:
+            # single values as is
+            result[top_key] = value
+
+    return result

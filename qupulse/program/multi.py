@@ -48,15 +48,18 @@ class MultiProgramBuilder(ProgramBuilder):
                      structure: Dict[str,Any|Self],
                      ):
         
-        def replace_final_values(d, default_value):
+        structure = deepcopy(structure)
+        
+        def recursive_mpb(d, default_value):
             for key, value in d.items():
                 if isinstance(value, dict):
-                    d[key] = replace_final_values(value, default_program_builder)
+                    # d[key] = replace_final_values(value, default_program_builder)
+                    d[key] = cls.from_mapping(default_program_builder,value)
                 else:
                     d[key] = deepcopy(default_program_builder)
             return d
         
-        return cls(replace_final_values(structure, default_program_builder))
+        return cls(recursive_mpb(structure, default_program_builder))
     
     @property
     def program_builder_map(self) -> Dict[str,ProgramBuilder|Self]:
@@ -85,14 +88,16 @@ class MultiProgramBuilder(ProgramBuilder):
 
     def measure(self, measurements: Optional[Sequence[MeasurementWindow]]):
         """Unconditionally add given measurements relative to the current position."""
-        raise NotImplementedError()
+        if measurements:
+            raise NotImplementedError()
 
     def with_repetition(self, repetition_count: RepetitionCount,
                         measurements: Optional[Sequence[MeasurementWindow]] = None) -> Iterable['ProgramBuilder']:
         self._stack.append(('repetition',{k:pb.with_repetition(repetition_count,measurements) for k,pb in self.program_builder_map.items()}))
         yield self
         self._stack.pop()
-        
+    
+    @contextlib.contextmanager
     def with_sequence(self,
                       measurements: Optional[Sequence[MeasurementWindow]] = None) -> ContextManager['ProgramBuilder']:
         self._stack.append(('sequence',{k:pb.with_sequence(measurements) for k,pb in self.program_builder_map.items()}))

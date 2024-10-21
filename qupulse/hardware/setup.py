@@ -1,4 +1,4 @@
-from typing import NamedTuple, Set, Callable, Dict, Tuple, Union, Iterable, Any, Mapping
+from typing import NamedTuple, Set, Callable, Dict, Tuple, Union, Iterable, Any, Mapping, Self
 from collections import defaultdict
 from dataclasses import dataclass
 import warnings
@@ -340,12 +340,21 @@ class MetaHardwareSetup:
                          program: MultiProgram,
                          run_callback: Callable = lambda: None,
                          update: bool = False,
+                         flatten_structure: bool = False,
                          # measurements: Mapping[str, Tuple[np.ndarray, np.ndarray]] = None
                          ) -> None:
         
         hw_setups_to_utilize = set()
         
-        for s_ident,prog in program.program_map.items():
+        if flatten_structure:
+            
+            
+            
+            program_map = flatten_mp_dict(program.program_map)
+        else:
+            program_map = program.program_map
+        
+        for s_ident,prog in program_map.items():
             self.setup_map[s_ident].register_program(s_ident+'_'+name, prog,
                                                      update=update,run_callback=lambda:None)
             hw_setups_to_utilize.add(self.setup_map[s_ident])
@@ -365,11 +374,11 @@ class MetaHardwareSetup:
         self._registered_programs = {}
 
     @property
-    def known_hw_setups(self) -> Set[HardwareSetup]:
+    def known_hw_setups(self) -> Set[Union[HardwareSetup,"MetaHardwareSetup"]]:
         return set(self._setup_map.values())
     
     @property
-    def setup_map(self) -> Dict[str,HardwareSetup]:
+    def setup_map(self) -> Dict[str,Union[HardwareSetup,"MetaHardwareSetup"]]:
         return self._setup_map
     
     @property
@@ -401,7 +410,7 @@ class MetaHardwareSetup:
         self._registered_programs[name].run_callback()
 
     def add_setup(self, identifier: str,
-                    setup: HardwareSetup,
+                    setup: Union[HardwareSetup,"MetaHardwareSetup"],
                     allow_multiple_registration: bool=False) -> None:
         
         assert identifier not in self._setup_map
@@ -428,3 +437,25 @@ class MetaHardwareSetup:
     @property
     def registered_programs(self) -> Dict[str, RegisteredMultiProgram]:
         return self._registered_programs
+
+
+
+
+def flatten_mp_dict(input_dict: Dict[str,MultiProgram|Self],
+                         ) -> Dict[str,MultiProgram]:
+    def flatten(d, parent_key='', sep='.'):
+        items = []
+        for k, v in d.items():
+            # new_key = f"{parent_key}{sep}{k}" if parent_key else k
+            new_key = k
+            assert new_key != parent_key
+
+            if isinstance(v, MultiProgram):
+                # Recursively flatten the dictionary
+                items.extend(flatten(v.program_map, new_key, sep=sep).items())
+            else:
+                # Add non-dict, non-set items directly
+                items.append((new_key, v))
+        return dict(items)
+
+    return flatten(input_dict)

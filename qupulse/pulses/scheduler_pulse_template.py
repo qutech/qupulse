@@ -1,5 +1,5 @@
 from numbers import Real
-from typing import Dict, Optional, Set, Union, List, Iterable, Any, Sequence, Hashable, Mapping, Generator, Tuple
+from typing import Dict, Optional, Set, Union, List, Iterable, Any, Sequence, Hashable, Mapping, Generator, Tuple, Self
 
 from qupulse import ChannelID
 from qupulse.parameter_scope import Scope
@@ -10,7 +10,7 @@ from qupulse._program.waveforms import ConstantWaveform
 from qupulse.program import ProgramBuilder, Program
 from qupulse.program.linspace import LinSpaceBuilder
 from qupulse.program.multi import MultiProgramBuilder
-from qupulse.utils import cached_property
+from qupulse.utils import cached_property, flatten_dict_to_sets
 
 from qupulse.pulses.parameters import ConstraintLike
 from qupulse.pulses.measurement import MeasurementDefiner, MeasurementDeclaration
@@ -24,6 +24,9 @@ from graphlib import TopologicalSorter, CycleError
 from intervaltree import Interval, IntervalTree
 from sympy import Max as spMax
 import sympy as sp
+from copy import deepcopy
+
+import numpy as np
 
 class SpacerConstantPT(ConstantPT):
     pass
@@ -138,19 +141,25 @@ class SchedulerPT(PulseTemplate, MeasurementDefiner):
         self.__dict__.pop('defined_channels', None)
 
         
-        if isinstance(PulseTemplate, SchedulerPT):
-            raise NotImplementedError('TBD')
+        
         
         if self._root is not None and reference is None:
             raise NotImplementedError('always define a reference except for first addition')
    
         
+        # if isinstance(PulseTemplate, SchedulerPT):
+        #     #check if correct channels
+        #     if not sum(int(pt.defined_subsets==subset) for subset in self._channel_subsets.values())==1:
+        #         raise RuntimeError('Only define PT on exactly one subset')
+        # else:
         #check if correct channels
-        if not sum(int(pt.defined_channels==subset) for subset in self._channel_subsets.values())==1:
+        if not sum(int(pt.defined_channels==subset) for subset in self._flattened_channels_by_subset_key.values())==1:
             raise RuntimeError('Only define PT on exactly one subset')
         
         #find subset
-        for k,subset in self._channel_subsets.items():
+        # for k,subset in self._channel_subsets.items():
+        for k,subset in self._flattened_channels_by_subset_key.items():
+
             if pt.defined_channels==subset:
                 #add to channel subsets
                 sched = Scheduled(pt,k,reference,REF_POINT[ref_point.upper()],rel_time,GAP_VOLT[fill_post_gap_voltage.upper()],
@@ -186,18 +195,25 @@ class SchedulerPT(PulseTemplate, MeasurementDefiner):
             
         return sorted_scheduled
     
+    # def _recursive_build_schedule
+    
     def build_schedule(self,
                        parameters: Scope,
-                          
                        ) -> Dict[str,PulseTemplate]:
+                       # ) -> Dict[str,PulseTemplate|Self]:
         
         #evaluate all real timings
         pts_by_channel_subset = {k:[] for k in self._channel_subsets.keys()}
+        # pts_by_channel_subset = deepcopy(self._channel_subsets)
+
         timings_by_channel_subset = {k:IntervalTree() for k in self._channel_subsets.keys()}
         all_scheduled = set().union(*self._scheduled.values())
         scheduled_to_evaluated_scheduled = {s: None for s in all_scheduled} | {None: None}
         
         sorted_scheduled = self.sorted_scheduled
+        
+        offset_start_time = 0.
+        end_time = -np.inf
         
         #iterate through to get absolute timing
         for scheduled in sorted_scheduled:
@@ -206,6 +222,12 @@ class SchedulerPT(PulseTemplate, MeasurementDefiner):
                                                                           scheduled_to_evaluated_scheduled[scheduled.reference],
                                                                           parameters)
             new_interval = (evaluated_scheduled.start_time, evaluated_scheduled.end_time)
+            
+            if evaluated_scheduled.start_time < offset_start_time:
+                offset_start_time = evaluated_scheduled.start_time
+                
+            if evaluated_scheduled.end_time > end_time:
+                end_time = evaluated_scheduled.end_time
             
             # Search for overlaps in the interval tree
             overlaps = timings_by_channel_subset[scheduled.channel_subset_key].overlap(*new_interval)
@@ -218,42 +240,69 @@ class SchedulerPT(PulseTemplate, MeasurementDefiner):
             scheduled_to_evaluated_scheduled[scheduled] = evaluated_scheduled
             
             # pts_by_channel_subset[scheduled.channel_subset_key] = evaluated_scheduled
-            
+        
+        #!!! add lowest start time as offset, latest time as end time
+        
         #build PT on every subset
-        for k in pts_by_channel_subset.keys():
-            
-            #begin should be sufficient to sort by
-            #returns list of (begin,end,scheduled)
-            sorted_scheduled = sorted(timings_by_channel_subset[k].items(), key=lambda interval: interval.begin)
-            
-            first_scheduled = sorted_scheduled[0][2]
-            #initial ConstantPT shouldn't hurt when length 0
-            if first_scheduled.pre_gap_volt is GAP_VOLT.DEFAULT:
-                pt = ConstantPT(first_scheduled.start_time, first_scheduled.pt.initial_values)
-            elif first_scheduled.pre_gap_volt is GAP_VOLT.ZERO:
-                pt = ConstantPT(first_scheduled.start_time, {ch: 0. for ch in self._channel_subsets.keys()})
-            else:
-                raise NotImplementedError()
+        def nested_pt_subsets(pts_by_channel_subset):
+            for k in pts_by_channel_subset.keys():
+                # if isinstance(pts_by_channel_subset[k],dict):
+                #     return nested_pt_subsets(pts_by_channel_subset[k])
+                # assert isinstance(pts_by_channel_subset[k],Set)
                 
-            for i,interv in enumerate(sorted_scheduled[:-1]):
-                s = interv[2]
-                pt @= s.pt
-                if sorted_scheduled[i+1][2].pre_gap_volt is not GAP_VOLT.DEFAULT:
+                #begin should be sufficient to sort by
+                #returns list of (begin,end,scheduled)
+                sorted_scheduled = sorted(timings_by_channel_subset[k].items(), key=lambda interval: interval.begin)
+                
+                if len(sorted_scheduled)==0:
+                    raise NotImplementedError('one pt on every subset')
+                    continue
+                
+                first_scheduled = sorted_scheduled[0][2]
+                
+                #!!! optional short fillers as timeextendpt / non-constant pt as  hdawg bad with short hold times?
+                
+                #initial ConstantPT shouldn't hurt when length 0
+                if first_scheduled.pre_gap_volt is GAP_VOLT.DEFAULT:
+                    pt = ConstantPT(first_scheduled.start_time+offset_start_time, first_scheduled.pt.initial_values)
+                elif first_scheduled.pre_gap_volt is GAP_VOLT.ZERO:
+                    pt = ConstantPT(first_scheduled.start_time+offset_start_time, {ch: 0. for ch in self._flattened_channels_by_subset_key.values()})
+                else:
                     raise NotImplementedError()
+                    
+                for i,interv in enumerate(sorted_scheduled[:-1]):
+                    s = interv[2]
+                    pt @= s.pt
+                    if sorted_scheduled[i+1][2].pre_gap_volt is not GAP_VOLT.DEFAULT:
+                        raise NotImplementedError()
+                    if s.post_gap_volt is GAP_VOLT.NEXT:
+                        gap_volt = sorted_scheduled[i+1][2].pt.initial_values
+                    elif s.post_gap_volt is GAP_VOLT.LAST:
+                        gap_volt = s.pt.final_values
+                    elif s.post_gap_volt is GAP_VOLT.ZERO:
+                        gap_volt = {ch: 0. for ch in self._flattened_channels_by_subset_key.values()}
+                    pt @= ConstantPT(sorted_scheduled[i+1][2].start_time-s.end_time,
+                                     gap_volt
+                                     )
+                    
+                s = sorted_scheduled[-1][2]
+                pt @= s.pt
+                
+                #!!! gap after last
                 if s.post_gap_volt is GAP_VOLT.NEXT:
-                    gap_volt = sorted_scheduled[i+1][2].pt.initial_values
+                    raise NotImplementedError()
                 elif s.post_gap_volt is GAP_VOLT.LAST:
                     gap_volt = s.pt.final_values
                 elif s.post_gap_volt is GAP_VOLT.ZERO:
-                    gap_volt = {ch: 0. for ch in self._channel_subsets.keys()}
-                pt @= ConstantPT(sorted_scheduled[i+1][2].start_time-s.end_time,
+                    gap_volt = {ch: 0. for ch in self._flattened_channels_by_subset_key.values()}
+                pt @= ConstantPT(end_time+offset_start_time-sorted_scheduled[-1][2].end_time,
                                  gap_volt
                                  )
                 
-            pt @= sorted_scheduled[-1][2].pt
-            
-            pts_by_channel_subset[k] = pt
+                
+                pts_by_channel_subset[k] = pt
         
+        nested_pt_subsets(pts_by_channel_subset)
         
         return pts_by_channel_subset
     
@@ -299,15 +348,31 @@ class SchedulerPT(PulseTemplate, MeasurementDefiner):
         
         return max_time
         
+    @cached_property
+    def _flattened_channels_by_subset_key(self) -> Dict[SubsetID,Set[ChannelID]]:
+        return flatten_dict_to_sets(self._channel_subsets)
     
     @cached_property
     def defined_channels(self) -> Set[ChannelID]:
-        # return set().union(*[chs for chs in self._channel_subsets.values()])
-        return set().union(*[chs  for s in self._scheduled.values() for chs in s.pt.defined_channels])
+        
+        # flattened_channels = flatten_dict_to_sets(self._channel_subsets)
+        
+        return set().union(*[chs for chs in self._flattened_channels_by_subset_key.values()])
+        # return set().union(*[subset for subset in self._channel_subsets.keys()])
+
+        # return set().union(*[chs  for s in self._scheduled.values() for chs in s.pt.defined_channels])
     
+    # @property
+    # def defined_channel_ids(self) -> Set[SubsetID]:
+    #     # return set().union(*[chs for chs in self._channel_subsets.values()])
+    #     return set().union(*[chs  for s in self._scheduled.values() for chs in s.pt.defined_channels])
     @property
-    def defined_subsets_or_channels(self) -> Set[SubsetID|ChannelID]:
-        return set().union(*[chs for chs in self._channel_subsets.values()])
+    def defined_subsets(self) -> Set[SubsetID]:
+        # return set().union(*[chs for chs in self._channel_subsets.keys()])
+        return set(self._channel_subsets.keys())
+
+        # return set().union(*[chs  for s in self._scheduled.values() for chs in s.pt.defined_channels])
+
 
     @property
     def integral(self) -> Dict[ChannelID, ExpressionScalar]:
@@ -324,8 +389,10 @@ class SchedulerPT(PulseTemplate, MeasurementDefiner):
         
         for key,ch_subset in self._channel_subsets.items():
             subset_scheduled = {s:time for s,time in start_points_by_scheduled.items() if s.pt.defined_channels==ch_subset}
-            initial_values.update(get_symbolic_vals_with_conditions_from_dict(subset_scheduled,ch_subset=self._channel_subsets[key],
-                                                              min_val=True))
+            initial_values.update(get_symbolic_vals_with_conditions_from_dict(subset_scheduled,
+                                                                              # ch_subset=self._channel_subsets[key],
+                                                                              ch_subset=self._flattened_channels_by_subset_key[key],
+                                                                              min_val=True))
         
         return initial_values
         
@@ -339,8 +406,10 @@ class SchedulerPT(PulseTemplate, MeasurementDefiner):
         
         for key,ch_subset in self._channel_subsets.items():
             subset_scheduled = {s:time for s,time in start_points_by_scheduled.items() if s.pt.defined_channels==ch_subset}
-            final_values.update(get_symbolic_vals_with_conditions_from_dict(subset_scheduled,ch_subset=self._channel_subsets[key],
-                                                              min_val=False))
+            final_values.update(get_symbolic_vals_with_conditions_from_dict(subset_scheduled,
+                                                                            # ch_subset=self._channel_subsets[key],
+                                                                            ch_subset=self._flattened_channels_by_subset_key[key],
+                                                                            min_val=False))
             
         return final_values
     
@@ -495,6 +564,9 @@ def get_symbolic_vals_with_conditions_from_dict(start_time_by_scheduled: Dict[Sc
                                                       min_val:bool=True) -> Dict[ChannelID,ExpressionScalar]:
     # conditions = []  # To store conditions for Piecewise
     
+    if len(start_time_by_scheduled)==0:
+        return {ch: ExpressionScalar(0.) for ch in ch_subset}
+    
     conditions_by_channel = {ch:[] for ch in ch_subset}
     
     # List of objects and their expr1
@@ -537,17 +609,17 @@ def get_symbolic_vals_with_conditions_from_dict(start_time_by_scheduled: Dict[Sc
     default_condition = {}
     if min_val:
         for ch in ch_subset:
-            if scheduled.pre_gap_volt is GAP_VOLT.DEFAULT:
+            if scheduled_list[0].pre_gap_volt is GAP_VOLT.DEFAULT:
                 default_condition[ch] = (scheduled_list[0].pt.initial_values[ch].underlying_expression, True)
-            elif scheduled.pre_gap_volt is GAP_VOLT.ZERO:
+            elif scheduled_list[0].pre_gap_volt is GAP_VOLT.ZERO:
                 default_condition[ch] = (0, True)
             else:
                 raise NotImplementedError()
     else:
         for ch in ch_subset:
-            if scheduled.post_gap_volt is GAP_VOLT.LAST:
+            if scheduled_list[0].post_gap_volt is GAP_VOLT.LAST:
                 default_condition[ch] = (scheduled_list[0].pt.final_values[ch].underlying_expression, True)
-            elif scheduled.post_gap_volt is GAP_VOLT.ZERO:
+            elif scheduled_list[0].post_gap_volt is GAP_VOLT.ZERO:
                 default_condition[ch] = (0, True)
             else:
                 raise NotImplementedError()
@@ -555,3 +627,6 @@ def get_symbolic_vals_with_conditions_from_dict(start_time_by_scheduled: Dict[Sc
     
     # Create and return the Piecewise expression
     return {ch: ExpressionScalar(sp.Piecewise(*conditions_by_channel[ch], default_condition[ch])) for ch in ch_subset}
+
+
+
