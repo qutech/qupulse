@@ -199,6 +199,22 @@ class LinSpaceNode:
     _cached_body_duration: TimeType|None = field(default=None, kw_only=True)
     _measurement_memory: DummyMeasurementMemory|None = field(default_factory=lambda:DummyMeasurementMemory(), kw_only=True)
     
+
+    def get_defined_channels(self,) -> TypingSet[ChannelID]:
+        if isinstance(self,Union[LinSpaceTopLevel,LinSpaceRepeat,LinSpaceIter]):
+            return self.body[0].get_defined_channels()
+        elif isinstance(self,LinSpaceHold):
+            return self.bases.keys()
+        elif isinstance(self,LinSpaceArbitraryWaveform):
+            return self.waveform.defined_channels
+        elif isinstance(self,LinSpaceArbitraryWaveformIndexed):
+            if isinstance(self.waveform,Waveform):
+                return self.waveform.defined_channels
+            elif isinstance(self.waveform,WaveformCollection):
+                return self.waveform.flatten()[0].defined_channels
+        raise NotImplementedError()
+                
+    
     def dependencies(self) -> Mapping[GeneralizedChannel, set]:
         # doing this as a set _should_ get rid of non-active deps that are one level above?
         #!!! 
@@ -231,7 +247,7 @@ class LinSpaceTopLevel(LinSpaceNode):
     
     body: Tuple[LinSpaceNode, ...]
     _play_marker_when_constant: bool
-    _defined_channels: TypingSet[ChannelID]
+    # _defined_channels: TypingSet[ChannelID]
     
     @property
     def play_marker_when_constant(self) -> bool:
@@ -250,8 +266,8 @@ class LinSpaceTopLevel(LinSpaceNode):
         """
         return _get_measurement_windows_loop(self._measurement_memory.measurements,1,self.body)
     
-    def get_defined_channels(self) -> TypingSet[ChannelID]:
-        return  self._defined_channels
+    # def get_defined_channels(self) -> TypingSet[ChannelID]:
+    #     return  self._defined_channels
     
 
 @dataclass
@@ -823,9 +839,15 @@ class LinSpaceBuilder(ProgramBuilder):
         # dirty, quick workaround - if this doesnt work, assume it is also not constant:
         try:
             potential_waveform = build_func(build_parameters,channel_mapping=channel_mapping)
+            
+            # #for duration 0:
+            # if potential_waveform is None:
+            #     constant_values = None
+                
             if global_transformation:
                 potential_waveform = TransformingWaveform.from_transformation(potential_waveform, global_transformation)
                 constant_values = potential_waveform.constant_value_dict()
+                
         except:
             constant_values = None
         
@@ -837,12 +859,15 @@ class LinSpaceBuilder(ProgramBuilder):
             # and doesn't need to be stepped?
             self.hold_voltage(potential_waveform.duration, constant_values)
     
-    def to_program(self, defined_channels: TypingSet[ChannelID]) -> Optional[Sequence[LinSpaceNode]]:
+    def to_program(self,
+                   # defined_channels: TypingSet[ChannelID]
+                   ) -> Optional[Sequence[LinSpaceNode]]:
         assert not self._meas_queue
         if self._root():
             return LinSpaceTopLevel(body=tuple(self._root()),
                                     _play_marker_when_constant=self._play_marker_when_constant,
-                                    _defined_channels=defined_channels)
+                                    # _defined_channels=defined_channels
+                                    )
 
 
 def collect_scaling_and_offset_per_channel(channels: Sequence[ChannelID],

@@ -35,7 +35,7 @@ def _assemble_subset_schedule():
 REF_POINT = Enum('REFERENCE_POINT', ['START', 'END',])
 GAP_VOLT = Enum('GAP_VOLTAGE', ['LAST', 'NEXT', 'ZERO', 'DEFAULT'])
 
-
+SubsetID = str
 
 @dataclass(frozen=True)
 class Scheduled:
@@ -135,7 +135,8 @@ class SchedulerPT(PulseTemplate, MeasurementDefiner):
         self.__dict__.pop('_start_points_by_subset', None)
         self.__dict__.pop('initial_values', None)
         self.__dict__.pop('final_values', None)
-        
+        self.__dict__.pop('defined_channels', None)
+
         
         if isinstance(PulseTemplate, SchedulerPT):
             raise NotImplementedError('TBD')
@@ -299,10 +300,14 @@ class SchedulerPT(PulseTemplate, MeasurementDefiner):
         return max_time
         
     
-    @property
+    @cached_property
     def defined_channels(self) -> Set[ChannelID]:
+        # return set().union(*[chs for chs in self._channel_subsets.values()])
+        return set().union(*[chs  for s in self._scheduled.values() for chs in s.pt.defined_channels])
+    
+    @property
+    def defined_subsets_or_channels(self) -> Set[SubsetID|ChannelID]:
         return set().union(*[chs for chs in self._channel_subsets.values()])
-        
 
     @property
     def integral(self) -> Dict[ChannelID, ExpressionScalar]:
@@ -446,7 +451,9 @@ class SchedulerPT(PulseTemplate, MeasurementDefiner):
 
         
         if (mode:=program_builder._stack[-1][0]) in {"top","sequence"}:
-            pt_dict = self.build_schedule({key:scope for key in self._channel_subsets.keys()})
+            # pt_dict = self.build_schedule({key:scope for key in self._channel_subsets.keys()})
+            pt_dict = self.build_schedule(scope)
+
             for key,subset_program_builder in program_builder._stack[-1][1].items():
                 pt_dict[key]._create_program(scope=scope,
                                              measurement_mapping=measurement_mapping,
@@ -457,7 +464,9 @@ class SchedulerPT(PulseTemplate, MeasurementDefiner):
                                              )
                                              
         elif (mode:=program_builder._stack[-1][0]) in {"iteration","repetition"}:
-            pt_dict = self.build_schedule(scope[0] if mode=="iteration" else {key:scope for key in self._channel_subsets.keys()})
+            # pt_dict = self.build_schedule(scope[0] if mode=="iteration" else {key:scope for key in self._channel_subsets.keys()})
+            pt_dict = self.build_schedule(scope[0] if mode=="iteration" else scope)
+
             for key,subset_program_builder in program_builder._stack[-1][1].items():
                 for itrep_builder in subset_program_builder:
                     pt_dict[key]._create_program(scope=itrep_builder.inner_scope(*scope) if mode=="iteration" else scope,

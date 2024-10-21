@@ -358,7 +358,11 @@ class MetaHardwareSetup:
     
     
     def remove_program(self): pass
-    def clear_programs(self): pass
+    def clear_programs(self):
+        for setup in self._setup_map.values():
+            setup.clear_programs()
+            
+        self._registered_programs = {}
 
     @property
     def known_hw_setups(self) -> Set[HardwareSetup]:
@@ -377,7 +381,7 @@ class MetaHardwareSetup:
         if name not in self._registered_programs:
             raise KeyError('{} is not a registered program'.format(name))
 
-        *_, hw_setups_to_utilize = self._registered_programs[name]
+        hw_setups_to_utilize = self._registered_programs[name].hw_setups_to_utilize
         for key,setup in self._setup_map.items():
             if setup in hw_setups_to_utilize:
                 setup.arm_program(key+'_'+name)

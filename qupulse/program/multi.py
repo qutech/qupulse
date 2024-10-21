@@ -30,7 +30,7 @@ class MultiProgramBuilder(ProgramBuilder):
     
     def __init__(self,
                  sub_program_builders: Dict[str,ProgramBuilder|Self],
-                 channel_subsets: Dict[str,Set[ChannelID]|Self],
+                 # channel_subsets: Dict[str,Set[ChannelID]|Self],
                  ):
         
         super().__init__()
@@ -38,7 +38,7 @@ class MultiProgramBuilder(ProgramBuilder):
         
         self._stack = [('top',sub_program_builders)]
         
-        self._channel_subsets = channel_subsets
+        # self._channel_subsets = channel_subsets
         
     # def get_program_builder(self, key) -> NestedPBMapping:
     #     return self._program_builder_map.setdefault(key,deepcopy(self._program_builder_map[-1]))
@@ -89,7 +89,7 @@ class MultiProgramBuilder(ProgramBuilder):
 
     def with_repetition(self, repetition_count: RepetitionCount,
                         measurements: Optional[Sequence[MeasurementWindow]] = None) -> Iterable['ProgramBuilder']:
-        self._stack.append(('repetition',{k:pb.with_repetition(measurements) for k,pb in self.program_builder_map.items()}))
+        self._stack.append(('repetition',{k:pb.with_repetition(repetition_count,measurements) for k,pb in self.program_builder_map.items()}))
         yield self
         self._stack.pop()
         
@@ -115,11 +115,16 @@ class MultiProgramBuilder(ProgramBuilder):
     def evaluate_nested_stepping(self, scope: Scope, parameter_names: set[str]) -> bool:
         return False
     
-    def to_program(self, defined_channels: Set[ChannelID]) -> Optional[Dict[str,Program|Self]]:
+    def to_program(self,
+                   # defined_channels: Set[ChannelID]
+                   ) -> Optional[Dict[str,Program|Self]]:
         top = self._stack.pop()
         assert top[0]=='top'
         assert len(self._stack)==0
-        return MultiProgram({k:sub.to_program(self._channel_subsets[k]) for k,sub in self.program_builder_map.items()})
+        return MultiProgram({k:sub.to_program(
+            # self._channel_subsets[k]
+            ) for k,sub in self.program_builder_map.items()})
+            
         
         
 class MultiProgram:
