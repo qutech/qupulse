@@ -17,7 +17,8 @@ from qupulse.parameter_scope import Scope, MappedScope, FrozenDict
 # from qupulse.pulses import ForLoopPT
 from qupulse.program import ProgramBuilder, HardwareTime, HardwareVoltage, Waveform, RepetitionCount, TimeType, Program
 from qupulse.expressions.simple import SimpleExpression, NumVal, SimpleExpressionStepped
-from qupulse.program.waveforms import MultiChannelWaveform, TransformingWaveform, WaveformCollection
+from qupulse.program.waveforms import MultiChannelWaveform, TransformingWaveform, WaveformCollection, SubsetWaveform
+from qupulse.utils import cached_property
 
 from qupulse.program.transformation import ChainedTransformation, ScalingTransformation, OffsetTransformation,\
     IdentityTransformation, ParallelChannelTransformation, Transformation
@@ -30,7 +31,8 @@ class MultiProgramBuilder(ProgramBuilder):
     
     def __init__(self,
                  sub_program_builders: Dict[str,ProgramBuilder|Self],
-                 # channel_subsets: Dict[str,Set[ChannelID]|Self],
+                 channel_subsets: Dict[str,Set[ChannelID]|Self],
+                 _scheduler_options: Dict[str,Any] = {},
                  ):
         
         super().__init__()
@@ -38,28 +40,75 @@ class MultiProgramBuilder(ProgramBuilder):
         
         self._stack = [('top',sub_program_builders)]
         
-        # self._channel_subsets = channel_subsets
+        self._channel_subsets = channel_subsets
+        
+        self._scheduler_options = _scheduler_options
         
     # def get_program_builder(self, key) -> NestedPBMapping:
     #     return self._program_builder_map.setdefault(key,deepcopy(self._program_builder_map[-1]))
     
     @classmethod
     def from_mapping(cls, default_program_builder: ProgramBuilder,
-                     structure: Dict[str,Any|Self],
+                     channel_subsets: Dict[str,Set[ChannelID]|Self],
+                     _scheduler_options: Dict[str,Any] = {},
                      ):
         
-        structure = deepcopy(structure)
+        structure = deepcopy(channel_subsets)
         
         def recursive_mpb(d, default_value):
             for key, value in d.items():
                 if isinstance(value, dict):
                     # d[key] = replace_final_values(value, default_program_builder)
-                    d[key] = cls.from_mapping(default_program_builder,value)
+                    d[key] = cls.from_mapping(default_program_builder,value,_scheduler_options)
                 else:
                     d[key] = deepcopy(default_program_builder)
             return d
         
-        return cls(recursive_mpb(structure, default_program_builder))
+        return cls(recursive_mpb(structure,default_program_builder),channel_subsets)
+    
+    
+    @cached_property
+    def _flattened_channel_subsets(self) -> Dict[str,Set[ChannelID]]:
+        def flatten_dict(d: Dict[str, Union[Set[Any], 'Dict']], parent_key: str = '', separator: str = '.') -> Dict[str, Set[Any]]:
+
+            flattened = {}
+        
+            for k, v in d.items():
+                # new_key = parent_key + separator + k if parent_key else k
+                new_key = k
+                assert new_key!=parent_key
+
+                if isinstance(v, dict):
+                    # Recursive case: flatten the nested dictionary
+                    flattened.update(flatten_dict(v, new_key, separator))
+                elif isinstance(v, set):
+                    # Base case: add the set to the flattened dictionary
+                    flattened[new_key] = v
+                else:
+                    raise ValueError(f"Unsupported value type: {type(v)} at key {new_key}")
+        
+            return flattened
+    
+        return flatten_dict(deepcopy(self._channel_subsets))
+    
+    
+    def _get_subbuilder(self, target_key: str) -> ProgramBuilder:
+        
+        stack = [self._program_builder_map]  # Stack for DFS, starting with the root dictionary
+    
+        while stack:
+            current_dict = stack.pop()  # Get the last element from the stack (LIFO)
+            
+            for key, value in current_dict.items():
+                if key == target_key:
+                    return value  # Return the value if the target key is found
+                
+                # If the value is a dictionary, add it to the stack to continue searching
+                if isinstance(value, dict):
+                    stack.append(value)
+        
+        return None  # Return None if the key is not found
+            
     
     @property
     def program_builder_map(self) -> Dict[str,ProgramBuilder|Self]:
@@ -79,12 +128,47 @@ class MultiProgramBuilder(ProgramBuilder):
         
 
     def hold_voltage(self, duration: HardwareTime, voltages: Mapping[str, HardwareVoltage]):
-        """Supports dynamic i.e. for loop generated offsets and duration"""
-        raise RuntimeError()
+        #delegate to subbuilders? defining hold should be enough as this is used for fillers in SchedulerPT
+        
+        grouped_channels = ()
+        handled_chs = set()
+        for key,channel_set in self._flattened_channel_subsets.items():
+            relevant_chs = channel_set.intersection(voltages.keys())
+            if not (len(relevant_chs)==0 or len(relevant_chs)==len(channel_set)):
+                raise RuntimeError()
+            if any(ch in handled_chs for ch in relevant_chs):
+                raise RuntimeError()
+                
+            self._get_subbuilder(key).hold_voltage(duration, {ch: voltages[ch] for ch in relevant_chs})
+            
+            handled_chs = handled_chs.union(relevant_chs)
+        
+        assert len(handled_chs)==len(voltages)
+        # raise RuntimeError()
         
     def play_arbitrary_waveform(self, waveform: Waveform):
-        """"""
-        raise RuntimeError()
+        
+        SubsetWaveform
+        
+        #delegate to subbuilders? defining hold should be enough as this is used for fillers in SchedulerPT
+        
+        grouped_channels = ()
+        handled_chs = set()
+        for key,channel_set in self._flattened_channel_subsets.items():
+            relevant_chs = channel_set.intersection(waveform.defined_channels)
+            if not (len(relevant_chs)==0 or len(relevant_chs)==len(channel_set)):
+                raise RuntimeError()
+            if any(ch in handled_chs for ch in relevant_chs):
+                raise RuntimeError()
+                
+            self._get_subbuilder(key).play_arbitrary_waveform(SubsetWaveform(waveform, relevant_chs))
+            
+            handled_chs = handled_chs.union(relevant_chs)
+        
+        assert len(handled_chs)==len(waveform.defined_channels)
+        
+        # """"""
+        # raise RuntimeError()
 
     def measure(self, measurements: Optional[Sequence[MeasurementWindow]]):
         """Unconditionally add given measurements relative to the current position."""
