@@ -101,7 +101,7 @@ class ScheduledEvaluated(Scheduled):
         return self._start_time+self._duration
 
 
-class SchedulerPT(PulseTemplate, MeasurementDefiner):
+class SchedulerPulseTemplate(PulseTemplate, MeasurementDefiner):
     
     CONSTANT_TIME_THRESHOLD = 128
     
@@ -109,6 +109,7 @@ class SchedulerPT(PulseTemplate, MeasurementDefiner):
                  channel_subsets: Dict[Hashable,Set],
                  identifier: Optional[str] = None,
                  *,
+                 empty_fill: GAP_VOLT = GAP_VOLT.DEFAULT,
                  measurements: Optional[List[MeasurementDeclaration]]=None,
                  registry: PulseRegistryType=None) -> None:
         
@@ -129,7 +130,8 @@ class SchedulerPT(PulseTemplate, MeasurementDefiner):
     
          self._incoming_volts: Dict[ChannelID, float|SimpleExpression] = {ch: None for ch in self.defined_channels}
         
-    
+         self._empty_fill = empty_fill
+        
     def _set_incoming_volts(self, volt_dict: Dict[ChannelID, float|SimpleExpression]):
         
         assert set(volt_dict.keys()) == set(self._incoming_volts.keys())
@@ -169,7 +171,7 @@ class SchedulerPT(PulseTemplate, MeasurementDefiner):
             raise NotImplementedError('always define a reference except for first addition')
    
         
-        # if isinstance(PulseTemplate, SchedulerPT):
+        # if isinstance(PulseTemplate, SchedulerPulseTemplate):
         #     #check if correct channels
         #     if not sum(int(pt.defined_subsets==subset) for subset in self._channel_subsets.values())==1:
         #         raise RuntimeError('Only define PT on exactly one subset')
@@ -280,7 +282,16 @@ class SchedulerPT(PulseTemplate, MeasurementDefiner):
                 sorted_scheduled = sorted(timings_by_channel_subset[k].items(), key=lambda interval: interval.begin)
                 
                 if len(sorted_scheduled)==0:
-                    raise NotImplementedError('one pt on every subset')
+                    # raise NotImplementedError('one pt on every subset')
+                    if self._empty_fill is GAP_VOLT.DEFAULT:
+                        if (potential_previous_volts:=self._get_incoming_volts()) is not None:
+                            empty_fill = {ch: potential_previous_volts[ch] for ch in self._flattened_channels_by_subset_key[k]}
+                        else:
+                            empty_fill = {ch:0. for ch in self._flattened_channels_by_subset_key[k]}
+                        pt = ConstantPT(end_time-offset_start_time,empty_fill)
+                        
+                    else:
+                        raise NotImplementedError()
                     continue
                 
                 first_scheduled = sorted_scheduled[0][2]
@@ -290,20 +301,21 @@ class SchedulerPT(PulseTemplate, MeasurementDefiner):
                 #initial ConstantPT shouldn't hurt when length 0
                 #... but maybe do when finite but too short
                 
-                #!!! if sub.pt is schedulerPT, add incoming volts
+                #!!! if sub.pt is SchedulerPulseTemplate, add incoming volts
                 
                 if first_scheduled.pre_gap_volt is GAP_VOLT.DEFAULT:
                     if (potential_previous_volts:=self._get_incoming_volts()) is not None:
-                        first_gap_volt = potential_previous_volts
+                        first_gap_volt = {ch: potential_previous_volts[ch] for ch in first_scheduled.pt.defined_channels}
                     else:
                         first_gap_volt = first_scheduled.pt.initial_values
                 elif first_scheduled.pre_gap_volt is GAP_VOLT.ZERO:
-                    first_gap_volt = {ch:0. for ch in self._flattened_channels_by_subset_key.values()}
+                    first_gap_volt = {ch:0. for ch in self._flattened_channels_by_subset_key[k]}
                 elif first_scheduled.pre_gap_volt is GAP_VOLT.NEXT:
                     first_gap_volt = first_scheduled.pt.initial_values
                 elif first_scheduled.pre_gap_volt is GAP_VOLT.LAST:
-                    first_gap_volt = self._get_incoming_volts()
-                    assert first_gap_volt is not None, 'Undefined incoming volt'
+                    potential_previous_volts = self._get_incoming_volts()
+                    assert potential_previous_volts is not None, 'Undefined incoming volt'
+                    first_gap_volt = {ch: potential_previous_volts[ch] for ch in first_scheduled.pt.defined_channels}
                     raise NotImplementedError()
                 
                 if first_scheduled.start_time-offset_start_time<constant_as_arbitrary_wf_below:
@@ -311,7 +323,7 @@ class SchedulerPT(PulseTemplate, MeasurementDefiner):
                 else:
                     pt = ConstantPT(first_scheduled.start_time-offset_start_time, first_gap_volt)
             
-                if isinstance(first_scheduled,SchedulerPT):
+                if isinstance(first_scheduled,SchedulerPulseTemplate):
                     first_scheduled._set_incoming_volts(first_gap_volt)
                 
                 
@@ -326,7 +338,7 @@ class SchedulerPT(PulseTemplate, MeasurementDefiner):
                     elif s.post_gap_volt is GAP_VOLT.LAST:
                         gap_volt = s.pt.final_values
                     elif s.post_gap_volt is GAP_VOLT.ZERO:
-                        gap_volt = {ch: 0. for ch in self._flattened_channels_by_subset_key.values()}
+                        gap_volt = {ch: 0. for ch in self._flattened_channels_by_subset_key[k]}
                         
                     if sorted_scheduled[i+1][2].start_time-s.end_time<constant_as_arbitrary_wf_below:
                         pt @= TablePT({ch: [(0.,0.),(sorted_scheduled[i+1][2].start_time-s.end_time,val,'jump')] for ch,val in gap_volt.items()})
@@ -335,7 +347,7 @@ class SchedulerPT(PulseTemplate, MeasurementDefiner):
                                          gap_volt
                                          )
                         
-                    if isinstance(sorted_scheduled[i+1][2],SchedulerPT):
+                    if isinstance(sorted_scheduled[i+1][2],SchedulerPulseTemplate):
                         sorted_scheduled[i+1][2]._set_incoming_volts(gap_volt)
                     
                 s = sorted_scheduled[-1][2]
@@ -492,7 +504,7 @@ class SchedulerPT(PulseTemplate, MeasurementDefiner):
     @classmethod
     def deserialize(cls,
                     serializer: Optional[Serializer]=None,  # compatibility to old serialization routines, deprecated
-                    **kwargs) -> 'SchedulerPT':
+                    **kwargs) -> 'SchedulerPulseTemplate':
         raise NotImplementedError()
 
         # main_pt = kwargs['main_pt']

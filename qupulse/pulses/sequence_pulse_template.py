@@ -64,7 +64,7 @@ class SequencePulseTemplate(PulseTemplate, ParameterConstrainer, MeasurementDefi
         # if any(isinstance(body,SchedulerPT) for body in subtemplates):
         #     raise NotImplementedError('access via @')
         
-        from qupulse.pulses.scheduler_pulse_template import SchedulerPT
+        from qupulse.pulses.scheduler_pulse_template import SchedulerPulseTemplate as SchedulerPT
         assert not any(isinstance(body,SchedulerPT) for body in subtemplates) or\
                    all(isinstance(body,SchedulerPT) for body in subtemplates),\
                    NotImplementedError('None or all SchedulerPTs in sequence')

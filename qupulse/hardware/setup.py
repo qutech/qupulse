@@ -321,7 +321,7 @@ class RegisteredMultiProgram:
     measurement_windows: Dict[str, Tuple[np.ndarray, np.ndarray]]
     run_callback: Callable
     hw_setups_to_utilize: Set[HardwareSetup]
-
+    dacs_to_arm: Set[DAC]
 
 
 class MetaHardwareSetup:
@@ -330,10 +330,10 @@ class MetaHardwareSetup:
         # self._channel_map: Dict[str, Set[ChannelID]] = dict()
         self._setup_map: Dict[str, HardwareSetup] = dict()
         
-        self._measurement_map: Dict[str, Set[MeasurementMask]] = dict() #TODO
 
         self._registered_programs: Dict[str, RegisteredMultiProgram] = dict()
         
+        self._alibi_measurement_setup = HardwareSetup()
         
     def register_program(self,
                          name: str,
@@ -341,36 +341,73 @@ class MetaHardwareSetup:
                          run_callback: Callable = lambda: None,
                          update: bool = False,
                          flatten_structure: bool = False,
-                         # measurements: Mapping[str, Tuple[np.ndarray, np.ndarray]] = None
+                         measurements: Mapping[str, Tuple[np.ndarray, np.ndarray]] = None
                          ) -> None:
         
         hw_setups_to_utilize = set()
         
         if flatten_structure:
-            
-            
-            
-            program_map = flatten_mp_dict(program.program_map)
+            program_map = program._flattened_program_map
         else:
             program_map = program.program_map
         
+        ############
+        #GET MEASUREMENT WINDOWS, collect from all subprograms (can have different ones...)
+        # measurements: Mapping[str, Tuple[np.ndarray, np.ndarray]]
+        if measurements is None:
+            measurements = program.get_measurement_windows(drop=True)
+        
+        self._alibi_measurement_setup.register_program(name, None,
+                                                       run_callback=lambda: None,
+                                                       channels=set(),measurements=measurements
+                                                       )
+        
+        #END MEAS.        
+        ############
+        
+        
+        
+        
         for s_ident,prog in program_map.items():
             self.setup_map[s_ident].register_program(s_ident+'_'+name, prog,
-                                                     update=update,run_callback=lambda:None)
+                                                     update=update,run_callback=lambda:None,
+                                                     measurements={})
             hw_setups_to_utilize.add(self.setup_map[s_ident])
     
-        self._registered_programs[name] = RegisteredMultiProgram(program, {}, #meas todo
-                                                                         run_callback,
-                                                                         hw_setups_to_utilize)
+        self._registered_programs[name] = RegisteredMultiProgram(program,
+                                                                 self._alibi_measurement_setup.registered_programs[name].measurement_windows, #meas todo TODOTODO exract from alibi setup
+                                                                 run_callback,
+                                                                 hw_setups_to_utilize,
+                                                                 dacs_to_arm=self._alibi_measurement_setup.registered_programs[name].dacs_to_arm,
+                                                                 # dacs_to_arm=set(affected_dacs.keys())
+                                                                 )
         
         return
     
+    @property
+    def _measurement_map(self) -> Dict[str, Set[MeasurementMask]]:
+        return self._alibi_measurement_setup._measurement_map
+
     
-    def remove_program(self): pass
+    def set_measurement(self, measurement_name: str,
+                        measurement_mask: Union[MeasurementMask, Iterable[MeasurementMask]],
+                        allow_multiple_registration: bool=False):
+        return self._alibi_measurement_setup.set_measurement(measurement_name, measurement_mask, allow_multiple_registration)
+    
+    
+    def remove_program(self, name: str):
+        if name in self.registered_programs:
+            for setup in self.setup_map.values():
+                if name in setup.registered_programs:
+                    setup.remove_program(name)
+            self._alibi_measurement_setup.remove_program(name)
+                
+        
     def clear_programs(self):
         for setup in self._setup_map.values():
             setup.clear_programs()
-            
+        
+        self._alibi_measurement_setup.clear_programs()
         self._registered_programs = {}
 
     @property
@@ -384,7 +421,11 @@ class MetaHardwareSetup:
     @property
     def known_awgs(self) -> Set[AWG]:
         return set().union(*[s.known_awgs for s in self._setup_map.values()])
-
+    
+    @property
+    def known_dacs(self) -> Set[DAC]:
+        return self._alibi_measurement_setup.known_dacs
+    
     def arm_program(self, name: str) -> None:
         """Assert program is in memory. Hardware will wait for trigger event"""
         if name not in self._registered_programs:
@@ -398,6 +439,7 @@ class MetaHardwareSetup:
                 # The other AWGs should ignore the trigger
                 # awg.arm(None)
                 pass
+        self._alibi_measurement_setup.arm_program(name)
         # for dac in dacs_to_arm:
         #     dac.arm_program(name)
     @property 
@@ -441,21 +483,4 @@ class MetaHardwareSetup:
 
 
 
-def flatten_mp_dict(input_dict: Dict[str,MultiProgram|Self],
-                         ) -> Dict[str,MultiProgram]:
-    def flatten(d, parent_key='', sep='.'):
-        items = []
-        for k, v in d.items():
-            # new_key = f"{parent_key}{sep}{k}" if parent_key else k
-            new_key = k
-            assert new_key != parent_key
 
-            if isinstance(v, MultiProgram):
-                # Recursively flatten the dictionary
-                items.extend(flatten(v.program_map, new_key, sep=sep).items())
-            else:
-                # Add non-dict, non-set items directly
-                items.append((new_key, v))
-        return dict(items)
-
-    return flatten(input_dict)

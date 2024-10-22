@@ -143,8 +143,11 @@ class MultiProgramBuilder(ProgramBuilder):
             
             handled_chs = handled_chs.union(relevant_chs)
         
-        assert len(handled_chs)==len(voltages)
-        # raise RuntimeError()
+        assert len(handled_chs)==len(voltages), f'{len(handled_chs)},{len(voltages)}'
+        # if len(handled_chs)!=len(voltages):
+        #     print(voltages)
+        #     print(handled_chs)
+        #     raise RuntimeError()
         
     def play_arbitrary_waveform(self, waveform: Waveform):
         
@@ -172,8 +175,10 @@ class MultiProgramBuilder(ProgramBuilder):
 
     def measure(self, measurements: Optional[Sequence[MeasurementWindow]]):
         """Unconditionally add given measurements relative to the current position."""
-        if measurements:
-            raise NotImplementedError()
+        # if measurements:
+        # let all subbuilders measure
+        for pb in self.program_builder_map.values():
+            pb.measure(measurements)
 
     def with_repetition(self, repetition_count: RepetitionCount,
                         measurements: Optional[Sequence[MeasurementWindow]] = None) -> Iterable['ProgramBuilder']:
@@ -218,10 +223,67 @@ class MultiProgramBuilder(ProgramBuilder):
         
 class MultiProgram:
     
-    def __init__(self, program_map: Dict[str,Program|Self]):
+    def __init__(self, program_map: Dict[str,Union[Program,"MultiProgram"]]):
         
         self._program_map = program_map
         
     @property
-    def program_map(self) -> Dict[str,Program|Self]:
+    def program_map(self) -> Dict[str,Union[Program,"MultiProgram"]]:
         return self._program_map
+    
+    
+    def get_measurement_windows(self, drop: bool = False) -> Dict[str, Tuple[np.ndarray, np.ndarray]]:
+        
+        if drop:
+            print('ignorign drop measurements for now')
+        
+        meas = {}
+        
+        for program in self._flattened_program_map:
+            prog_meas_win = program.get_measurement_windows()
+            for key, begins_lengths_tuple in prog_meas_win.items():
+                if key in meas.keys():
+                    
+                    new_begins = np.concatenate((meas[key][0], begins_lengths_tuple[0]))
+                    new_lengths = np.concatenate((meas[key][1], begins_lengths_tuple[1]))
+                    
+                    #just delete non-unique(?)
+                    #if the lengths would have been different for different begins,
+                    #this still would have been an overlap and error
+                    new_begins, idxs = np.unique(new_begins,return_index=True)
+                    new_lengths = new_lengths[idxs]
+                
+                    meas[key] = (new_begins,new_lengths)
+                    
+                else:
+                    meas[key] = begins_lengths_tuple
+                
+                
+        return meas
+    
+    @cached_property
+    def _flattened_program_map(self) -> Dict[str,Program]:
+        
+        return flatten_mp_dict(self.program_map)
+        
+    
+def flatten_mp_dict(input_dict: Dict[str,MultiProgram|Self],
+                    parent_key: str = ''
+                         ) -> Dict[str,MultiProgram]:
+    new_dict = {}
+
+    for k, v in input_dict.items():
+        # Construct the new key
+        # new_key = parent_key + separator + k if parent_key else k
+        new_key = k
+        assert new_key != parent_key
+        
+        if isinstance(v, MultiProgram):
+            # If the value is a dictionary, recursively flatten it
+            nested_dict = flatten_mp_dict(v.program_map, new_key,)
+            new_dict.update(nested_dict)
+        else:
+            # If the value is a set, add it to the new dictionary
+            new_dict[new_key] = v
+
+    return new_dict
