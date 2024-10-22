@@ -9,6 +9,7 @@ from qupulse.pulses.constant_pulse_template import ConstantPulseTemplate as Cons
 from qupulse.pulses.table_pulse_template import TablePulseTemplate as TablePT
 
 from qupulse.expressions import ExpressionLike, ExpressionScalar, Expression
+from qupulse.expressions.simple import SimpleExpression
 from qupulse._program.waveforms import ConstantWaveform
 from qupulse.program import ProgramBuilder, Program
 from qupulse.program.linspace import LinSpaceBuilder
@@ -40,6 +41,7 @@ def _assemble_subset_schedule():
 
 REF_POINT = Enum('REFERENCE_POINT', ['START', 'END',])
 GAP_VOLT = Enum('GAP_VOLTAGE', ['LAST', 'NEXT', 'ZERO', 'DEFAULT'])
+#define default as last if there is last, otherwise next
 
 SubsetID = str
 
@@ -125,6 +127,20 @@ class SchedulerPT(PulseTemplate, MeasurementDefiner):
          
          self._register(registry=registry)    
     
+         self._incoming_volts: Dict[ChannelID, float|SimpleExpression] = {ch: None for ch in self.defined_channels}
+        
+    
+    def _set_incoming_volts(self, volt_dict: Dict[ChannelID, float|SimpleExpression]):
+        
+        assert set(volt_dict.keys()) == set(self._incoming_volts.keys())
+        self._incoming_volts = deepcopy(volt_dict)
+        
+    def _get_incoming_volts(self) -> Optional[Dict[ChannelID, float|SimpleExpression]]:
+        
+        # assert not any(v is None for v in self._incoming_volts.values()), 'Undefined incoming volt'
+        if any(v is None for v in self._incoming_volts.values()): return None
+        return self._incoming_volts
+        
     
     def add_pt(self,
                pt: PulseTemplate,
@@ -273,21 +289,35 @@ class SchedulerPT(PulseTemplate, MeasurementDefiner):
                 
                 #initial ConstantPT shouldn't hurt when length 0
                 #... but maybe do when finite but too short
+                
+                #!!! if sub.pt is schedulerPT, add incoming volts
+                
                 if first_scheduled.pre_gap_volt is GAP_VOLT.DEFAULT:
-                    if first_scheduled.start_time-offset_start_time<constant_as_arbitrary_wf_below:
-                        pt = TablePT({ch: [(0.,0.),(first_scheduled.start_time-offset_start_time,val,'jump')] for ch,val in first_scheduled.pt.initial_values.items()})
+                    if (potential_previous_volts:=self._get_incoming_volts()) is not None:
+                        first_gap_volt = potential_previous_volts
                     else:
-                        pt = ConstantPT(first_scheduled.start_time-offset_start_time, first_scheduled.pt.initial_values)
+                        first_gap_volt = first_scheduled.pt.initial_values
                 elif first_scheduled.pre_gap_volt is GAP_VOLT.ZERO:
-                    if first_scheduled.start_time-offset_start_time<constant_as_arbitrary_wf_below:
-                        pt = TablePT({ch: [(0.,0.),(first_scheduled.start_time-offset_start_time,0.,'jump')] for ch in self._flattened_channels_by_subset_key.values()})
-                    else:
-                        pt = ConstantPT(first_scheduled.start_time-offset_start_time, {ch: 0. for ch in self._flattened_channels_by_subset_key.values()})
-                else:
+                    first_gap_volt = {ch:0. for ch in self._flattened_channels_by_subset_key.values()}
+                elif first_scheduled.pre_gap_volt is GAP_VOLT.NEXT:
+                    first_gap_volt = first_scheduled.pt.initial_values
+                elif first_scheduled.pre_gap_volt is GAP_VOLT.LAST:
+                    first_gap_volt = self._get_incoming_volts()
+                    assert first_gap_volt is not None, 'Undefined incoming volt'
                     raise NotImplementedError()
-                    
+                
+                if first_scheduled.start_time-offset_start_time<constant_as_arbitrary_wf_below:
+                    pt = TablePT({ch: [(0.,0.),(first_scheduled.start_time-offset_start_time,val,'jump')] for ch,val in first_gap_volt.items()})
+                else:
+                    pt = ConstantPT(first_scheduled.start_time-offset_start_time, first_gap_volt)
+            
+                if isinstance(first_scheduled,SchedulerPT):
+                    first_scheduled._set_incoming_volts(first_gap_volt)
+                
+                
                 for i,interv in enumerate(sorted_scheduled[:-1]):
                     s = interv[2]
+                    
                     pt @= s.pt
                     if sorted_scheduled[i+1][2].pre_gap_volt is not GAP_VOLT.DEFAULT:
                         raise NotImplementedError()
@@ -304,12 +334,16 @@ class SchedulerPT(PulseTemplate, MeasurementDefiner):
                         pt @= ConstantPT(sorted_scheduled[i+1][2].start_time-s.end_time,
                                          gap_volt
                                          )
+                        
+                    if isinstance(sorted_scheduled[i+1][2],SchedulerPT):
+                        sorted_scheduled[i+1][2]._set_incoming_volts(gap_volt)
                     
                 s = sorted_scheduled[-1][2]
                 pt @= s.pt
                 
                 #!!! gap after last
                 if s.post_gap_volt is GAP_VOLT.NEXT:
+                    #can probably be done with volatile params, but may be unnecessary anyway...
                     raise NotImplementedError()
                 elif s.post_gap_volt is GAP_VOLT.LAST:
                     gap_volt = s.pt.final_values
@@ -614,6 +648,7 @@ def get_symbolic_vals_with_conditions_from_dict(start_time_by_scheduled: Dict[Sc
         if min_val:
             for ch in ch_subset:
                 if scheduled.pre_gap_volt is GAP_VOLT.DEFAULT:
+                    
                     conditions_by_channel[ch].append((scheduled.pt.initial_values[ch].underlying_expression, combined_condition))
                 elif scheduled.pre_gap_volt is GAP_VOLT.ZERO:
                     conditions_by_channel[ch].append((0, combined_condition))
