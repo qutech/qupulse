@@ -149,7 +149,8 @@ class TablePulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
                  parameter_constraints: Optional[List[Union[str, ParameterConstraint]]]=None,
                  measurements: Optional[List[MeasurementDeclaration]]=None,
                  consistency_check: bool=True,
-                 registry: PulseRegistryType=None) -> None:
+                 registry: PulseRegistryType=None,
+                 allow_constant_waveform: bool=True) -> None:
         """
         Construct a `TablePulseTemplate` from a dict which maps channels to their entries. By default the consistency
         of the provided entries is checked. There are two static functions for convenience construction: from_array and
@@ -211,7 +212,9 @@ class TablePulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
                 raise ValueError('Table pulse template has impossible parametrization')
 
         self._register(registry=registry)
-
+        
+        self._allow_constant_waveform = allow_constant_waveform
+        
     def _add_entry(self, channel, new_entry: TableEntry) -> None:
         ch_entries = self._entries[channel]
 
@@ -324,7 +327,7 @@ class TablePulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
         if not instantiated:
             return None
 
-        waveforms = [TableWaveform.from_table(*ch_instantiated)
+        waveforms = [TableWaveform.from_table(*ch_instantiated,self._allow_constant_waveform)
                      for ch_instantiated in instantiated]
 
         return MultiChannelWaveform.from_parallel(waveforms)

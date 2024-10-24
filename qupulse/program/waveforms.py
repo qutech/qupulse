@@ -269,8 +269,9 @@ class TableWaveform(Waveform):
         self._channel_id = channel
 
     @staticmethod
-    def _validate_input(input_waveform_table: Sequence[EntryInInit]) -> Union[Tuple[Real, Real],
-                                                                              List[TableWaveformEntry]]:
+    def _validate_input(input_waveform_table: Sequence[EntryInInit],
+                        allow_constant_optimization: bool = True,
+                        ) -> Union[Tuple[Real, Real],List[TableWaveformEntry]]:
         """ Checks that:
          - the time is increasing,
          - there are at least two entries
@@ -340,7 +341,7 @@ class TableWaveform(Waveform):
         if t == 0:
             raise ValueError('Last time entry is zero.')
 
-        if constant_v is not None:
+        if constant_v is not None and allow_constant_optimization:
             # the waveform is constant
             return t, constant_v
         else:
@@ -357,8 +358,10 @@ class TableWaveform(Waveform):
         return None
 
     @classmethod
-    def from_table(cls, channel: ChannelID, table: Sequence[EntryInInit]) -> Union['TableWaveform', 'ConstantWaveform']:
-        table = cls._validate_input(table)
+    def from_table(cls, channel: ChannelID, table: Sequence[EntryInInit],
+                   allow_constant_waveform: bool = True,
+                   ) -> Union['TableWaveform', 'ConstantWaveform']:
+        table = cls._validate_input(table,allow_constant_waveform)
         if isinstance(table, tuple):
             duration, amplitude = table
             return ConstantWaveform(duration=duration, amplitude=amplitude, channel=channel)

@@ -55,6 +55,11 @@ class Scheduled:
     post_gap_volt: GAP_VOLT
     pre_gap_volt: GAP_VOLT
     
+    def __str__(self) -> str:
+        # return "("+",".join(str(self.pt),)+")"
+        return str(self.pt)
+
+    
 
 @dataclass(frozen=True)
 class ScheduledEvaluated(Scheduled):
@@ -178,6 +183,8 @@ class SchedulerPulseTemplate(PulseTemplate, MeasurementDefiner):
         # else:
         #check if correct channels
         if not sum(int(pt.defined_channels==subset) for subset in self._flattened_channels_by_subset_key.values())==1:
+            print(pt.defined_channels)
+            print(self._flattened_channels_by_subset_key.values())
             raise RuntimeError('Only define PT on exactly one subset')
         
         #find subset
@@ -230,7 +237,7 @@ class SchedulerPulseTemplate(PulseTemplate, MeasurementDefiner):
         constant_as_arbitrary_wf_below = scheduler_options.get('constant_val_time_threshold',self.CONSTANT_TIME_THRESHOLD)                   
         
         #evaluate all real timings
-        pts_by_channel_subset = {k:[] for k in self._channel_subsets.keys()}
+        pts_by_channel_subset = {k:None for k in self._channel_subsets.keys()}
         # pts_by_channel_subset = deepcopy(self._channel_subsets)
 
         timings_by_channel_subset = {k:IntervalTree() for k in self._channel_subsets.keys()}
@@ -292,6 +299,9 @@ class SchedulerPulseTemplate(PulseTemplate, MeasurementDefiner):
                         
                     else:
                         raise NotImplementedError()
+                        
+                    pts_by_channel_subset[k] = pt
+                        
                     continue
                 
                 first_scheduled = sorted_scheduled[0][2]
@@ -319,7 +329,10 @@ class SchedulerPulseTemplate(PulseTemplate, MeasurementDefiner):
                     raise NotImplementedError()
                 
                 if first_scheduled.start_time-offset_start_time<constant_as_arbitrary_wf_below:
-                    pt = TablePT({ch: [(0.,0.),(first_scheduled.start_time-offset_start_time,val,'jump')] for ch,val in first_gap_volt.items()})
+                    #uglily set two table entries for now to force non-constant waveform generation
+                    pt = TablePT({ch: [(0.,0.),
+                                       (first_scheduled.start_time-offset_start_time,val,'jump')] for ch,val in first_gap_volt.items()},
+                                 allow_constant_waveform=False)
                 else:
                     pt = ConstantPT(first_scheduled.start_time-offset_start_time, first_gap_volt)
             
@@ -341,7 +354,10 @@ class SchedulerPulseTemplate(PulseTemplate, MeasurementDefiner):
                         gap_volt = {ch: 0. for ch in self._flattened_channels_by_subset_key[k]}
                         
                     if sorted_scheduled[i+1][2].start_time-s.end_time<constant_as_arbitrary_wf_below:
-                        pt @= TablePT({ch: [(0.,0.),(sorted_scheduled[i+1][2].start_time-s.end_time,val,'jump')] for ch,val in gap_volt.items()})
+                        #uglily set two table entries for now to force non-constant waveform generation
+                        pt @= TablePT({ch: [(0.,0.),
+                                            (sorted_scheduled[i+1][2].start_time-s.end_time,val,'jump')] for ch,val in gap_volt.items()},
+                                      allow_constant_waveform=False)
                     else:
                         pt @= ConstantPT(sorted_scheduled[i+1][2].start_time-s.end_time,
                                          gap_volt
@@ -362,7 +378,10 @@ class SchedulerPulseTemplate(PulseTemplate, MeasurementDefiner):
                 elif s.post_gap_volt is GAP_VOLT.ZERO:
                     gap_volt = {ch: 0. for ch in self._flattened_channels_by_subset_key.values()}
                 if end_time-offset_start_time-sorted_scheduled[-1][2].end_time<constant_as_arbitrary_wf_below:
-                    pt @= TablePT({ch: [(0.,0.),(end_time-offset_start_time-sorted_scheduled[-1][2].end_time,val,'jump')] for ch,val in gap_volt.items()})
+                    #uglily set two table entries for now to force non-constant waveform generation
+                    pt @= TablePT({ch: [(0.,0.),
+                                        (end_time-offset_start_time-sorted_scheduled[-1][2].end_time,val,'jump')] for ch,val in gap_volt.items()},
+                                  allow_constant_waveform=False)
                 else:
                     pt @= ConstantPT(end_time-offset_start_time-sorted_scheduled[-1][2].end_time,
                                      gap_volt
@@ -492,7 +511,6 @@ class SchedulerPulseTemplate(PulseTemplate, MeasurementDefiner):
         data['channel_subsets'] = self._channel_subsets
         data['scheduled'] = self._scheduled
         data['root'] = self._root
-        data['register'] = self._register
                 
 
         if self.measurement_declarations:
@@ -516,6 +534,16 @@ class SchedulerPulseTemplate(PulseTemplate, MeasurementDefiner):
         #     raise NotImplementedError()
 
         # return cls(main_pt,new_duration,**kwargs)
+    
+    def __str__(self) -> str:
+        st = "SchedulerPT: "
+        for k, scheduled_set in self._scheduled.items():
+            st += f"subset {k}: "
+            for s in scheduled_set:
+                st += str(s)+";"
+            
+        return +";".join(self._sch, self.body)
+    
     
     def build_waveform(self,
                        parameters: Dict[str, Real],
@@ -600,7 +628,8 @@ class SchedulerPulseTemplate(PulseTemplate, MeasurementDefiner):
                                              to_single_waveform=to_single_waveform,
                                              program_builder=subset_program_builder
                                              )
-                                             
+        
+        
         elif (mode:=program_builder._stack[-1][0]) in {"iteration","repetition"}:
             # pt_dict = self.build_schedule(scope[0] if mode=="iteration" else {key:scope for key in self._channel_subsets.keys()})
             pt_dict = self.build_schedule(scope[0] if mode=="iteration" else scope,program_builder._scheduler_options)

@@ -103,9 +103,9 @@ class MultiProgramBuilder(ProgramBuilder):
                 if key == target_key:
                     return value  # Return the value if the target key is found
                 
-                # If the value is a dictionary, add it to the stack to continue searching
-                if isinstance(value, dict):
-                    stack.append(value)
+                # If the value is a MultiProgramBuilder, add it to the stack to continue searching
+                if isinstance(value, MultiProgramBuilder):
+                    stack.append(value._program_builder_map)
         
         return None  # Return None if the key is not found
             
@@ -189,8 +189,13 @@ class MultiProgramBuilder(ProgramBuilder):
     @contextlib.contextmanager
     def with_sequence(self,
                       measurements: Optional[Sequence[MeasurementWindow]] = None) -> ContextManager['ProgramBuilder']:
-        self._stack.append(('sequence',{k:pb.with_sequence(measurements) for k,pb in self.program_builder_map.items()}))
-        yield self
+        context_managers = {k:pb.with_sequence(measurements) for k,pb in self.program_builder_map.items()}
+        with contextlib.ExitStack() as stack:
+            context_objects = {k:stack.enter_context(cm) for k,cm in context_managers.items()}
+            # for cm in self._stack[-1][1].values():
+                # stack.enter_context(cm)
+            self._stack.append(('sequence',context_objects))
+            yield self
         self._stack.pop()
 
     def new_subprogram(self, global_transformation: 'Transformation' = None) -> ContextManager['ProgramBuilder']:
