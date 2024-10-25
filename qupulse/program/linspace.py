@@ -256,7 +256,7 @@ class LinSpaceTopLevel(LinSpaceNode):
     @property
     def body_duration(self) -> TimeType:
         if self._cached_body_duration is None:
-            self._cached_body_duration = self.duration_base
+            self._cached_body_duration = sum(b.body_duration for b in self.body)
         return self._cached_body_duration
     
     def _get_measurement_windows(self) -> Mapping[str, np.ndarray]:
@@ -525,6 +525,8 @@ class LinSpaceBuilder(ProgramBuilder):
         self._play_marker_when_constant = play_marker_when_constant
         self._pt_channels = None
         self._meas_queue = []
+        
+        self._donotcreatenext = []
         
     def _root(self):
         return self._stack[0]
@@ -863,6 +865,7 @@ class LinSpaceBuilder(ProgramBuilder):
                    # defined_channels: TypingSet[ChannelID]
                    ) -> Optional[Sequence[LinSpaceNode]]:
         assert not self._meas_queue
+        assert not self._donotcreatenext
         if self._root():
             return LinSpaceTopLevel(body=tuple(self._root()),
                                     _play_marker_when_constant=self._play_marker_when_constant,

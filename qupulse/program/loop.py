@@ -774,7 +774,9 @@ class LoopBuilder(ProgramBuilder):
         self._top: Union[Loop, LoopGuard] = self._root
 
         self._stack: List[StackFrame] = [StackFrame(self._root, None)]
-
+        
+        self._donotcreatenext = []
+        
     def inner_scope(self, scope: Scope, pt_obj: 'ForLoopPT') -> Scope:
         local_vars = self._stack[-1].iterating
         if local_vars is None:
@@ -850,6 +852,7 @@ class LoopBuilder(ProgramBuilder):
     def to_program(self,
                    # defined_channels: Set[ChannelID]={}
                    ) -> Optional[Loop]:
+        assert not self._donotcreatenext
         #defined channels ignored as can be inferred from depth_iterator anyway
         if len(self._stack) != 1:
             warnings.warn("Creating program with active build stack.")

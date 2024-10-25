@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from typing import Mapping, Optional, Sequence, ContextManager, Iterable, Tuple, Union, Dict, List, Iterator, Generic,\
     Set, Callable, Self, Any
 from enum import Enum
-from itertools import dropwhile, count
+from itertools import dropwhile, count, zip_longest
 from numbers import Real, Number
 from collections import defaultdict
 
@@ -43,6 +43,8 @@ class MultiProgramBuilder(ProgramBuilder):
         self._channel_subsets = channel_subsets
         
         self._scheduler_options = _scheduler_options
+        
+        self._donotcreatenext = []
         
     # def get_program_builder(self, key) -> NestedPBMapping:
     #     return self._program_builder_map.setdefault(key,deepcopy(self._program_builder_map[-1]))
@@ -179,10 +181,40 @@ class MultiProgramBuilder(ProgramBuilder):
         # let all subbuilders measure
         for pb in self.program_builder_map.values():
             pb.measure(measurements)
+            
+    # def _with_repetition_if_sub_mpb(self,
+    def _with_repetition(self,
 
+                            # subset_key: str,
+                            repetition_count: RepetitionCount,
+                            measurements: Optional[Sequence[MeasurementWindow]]) -> Iterable['ProgramBuilder']:
+        
+        # assert isinstance(self.program_builder_map[subset_key],MultiProgramBuilder)
+        # flattened_builders = list(flatten_dict(self.program_builder_map[subset_key]).values())
+        flattened_builders = list(flatten_dict(self.program_builder_map,
+                                               type_to_flatten=MultiProgramBuilder,
+                                               attribute_to_access="program_builder_map").values())
+        assert not any(isinstance(flat_builder,MultiProgramBuilder) for flat_builder in flattened_builders)
+        
+        flattened_generators = [b.with_repetition(repetition_count,measurements) for b in flattened_builders]
+        
+        for i,builders_vertical in enumerate(zip_longest(*flattened_generators,fillvalue=None)):
+            #the builders 
+            
+            for b in builders_vertical:
+                if b is None:
+                    b._donotcreatenext.append([])
+
+            yield self
+
+        
+            
     def with_repetition(self, repetition_count: RepetitionCount,
                         measurements: Optional[Sequence[MeasurementWindow]] = None) -> Iterable['ProgramBuilder']:
-        self._stack.append(('repetition',{k:pb.with_repetition(repetition_count,measurements) for k,pb in self.program_builder_map.items()}))
+        # self._stack.append(('repetition',{k:pb.with_repetition(repetition_count,measurements) for k,pb in self.program_builder_map.items()}))
+        self._stack.append(('repetition',{k:(pb,repetition_count,measurements) for k,pb in self.program_builder_map.items()}))
+        # for k,subbuilder in self.program_builder_map.items():
+            
         yield self
         self._stack.pop()
     
@@ -202,12 +234,44 @@ class MultiProgramBuilder(ProgramBuilder):
         """Create a context managed program builder whose contents are translated into a single waveform upon exit if
         it is not empty."""
         raise NotImplementedError()
+    
+    # @contextlib.contextmanager
+    
+    # def _with_iteration_if_sub_mpb(self,
+    def _with_iteration(self,
 
+                            # subset_key: str,
+                            index_name: str, rng: range,
+                            pt_obj: 'ForLoopPT', #hack this in for now.
+                            # can be placed more suitably, like in pulsemetadata later on, but need some working thing now.
+                            measurements: Optional[Sequence[MeasurementWindow]]) -> Iterable['ProgramBuilder']:
+        
+        # assert isinstance(self.program_builder_map[subset_key],MultiProgramBuilder)
+        # flattened_builders = list(flatten_dict(self.program_builder_map[subset_key]).values())
+        flattened_builders = list(flatten_dict(self.program_builder_map,
+                                               type_to_flatten=MultiProgramBuilder,
+                                               attribute_to_access="program_builder_map").values())
+
+        assert not any(isinstance(flat_builder,MultiProgramBuilder) for flat_builder in flattened_builders)
+        
+        flattened_generators = [b.with_iteration(index_name,rng,pt_obj,measurements) for b in flattened_builders]
+        
+        for i,builders_vertical in enumerate(zip_longest(*flattened_generators,fillvalue=None)):
+            #the builders 
+            
+            for b in builders_vertical:
+                if b is None:
+                    b._donotcreatenext.append([])
+
+            yield self
+    
     def with_iteration(self, index_name: str, rng: range,
                        pt_obj: 'ForLoopPT', #hack this in for now.
                        # can be placed more suitably, like in pulsemetadata later on, but need some working thing now.
                        measurements: Optional[Sequence[MeasurementWindow]] = None) -> Iterable['ProgramBuilder']:
-        self._stack.append(('iteration',{k:pb.with_iteration(index_name,rng,pt_obj,measurements) for k,pb in self.program_builder_map.items()}))
+        # self._stack.append(('iteration',{k:pb.with_iteration(index_name,rng,pt_obj,measurements) for k,pb in self.program_builder_map.items()}))
+        self._stack.append(('iteration',{k:(pb,index_name,rng,pt_obj,measurements) for k,pb in self.program_builder_map.items()}))
+
         yield self
         self._stack.pop()
     
@@ -219,7 +283,8 @@ class MultiProgramBuilder(ProgramBuilder):
                    ) -> Optional[Dict[str,Program|Self]]:
         top = self._stack.pop()
         assert top[0]=='top'
-        assert len(self._stack)==0
+        assert not self._stack
+        assert not self._donotcreatenext
         return MultiProgram({k:sub.to_program(
             # self._channel_subsets[k]
             ) for k,sub in self.program_builder_map.items()})
@@ -269,12 +334,14 @@ class MultiProgram:
     @cached_property
     def _flattened_program_map(self) -> Dict[str,Program]:
         
-        return flatten_mp_dict(self.program_map)
+        return flatten_dict(self.program_map)
         
     
-def flatten_mp_dict(input_dict: Dict[str,MultiProgram|Self],
-                    parent_key: str = ''
-                         ) -> Dict[str,MultiProgram]:
+def flatten_dict(input_dict: Dict[str,Any|Self],
+                 parent_key: str = '',
+                 type_to_flatten: type = MultiProgram,
+                 attribute_to_access: str = "program_map"
+                         ) -> Dict[str,Any]:
     new_dict = {}
 
     for k, v in input_dict.items():
@@ -283,9 +350,11 @@ def flatten_mp_dict(input_dict: Dict[str,MultiProgram|Self],
         new_key = k
         assert new_key != parent_key
         
-        if isinstance(v, MultiProgram):
+        if isinstance(v, type_to_flatten):
             # If the value is a dictionary, recursively flatten it
-            nested_dict = flatten_mp_dict(v.program_map, new_key,)
+            # nested_dict = flatten_mp_dict(v.program_map, new_key,)
+            nested_dict = flatten_dict(getattr(v,attribute_to_access), new_key,)
+
             new_dict.update(nested_dict)
         else:
             # If the value is a set, add it to the new dictionary

@@ -634,16 +634,34 @@ class SchedulerPulseTemplate(PulseTemplate, MeasurementDefiner):
             # pt_dict = self.build_schedule(scope[0] if mode=="iteration" else {key:scope for key in self._channel_subsets.keys()})
             pt_dict = self.build_schedule(scope[0] if mode=="iteration" else scope,program_builder._scheduler_options)
 
-            for key,subset_program_builder in program_builder._stack[-1][1].items():
-                for itrep_builder in subset_program_builder:
-                    pt_dict[key]._create_program(scope=itrep_builder.inner_scope(*scope) if mode=="iteration" else scope,
-                                                 measurement_mapping=measurement_mapping,
-                                                 channel_mapping=channel_mapping,
-                                                 global_transformation=global_transformation,
-                                                 to_single_waveform=to_single_waveform,
-                                                 program_builder=itrep_builder
-                                                 )
+            for key,subset_program_builder_tuple in program_builder._stack[-1][1].items():
+                if mode=="iteration":
+                    if isinstance(subset_program_builder_tuple[0],MultiProgramBuilder):
+                        iterator = subset_program_builder_tuple[0]._with_iteration(*subset_program_builder_tuple[1:])
+                    else:
+                        iterator = subset_program_builder_tuple[0].with_iteration(*subset_program_builder_tuple[1:])
+                    for itrep_builder in iterator:
+                        pt_dict[key]._create_program(scope=itrep_builder.inner_scope(*scope),
+                                                     measurement_mapping=measurement_mapping,
+                                                     channel_mapping=channel_mapping,
+                                                     global_transformation=global_transformation,
+                                                     to_single_waveform=to_single_waveform,
+                                                     program_builder=itrep_builder
+                                                     )
         
+                else:
+                    if isinstance(subset_program_builder_tuple[0],MultiProgramBuilder):
+                        iterator = subset_program_builder_tuple[0]._with_repetition(*subset_program_builder_tuple[1:])
+                    else:
+                        iterator = subset_program_builder_tuple[0].with_repetition(*subset_program_builder_tuple[1:])
+                    for itrep_builder in iterator:
+                        pt_dict[key]._create_program(scope=scope,
+                                                     measurement_mapping=measurement_mapping,
+                                                     channel_mapping=channel_mapping,
+                                                     global_transformation=global_transformation,
+                                                     to_single_waveform=to_single_waveform,
+                                                     program_builder=itrep_builder
+                                                     )
         # elif program_builder._stack[-1][0] in {"sequence",}:
         #     for key,subset_sequence_program_builder in program_builder._stack[-1][1].items():
         #         pt_dict[key]._create_program(scope=scope,

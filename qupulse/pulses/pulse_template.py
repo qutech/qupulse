@@ -245,6 +245,11 @@ class PulseTemplate(Serializable):
                         program_builder: ProgramBuilder):
         """Generic part of create program. This method handles to_single_waveform and the configuration of the
         transformer."""
+        #hacky:
+        if program_builder._donotcreatenext:
+            program_builder._donotcreatenext.pop()
+            return
+        
         if self.identifier in to_single_waveform or self in to_single_waveform:
             with program_builder.new_subprogram(global_transformation=global_transformation) as inner_program_builder:
 
