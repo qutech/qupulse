@@ -476,7 +476,7 @@ class SchedulerPulseTemplate(PulseTemplate, MeasurementDefiner):
         initial_values = {}
         
         for key,ch_subset in self._channel_subsets.items():
-            subset_scheduled = {s:time for s,time in start_points_by_scheduled.items() if s.pt.defined_channels==ch_subset}
+            subset_scheduled = {s:time for s,time in start_points_by_scheduled.items() if s.pt.defined_channels==self._flattened_channels_by_subset_key[key]}
             initial_values.update(get_symbolic_vals_with_conditions_from_dict(subset_scheduled,
                                                                               # ch_subset=self._channel_subsets[key],
                                                                               ch_subset=self._flattened_channels_by_subset_key[key],
@@ -493,7 +493,7 @@ class SchedulerPulseTemplate(PulseTemplate, MeasurementDefiner):
         final_values = {}
         
         for key,ch_subset in self._channel_subsets.items():
-            subset_scheduled = {s:time for s,time in start_points_by_scheduled.items() if s.pt.defined_channels==ch_subset}
+            subset_scheduled = {s:time for s,time in start_points_by_scheduled.items() if s.pt.defined_channels==self._flattened_channels_by_subset_key[key]}
             final_values.update(get_symbolic_vals_with_conditions_from_dict(subset_scheduled,
                                                                             # ch_subset=self._channel_subsets[key],
                                                                             ch_subset=self._flattened_channels_by_subset_key[key],
@@ -744,6 +744,3 @@ def get_symbolic_vals_with_conditions_from_dict(start_time_by_scheduled: Dict[Sc
     
     # Create and return the Piecewise expression
     return {ch: ExpressionScalar(sp.Piecewise(*conditions_by_channel[ch], default_condition[ch])) for ch in ch_subset}
-
-
-
