@@ -51,7 +51,7 @@ class Scheduled:
     channel_subset_key: Hashable
     reference: Union['Scheduled',None]
     ref_point: REF_POINT #start,end
-    rel_time: ExpressionLike
+    rel_time: ExpressionScalar
     post_gap_volt: GAP_VOLT
     pre_gap_volt: GAP_VOLT
     
@@ -193,7 +193,7 @@ class SchedulerPulseTemplate(PulseTemplate, MeasurementDefiner):
 
             if pt.defined_channels==subset:
                 #add to channel subsets
-                sched = Scheduled(pt,k,reference,REF_POINT[ref_point.upper()],rel_time,GAP_VOLT[fill_post_gap_voltage.upper()],
+                sched = Scheduled(pt,k,reference,REF_POINT[ref_point.upper()],ExpressionScalar(rel_time),GAP_VOLT[fill_post_gap_voltage.upper()],
                                   GAP_VOLT.DEFAULT
                                   )
                 if reference is None:
