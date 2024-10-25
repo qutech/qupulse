@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patheffects as pe
-from typing import Dict, Tuple
+from typing import Dict, Tuple, Optional
 import warnings
 import time
 from datetime import datetime
@@ -44,7 +44,6 @@ class HDAWGAlazar():
                  
                  ):
         
-        self._alazar_offsets = alazar_offsets
         self._hw_setup = HardwareSetup()
         self._alazar = get_alazar()
         self._init_alazar()
@@ -106,7 +105,10 @@ class ExpectationChecker():
                  ):
         
         self._devices = devices
-        self._pt = self._approve_pt(pt)
+        if pt is not None:
+            self._pt = self._approve_pt(pt)
+        else:
+            self._pt = None
         self.program_builder = program_builder
         
         self._number_samples_per_average = int(sample_rate_alazar*1e9 // self.ALAZAR_RAW_RATE)
@@ -118,9 +120,17 @@ class ExpectationChecker():
         self._data_offsets = data_offsets
         
     @classmethod
-    def from_file(cls, path: str, *args, **kwargs) -> 'ExpectationChecker':
-        ec = cls(*args,**kwargs)
-        ec._result = xr.open_dataset(path)
+    def from_file(cls, path: str, data_offsets: Optional[Dict[str,float]] = None) -> 'ExpectationChecker':
+        ds = xr.open_dataset(path)
+        file_data_offsets = {
+            't_offset': ds.attrs['offsets_to_be_applied'][0],
+            'v_offset': ds.attrs['offsets_to_be_applied'][1],
+            'v_scale': ds.attrs['offsets_to_be_applied'][2]
+            }
+        
+        
+        ec = cls(None,None,None,save_path=None,data_offsets=data_offsets if data_offsets is not None else file_data_offsets)
+        ec._result = ds
         return ec
     
     def _approve_pt(self, pt: PulseTemplate) -> bool:
@@ -273,7 +283,11 @@ class ExpectationChecker():
                         coords={
                             "time": times,
                         },
-                        attrs={'name': self._pt.identifier if self._pt.identifier else '',}
+                        attrs={'name': self._pt.identifier if self._pt.identifier else '',
+                               'offsets_to_be_applied': (self._data_offsets.get('t_offset',0.),
+                                                         self._data_offsets.get('v_offset',0.),
+                                                         self._data_offsets.get('v_scale',1.))
+                               }
                     )
         
         return
