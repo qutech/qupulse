@@ -7,7 +7,7 @@ Classes:
     - ParallelChannelPulseTemplate: A pulse template to add channels to an existing pulse template.
 """
 
-from typing import Dict, List, Optional, Any, AbstractSet, Union, Set, Sequence, Mapping
+from typing import Dict, List, Optional, Any, AbstractSet, Union, Set, Sequence, Mapping, Callable
 import numbers
 import warnings
 
@@ -215,7 +215,14 @@ class AtomicMultiChannelPulseTemplate(AtomicPulseTemplate, ParameterConstrainer)
         for subtemplate in self._subtemplates:
             values.update(subtemplate.final_values)
         return values
-
+    
+    def pad_all_atomic_subtemplates_to(self,
+        to_new_duration: Callable[[Expression], ExpressionLike]) -> 'PulseTemplate':
+        
+        for i,subtemplate in enumerate(self._subtemplates):
+            self._subtemplates[i] = subtemplate.pad_all_atomic_subtemplates_to(to_new_duration)
+        return self
+    
 
 class ParallelChannelPulseTemplate(PulseTemplate):
     def __init__(self,
@@ -352,7 +359,13 @@ class ParallelChannelPulseTemplate(PulseTemplate):
 
     def _is_atomic(self) -> bool:
         return self._template._is_atomic()
-
+    
+    def pad_all_atomic_subtemplates_to(self,
+        to_new_duration: Callable[[Expression], ExpressionLike]) -> 'PulseTemplate':
+        
+        self._template = self.template.pad_all_atomic_subtemplates_to(to_new_duration)
+        return self
+    
 
 ParallelConstantChannelPulseTemplate = ParallelChannelPulseTemplate
 

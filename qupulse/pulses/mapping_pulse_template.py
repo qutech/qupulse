@@ -1,10 +1,10 @@
-from typing import Optional, Set, Dict, Union, List, Any, Tuple, Mapping
+from typing import Optional, Set, Dict, Union, List, Any, Tuple, Mapping, Callable
 import itertools
 import numbers
 import collections
 
 from qupulse.utils.types import ChannelID, FrozenDict, FrozenMapping
-from qupulse.expressions import Expression, ExpressionScalar
+from qupulse.expressions import Expression, ExpressionScalar, ExpressionLike
 from qupulse.parameter_scope import Scope, MappedScope
 from qupulse.pulses.pulse_template import PulseTemplate, MappingTuple
 from qupulse.pulses.parameters import ParameterNotProvidedException, ParameterConstrainer
@@ -352,7 +352,12 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
     @property
     def final_values(self) -> Dict[ChannelID, ExpressionScalar]:
         return self._apply_mapping_to_inner_channel_dict(self.__template.final_values)
-
+    
+    def pad_all_atomic_subtemplates_to(self,
+        to_new_duration: Callable[[Expression], ExpressionLike]) -> 'PulseTemplate':
+        
+        self.__template = self.template.pad_all_atomic_subtemplates_to(to_new_duration)
+        return self
 
 class MissingMappingException(Exception):
     """Indicates that no mapping was specified for some parameter declaration of a
