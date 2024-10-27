@@ -168,8 +168,9 @@ class ForLoopPulseTemplate(LoopPulseTemplate, MeasurementDefiner, ParameterConst
                                       to_single_waveform=to_single_waveform,
                                       program_builder=iteration_program_builder)
 
-    def build_waveform(self, parameter_scope: Scope) -> ForLoopWaveform:
-        return ForLoopWaveform([self.body.build_waveform(local_scope)
+    def build_waveform(self, parameter_scope: Scope,
+                       channel_mapping: Dict[ChannelID, Optional[ChannelID]]) -> ForLoopWaveform:
+        return ForLoopWaveform([self.body.build_waveform(local_scope,channel_mapping)
                                 for local_scope in self._body_scope_generator(parameter_scope, forward=True)])
 
     def get_serialization_data(self, serializer: Optional[Serializer]=None) -> Dict[str, Any]:
