@@ -1,7 +1,7 @@
 """This module defines RepetitionPulseTemplate, a higher-order hierarchical pulse template that
 represents the n-times repetition of another PulseTemplate."""
 
-from typing import Dict, List, AbstractSet, Optional, Union, Any, Mapping, cast
+from typing import Dict, List, AbstractSet, Optional, Union, Any, Mapping, cast, Callable
 from numbers import Real
 from warnings import warn
 
@@ -13,7 +13,7 @@ from qupulse.program import ProgramBuilder
 from qupulse.parameter_scope import Scope
 
 from qupulse.utils.types import ChannelID
-from qupulse.expressions import ExpressionScalar
+from qupulse.expressions import ExpressionScalar, Expression, ExpressionLike
 from qupulse.utils import checked_int_cast
 from qupulse.pulses.pulse_template import PulseTemplate
 from qupulse.pulses.loop_pulse_template import LoopPulseTemplate
@@ -180,7 +180,13 @@ class RepetitionPulseTemplate(LoopPulseTemplate, ParameterConstrainer, Measureme
     @property
     def final_values(self) -> Dict[ChannelID, ExpressionScalar]:
         return self.body.final_values
-
+    
+    def pad_all_atomic_subtemplates_to(self,
+        to_new_duration: Callable[[Expression], ExpressionLike]) -> 'PulseTemplate':
+        
+        self.__body = self.body.pad_all_atomic_subtemplates_to(to_new_duration)
+        return self
+    
 
 class ParameterNotIntegerException(Exception):
     """Indicates that the value of the parameter given as repetition count was not an integer."""

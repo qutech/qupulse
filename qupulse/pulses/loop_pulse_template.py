@@ -4,7 +4,7 @@ import dataclasses
 import functools
 import itertools
 from abc import ABC
-from typing import Dict, Set, Optional, Any, Union, Tuple, Iterator, Sequence, cast, Mapping
+from typing import Dict, Set, Optional, Any, Union, Tuple, Iterator, Sequence, cast, Mapping, Callable
 import warnings
 from numbers import Number
 
@@ -16,7 +16,7 @@ from qupulse.utils.types import FrozenDict, FrozenMapping
 
 from qupulse.program import ProgramBuilder
 
-from qupulse.expressions import ExpressionScalar, ExpressionVariableMissingException, Expression
+from qupulse.expressions import ExpressionScalar, ExpressionVariableMissingException, Expression, ExpressionLike
 from qupulse.utils import checked_int_cast, cached_property
 from qupulse.pulses.parameters import InvalidParameterNameException, ParameterConstrainer, ParameterNotProvidedException
 from qupulse.pulses.pulse_template import PulseTemplate, ChannelID, AtomicPulseTemplate
@@ -241,7 +241,13 @@ class ForLoopPulseTemplate(LoopPulseTemplate, MeasurementDefiner, ParameterConst
         for ch, value in values.items():
             values[ch] = ExpressionScalar(value.underlying_expression.subs(self._loop_index, final_idx))
         return values
-
+    
+    def pad_all_atomic_subtemplates_to(self,
+        to_new_duration: Callable[[Expression], ExpressionLike]) -> 'ForLoopPulseTemplate':
+        self.__body = self.body.pad_all_atomic_subtemplates_to(to_new_duration)
+        self.__dict__.pop('duration', None)
+        return self
+    
 
 class LoopIndexNotUsedException(Exception):
     def __init__(self, loop_index: str, body_parameter_names: Set[str]):

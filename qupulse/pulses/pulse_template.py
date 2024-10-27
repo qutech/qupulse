@@ -376,7 +376,7 @@ class PulseTemplate(Serializable):
             return self
 
     def pad_to(self, to_new_duration: Union[ExpressionLike, Callable[[Expression], ExpressionLike]],
-               as_single_wf: bool = True,
+               as_single_wf: bool = False,
                pt_kwargs: Mapping[str, Any] = {}) -> 'PulseTemplate':
         """Pad this pulse template to the given duration.
         The target duration can be numeric, symbolic or a callable that returns a new duration from the current
@@ -405,7 +405,7 @@ class PulseTemplate(Serializable):
 
         Returns:
             A pulse template that has the duration given by ``to_new_duration``.
-            self if ConstantPT,
+            XXX# self if ConstantPT,
             else SingleWFTimeExtensionPulseTemplate if as_single_wf,
             else SequencePT
         """
@@ -418,12 +418,13 @@ class PulseTemplate(Serializable):
             new_duration = ExpressionScalar(to_new_duration)
         pad_duration = new_duration - current_duration
         
-        #shortcut
-        if isinstance(self,ConstantPT):
-            if pt_kwargs:
-                raise NotImplementedError()
-            self._duration = new_duration
-            return self
+        #maybe leads to inconsistencies if self may be returned
+        # #shortcut
+        # if isinstance(self,ConstantPT):
+        #     if pt_kwargs:
+        #         raise NotImplementedError()
+        #     self._duration = new_duration
+        #     return self
         
         if as_single_wf:
             return SingleWFTimeExtensionPulseTemplate(self, new_duration, **pt_kwargs)
@@ -436,7 +437,16 @@ class PulseTemplate(Serializable):
                 return SequencePT(self, pad_pt, **pt_kwargs)
             else:
                 return self @ pad_pt
-
+    
+    # @abstractmethod
+    def pad_all_atomic_subtemplates_to(self,
+        to_new_duration: Callable[[Expression], ExpressionLike]) -> 'PulseTemplate':
+        """pad ll atomic subtemplates to a new duration determiend from callable
+        to_new_duration, e.g. from qupulse.utils.to_next_multiple for waveform
+        granularity.
+        """
+        raise NotImplementedError()
+    
     def __format__(self, format_spec: str):
         if format_spec == '':
             format_spec = self._DEFAULT_FORMAT_SPEC
@@ -611,7 +621,15 @@ class AtomicPulseTemplate(PulseTemplate, MeasurementDefiner):
         for ch, value in values.items():
             values[ch] = value.evaluate_symbolic({self._AS_EXPRESSION_TIME: self.duration})
         return values
-
+    
+    def pad_to(self, to_new_duration: Union[ExpressionLike, Callable[[Expression], ExpressionLike]],
+               pt_kwargs: Mapping[str, Any] = {}) -> 'PulseTemplate':
+        return super().pad_to(to_new_duration,as_single_wf=True,pt_kwargs=pt_kwargs)
+    
+    def pad_all_atomic_subtemplates_to(self,
+        to_new_duration: Callable[[Expression], ExpressionLike]) -> 'PulseTemplate':
+        return self.pad_to(to_new_duration)
+    
 
 class DoubleParameterNameException(Exception):
 

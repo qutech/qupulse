@@ -1,10 +1,10 @@
-from typing import Optional, Set, Dict, Union
+from typing import Optional, Set, Dict, Union, Callable
 
 from qupulse import ChannelID
 from qupulse.program.loop import Loop
 from qupulse.program.waveforms import Waveform
 from qupulse.serialization import PulseRegistryType
-from qupulse.expressions import ExpressionScalar
+from qupulse.expressions import ExpressionScalar, Expression, ExpressionLike
 
 from qupulse.pulses.pulse_template import PulseTemplate
 
@@ -68,3 +68,9 @@ class TimeReversalPulseTemplate(PulseTemplate):
 
     def _is_atomic(self) -> bool:
         return self._inner._is_atomic()
+    
+    def pad_all_atomic_subtemplates_to(self,
+        to_new_duration: Callable[[Expression], ExpressionLike]) -> 'PulseTemplate':
+        self._inner = self._inner.pad_all_atomic_subtemplates_to(to_new_duration)
+        return self
+    

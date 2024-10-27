@@ -6,7 +6,7 @@ import operator
 
 import sympy
 
-from qupulse.expressions import ExpressionScalar, ExpressionLike
+from qupulse.expressions import ExpressionScalar, ExpressionLike, Expression
 from qupulse.serialization import Serializer, PulseRegistryType
 from qupulse.parameter_scope import Scope
 
@@ -538,7 +538,12 @@ class ArithmeticPulseTemplate(PulseTemplate):
 
     def _is_atomic(self):
         return self._pulse_template._is_atomic()
-
+    
+    def pad_all_atomic_subtemplates_to(self,
+        to_new_duration: Callable[[Expression], ExpressionLike]) -> 'PulseTemplate':
+        
+        self._pulse_template = self._pulse_template.pad_all_atomic_subtemplates_to(to_new_duration)
+    
 
 def try_operation(lhs: Union[PulseTemplate, ExpressionLike, Mapping[ChannelID, ExpressionLike]],
                   op: str,

@@ -17,7 +17,7 @@ from qupulse.pulses.parameters import ConstraintLike, ParameterConstrainer
 from qupulse.pulses.mapping_pulse_template import MappingPulseTemplate, MappingTuple
 from qupulse.program.waveforms import SequenceWaveform
 from qupulse.pulses.measurement import MeasurementDeclaration, MeasurementDefiner
-from qupulse.expressions import Expression, ExpressionScalar
+from qupulse.expressions import Expression, ExpressionScalar, ExpressionLike
 
 __all__ = ["SequencePulseTemplate"]
 
@@ -194,3 +194,9 @@ class SequencePulseTemplate(PulseTemplate, ParameterConstrainer, MeasurementDefi
     def final_values(self) -> Dict[ChannelID, ExpressionScalar]:
         return self.__subtemplates[-1].final_values
 
+    def pad_all_atomic_subtemplates_to(self,
+        to_new_duration: Callable[[Expression], ExpressionLike]) -> 'PulseTemplate':
+        
+        for i,sub in enumerate(self.__subtemplates):
+            self.__subtemplates[i] = sub.pad_all_atomic_subtemplates_to(to_new_duration)
+        return self
