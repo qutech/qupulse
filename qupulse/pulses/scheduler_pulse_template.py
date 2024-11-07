@@ -470,6 +470,7 @@ class SchedulerPulseTemplate(PulseTemplate, MeasurementDefiner):
 
     @cached_property
     def initial_values(self) -> Dict[ChannelID, ExpressionScalar]:
+        #!!! these are always the values for the actual PTs without considering (unknown) gap filler prior / after
         
         start_points_by_scheduled = self._start_points_by_subset
         
@@ -487,6 +488,7 @@ class SchedulerPulseTemplate(PulseTemplate, MeasurementDefiner):
 
     @cached_property
     def final_values(self) -> Dict[ChannelID, ExpressionScalar]:
+        #!!! these are always the values for the actual PTs without considering (unknown) gap filler prior / after
         
         start_points_by_scheduled = self._start_points_by_subset
         
@@ -678,6 +680,9 @@ class SchedulerPulseTemplate(PulseTemplate, MeasurementDefiner):
 def get_symbolic_vals_with_conditions_from_dict(start_time_by_scheduled: Dict[Scheduled, ExpressionScalar],
                                                       ch_subset: Set[ChannelID],
                                                       min_val:bool=True) -> Dict[ChannelID,ExpressionScalar]:
+    
+    #the total number of variables in the expression should scale with n^2, n number of scheduled
+    
     # conditions = []  # To store conditions for Piecewise
     
     if len(start_time_by_scheduled)==0:
