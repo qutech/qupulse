@@ -911,7 +911,7 @@ class Increment:
     key: DepKey
     
     def __hash__(self):
-        return hash((self.channel,self.value,self.key))
+        return hash((type(self),self.channel,self.value,self.key))
     
     def __str__(self):
         return "Increment("+",".join([f"{k}="+v.__str__() for k,v in vars(self).items()])+")"
@@ -923,7 +923,7 @@ class Set:
     key: DepKey = dataclasses.field(default_factory=lambda: DepKey((),DepDomain.NODEP))
 
     def __hash__(self):
-        return hash((self.channel,self.value,self.key))
+        return hash((type(self),self.channel,self.value,self.key))
     
     def __str__(self):
         return "Set("+",".join([f"{k}="+v.__str__() for k,v in vars(self).items()])+")"
@@ -934,7 +934,7 @@ class Wait:
     key_by_domain: Dict[DepDomain,DepKey] = dataclasses.field(default_factory=lambda: {})
 
     def __hash__(self):
-        return hash((self.duration,frozenset(self.key_by_domain.items())))
+        return hash((type(self),self.duration,frozenset(self.key_by_domain.items())))
 
 @dataclass
 class LoopJmp:
@@ -954,7 +954,7 @@ class Play:
             self.keys_by_domain_by_ch = {ch: {} for ch in self.play_channels+self.step_channels}
     
     def __hash__(self):
-        return hash((self.waveform,self.play_channels,self.step_channels,
+        return hash((type(self),self.waveform,self.play_channels,self.step_channels,
                      frozenset((k,frozenset(d.items())) for k,d in self.keys_by_domain_by_ch.items())))
 
 
