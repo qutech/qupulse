@@ -88,6 +88,7 @@ class TimeReversalPulseTemplate(PulseTemplate):
     def __init__(self, inner: PulseTemplate,
                  identifier: Optional[str] = None,
                  registry: PulseRegistryType = None):
+        raise NotImplementedError("Not yet adapted to ProgramBuilder formalism")
         super(TimeReversalPulseTemplate, self).__init__(identifier=identifier)
         self._inner = inner
         self._register(registry=registry)
