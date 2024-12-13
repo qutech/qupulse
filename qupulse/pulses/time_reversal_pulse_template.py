@@ -120,30 +120,14 @@ class TimeReversalPulseTemplate(PulseTemplate):
         return self._inner.integral
 
     def _internal_create_program(self, *, parent_loop: Loop, **kwargs) -> None:
-        inner_loop = Loop()
-        self._inner._internal_create_program(parent_loop=inner_loop, **kwargs)
-        inner_loop.reverse_inplace()
+        
+        raise NotImplementedError("Not yet adapted to ProgramBuilder formalism")
+        
+        # inner_loop = Loop()
+        # self._inner._internal_create_program(parent_loop=inner_loop, **kwargs)
+        # inner_loop.reverse_inplace()
 
-        parent_loop.append_child(inner_loop)
-    
-    def _internal_create_program(self, *,
-                                 scope: Scope,
-                                 measurement_mapping: Dict[str, Optional[str]],
-                                 channel_mapping: Dict[ChannelID, Optional[ChannelID]],
-                                 global_transformation: Optional['Transformation'],
-                                 to_single_waveform: Set[Union[str, 'PulseTemplate']],
-                                 program_builder: ProgramBuilder) -> None:
-        self.validate_scope(scope)
-
-        measurements = self.get_measurement_windows(scope, measurement_mapping)
-        with program_builder.with_sequence(measurements=measurements) as sequence_program_builder:
-            for subtemplate in self.subtemplates:
-                subtemplate._create_program(scope=scope,
-                                            measurement_mapping=measurement_mapping,
-                                            channel_mapping=channel_mapping,
-                                            global_transformation=global_transformation,
-                                            to_single_waveform=to_single_waveform,
-                                            program_builder=sequence_program_builder)
+        # parent_loop.append_child(inner_loop)
     
     
     def build_waveform(self,
