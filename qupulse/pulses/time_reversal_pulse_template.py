@@ -88,7 +88,6 @@ class TimeReversalPulseTemplate(PulseTemplate):
     def __init__(self, inner: PulseTemplate,
                  identifier: Optional[str] = None,
                  registry: PulseRegistryType = None):
-        raise NotImplementedError("Not yet adapted to ProgramBuilder formalism")
         super(TimeReversalPulseTemplate, self).__init__(identifier=identifier)
         self._inner = inner
         self._register(registry=registry)
@@ -120,17 +119,10 @@ class TimeReversalPulseTemplate(PulseTemplate):
     def integral(self) -> Dict[ChannelID, ExpressionScalar]:
         return self._inner.integral
 
-    def _internal_create_program(self, *, parent_loop: Loop, **kwargs) -> None:
-        
-        raise NotImplementedError("Not yet adapted to ProgramBuilder formalism")
-        
-        # inner_loop = Loop()
-        # self._inner._internal_create_program(parent_loop=inner_loop, **kwargs)
-        # inner_loop.reverse_inplace()
-
-        # parent_loop.append_child(inner_loop)
-    
-    
+    def _internal_create_program(self, *, program_builder: ProgramBuilder, **kwargs) -> None:
+        with program_builder.time_reversed() as reversed_builder:
+            self._inner._internal_create_program(program_builder=reversed_builder, **kwargs)
+            
     def build_waveform(self,
                        *args, **kwargs) -> Optional[Waveform]:
         wf = self._inner.build_waveform(*args, **kwargs)
