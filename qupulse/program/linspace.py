@@ -624,7 +624,16 @@ class LinSpaceBuilder(ProgramBuilder):
 
         self._stack[-1].append(set_cmd)
         if self._meas_queue:
-            self._stack[-1][-1]._measurement_memory.add_measurements(self._meas_queue.pop())
+            meas = self._meas_queue.pop()
+            if self._reversed_counter%2:
+                if duration_factors:
+                    raise NotImplementedError
+                duration = duration_base
+                meas = [
+                    (name, duration - (begin + length), length)
+                    for name, begin, length in meas
+                ]
+            self._stack[-1][-1]._measurement_memory.add_measurements(meas)
         
 
     def play_arbitrary_waveform(self, waveform: Union[Waveform,WaveformCollection],
