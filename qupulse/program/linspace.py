@@ -224,7 +224,11 @@ class LinSpaceNode:
         """
         return {mw_name: (begin_length_list[:, 0], begin_length_list[:, 1])
                 for mw_name, begin_length_list in self._get_measurement_windows().items()}
-
+    
+    def _reverse_body(self):
+        #default: do nothing
+        return
+    
 
 @dataclass
 class LinSpaceTopLevel(LinSpaceNode):
@@ -253,6 +257,10 @@ class LinSpaceTopLevel(LinSpaceNode):
     def get_defined_channels(self) -> TypingSet[ChannelID]:
         return  self._defined_channels
     
+    def _reverse_body(self):
+        self.body = self.body[::-1]
+        for node in self.body:
+            node._reverse_body()
 
 @dataclass
 class LinSpaceNodeChannelSpecific(LinSpaceNode):
@@ -299,7 +307,7 @@ class LinSpaceHold(LinSpaceNodeChannelSpecific):
         if self._cached_body_duration is None:
             self._cached_body_duration = self.duration_base
         return self._cached_body_duration
-    
+        
 
 @dataclass
 class LinSpaceArbitraryWaveform(LinSpaceNodeChannelSpecific):
@@ -383,6 +391,11 @@ class LinSpaceRepeat(LinSpaceNode):
         """
         return _get_measurement_windows_loop(self._measurement_memory.measurements,self.count,self.body)
     
+    def _reverse_body(self):
+        self.body = self.body[::-1]
+        for node in self.body:
+            node._reverse_body()
+    
     
 @dataclass
 class LinSpaceIter(LinSpaceNode):
@@ -417,7 +430,11 @@ class LinSpaceIter(LinSpaceNode):
               A dictionary (measurement_name -> array) with begin == array[:, 0] and length == array[:, 1]
         """
         return _get_measurement_windows_loop(self._measurement_memory.measurements,self.length,self.body)
-
+    
+    def _reverse_body(self):
+        self.body = self.body[::-1]
+        for node in self.body:
+            node._reverse_body()
     
 
 def _get_measurement_windows_leaf(measurements: List[MeasurementWindow]) -> Mapping[str, np.ndarray]:
@@ -509,6 +526,7 @@ class LinSpaceBuilder(ProgramBuilder):
         self._play_marker_when_constant = play_marker_when_constant
         self._pt_channels = None
         self._meas_queue = []
+        self._reversed_counter = 0
         
     def _root(self):
         return self._stack[0]
@@ -520,13 +538,13 @@ class LinSpaceBuilder(ProgramBuilder):
         """This function is necessary to inject program builder specific parameter implementations into the build
         process."""
         if self._ranges:
-            name, rng = self._ranges[-1]
+            name, rng, reverse = self._ranges[-1]
             if pt_obj and (pt_obj in self._to_stepping_repeat or pt_obj.identifier in self._to_stepping_repeat \
                 or pt_obj.loop_index in self._to_stepping_repeat):
                     # the nesting level should be simply the amount of this type in the scope.
                     nest = len(tuple(v for v in scope.values() if isinstance(v,SimpleExpressionStepped)))
                     return scope.overwrite({name:SimpleExpressionStepped(
-                        base=0,offsets={name: 1},step_nesting_level=nest+1,rng=rng)})
+                        base=0,offsets={name: 1},step_nesting_level=nest+1,rng=rng,reverse=reverse)})
             else:
                 if isinstance(scope.get(name,None),SimpleExpressionStepped):
                     return scope
@@ -536,13 +554,17 @@ class LinSpaceBuilder(ProgramBuilder):
             return scope
 
     def _get_ranges(self):
-        return dict(self._ranges)
-
+        return dict(r[:2] for r in self._ranges)
+    
+    def _get_range_reversals(self):
+        return {r[0]:r[2] for r in self._ranges}
+    
     def hold_voltage(self, duration: HardwareTime, voltages: Mapping[ChannelID, HardwareVoltage]):
         # voltages = sorted((self._name_to_idx[ch_name], value) for ch_name, value in voltages.items())
         # voltages = [value for _, value in voltages]
 
         ranges = self._get_ranges()
+        reversals = self._get_range_reversals()
         factors = {}
         bases = {}
         duration_base = duration
@@ -561,8 +583,12 @@ class LinSpaceBuilder(ProgramBuilder):
                 step = 0.
                 offset = offsets.get(rng_name, None)
                 if offset:
-                    start += rng.start * offset
-                    step += rng.step * offset
+                    if reversals[rng_name]:
+                        start += (rng.stop-1) * offset
+                        step += -rng.step * offset
+                    else:
+                        start += rng.start * offset
+                        step += rng.step * offset
                 base += start
                 incs.append(step)
             factors[ch_name] = tuple(incs)
@@ -579,8 +605,12 @@ class LinSpaceBuilder(ProgramBuilder):
                 step = TimeType(0)
                 offset = duration_offsets.get(rng_name, None)
                 if offset:
-                    start += rng.start * offset
-                    step += rng.step * offset
+                    if reversals[rng_name]:
+                        start += (rng.stop-1) * offset
+                        step += -rng.step * offset
+                    else:
+                        start += rng.start * offset
+                        step += rng.step * offset
                 duration_base += start
                 duration_factors.append(step)
             
@@ -600,13 +630,25 @@ class LinSpaceBuilder(ProgramBuilder):
     def play_arbitrary_waveform(self, waveform: Union[Waveform,WaveformCollection],
                                 stepped_var_list: Optional[List[Tuple[str,SimpleExpressionStepped]]] = None):
         
+        if self._meas_queue:
+            meas = self._meas_queue.pop()
+            if self._reversed_counter%2:
+                duration = waveform.duration
+                meas = [
+                    (name, duration - (begin + length), length)
+                    for name, begin, length in meas
+                ]
+        else:
+            meas = None
+        
         # recognize voltage trafo sweep syntax from a transforming waveform.
         # other sweepable things may need different approaches.
         if not isinstance(waveform,(TransformingWaveform,WaveformCollection)):
             assert stepped_var_list is None
-            ret = self._stack[-1].append(LinSpaceArbitraryWaveform(waveform=waveform,channels=waveform.defined_channels,))
-            if self._meas_queue:
-                self._stack[-1][-1]._measurement_memory.add_measurements(self._meas_queue.pop())
+            ret = self._stack[-1].append(LinSpaceArbitraryWaveform(waveform=waveform.reversed() if self._reversed_counter%2 else waveform,
+                                                                   channels=waveform.defined_channels,))
+            if meas:
+                self._stack[-1][-1]._measurement_memory.add_measurements(meas)
             return ret
         
             
@@ -627,12 +669,14 @@ class LinSpaceBuilder(ProgramBuilder):
         
         #fast track
         if not dependent_trafo_vals_flag and not isinstance(waveform,WaveformCollection):
-            ret = self._stack[-1].append(LinSpaceArbitraryWaveform(waveform=waveform,channels=waveform.defined_channels,))
-            if self._meas_queue:
-                self._stack[-1][-1]._measurement_memory.add_measurements(self._meas_queue.pop())
+            ret = self._stack[-1].append(LinSpaceArbitraryWaveform(waveform=waveform.reversed() if self._reversed_counter%2 else waveform,
+                                                                   channels=waveform.defined_channels,))
+            if meas:
+                self._stack[-1][-1]._measurement_memory.add_measurements(meas)
             return ret
     
         ranges = self._get_ranges()
+        reversals = self._get_range_reversals()
         ranges_list = list(ranges)
         index_factors = {}
         
@@ -665,7 +709,7 @@ class LinSpaceBuilder(ProgramBuilder):
 
                 offsets = value.offsets
                 #there can never be more than one key in this
-                # (nowhere is an evaluation of arithmetics betwen steppings intended)
+                # (nowhere is an evaluation of arithmetics between steppings intended)
                 assert len(offsets)==1
                 assert all(v==1 for v in offsets.values())
                 assert set(offsets.keys())=={var_name,}
@@ -700,8 +744,12 @@ class LinSpaceBuilder(ProgramBuilder):
                         step = 0.
                         offset = offsets.get(rng_name, None)
                         if offset:
-                            start += rng.start * offset
-                            step += rng.step * offset
+                            if reversals[rng_name]:
+                                start += (rng.stop-1) * offset
+                                step += -rng.step * offset
+                            else:
+                                start += rng.start * offset
+                                step += rng.step * offset
                         base += start
                         incs.append(step)
                     factors[ch_name] = tuple(incs)
@@ -710,7 +758,7 @@ class LinSpaceBuilder(ProgramBuilder):
         # assert ba        
 
         ret = self._stack[-1].append(LinSpaceArbitraryWaveformIndexed(
-            waveform=waveform,
+            waveform=waveform.reversed() if self._reversed_counter%2 and not stepped_var_list else waveform,
             channels=waveform_propertyextractor.defined_channels.union(set(index_factors.keys())),
             scale_bases=scale_bases,
             scale_factors=scale_factors,
@@ -718,8 +766,8 @@ class LinSpaceBuilder(ProgramBuilder):
             offset_factors=offset_factors,
             index_factors=index_factors,
             ))
-        if self._meas_queue:
-            self._stack[-1][-1]._measurement_memory.add_measurements(self._meas_queue.pop())
+        if meas:
+            self._stack[-1][-1]._measurement_memory.add_measurements(meas)
         return ret
 
     def measure(self, measurements: Optional[Sequence[MeasurementWindow]]):
@@ -736,7 +784,19 @@ class LinSpaceBuilder(ProgramBuilder):
         blocks = self._stack.pop()
         if blocks:
             self._stack[-1].append(LinSpaceRepeat(body=tuple(blocks), count=repetition_count))
-
+    
+    @contextlib.contextmanager
+    def time_reversed(self, measurements: Optional[Sequence[MeasurementWindow]] = None) -> ContextManager['ProgramBuilder']:
+        self._reversed_counter += 1
+        self._stack.append([])
+        yield self
+        blocks = self._stack.pop()
+        if blocks:
+            for block in blocks:
+                block._reverse_body()
+            self._stack[-1].extend(blocks[::-1])
+        self._reversed_counter += 1
+    
     @contextlib.contextmanager
     def with_sequence(self,
                       measurements: Optional[Sequence[MeasurementWindow]] = None) -> ContextManager['ProgramBuilder']:
@@ -767,7 +827,7 @@ class LinSpaceBuilder(ProgramBuilder):
         if len(rng) == 0:
             return
         self._stack.append([])
-        self._ranges.append((index_name, rng))
+        self._ranges.append((index_name, rng, self._reversed_counter%2))
         yield self
         cmds = self._stack.pop()
         self._ranges.pop()
@@ -811,12 +871,17 @@ class LinSpaceBuilder(ProgramBuilder):
                 #this case should not happen, should have been caught beforehand:
                 # or maybe not, if e.g. amp is zero for some reason
                 # assert waveform.constant_value_dict() is None
-                return waveform
+                return waveform.reversed() if self._reversed_counter%2 else waveform
             else:
+                if remaining_ranges[0][1].reverse:
+                    direction = -1
+                else:
+                    direction = 1
                 return WaveformCollection(
                     tuple(build_nested_wf_colls(remaining_ranges[1:],
                           fixed_elements+[(remaining_ranges[0][0],remaining_ranges[0][1].value({remaining_ranges[0][0]:it})),])
-                          for it in remaining_ranges[0][1].rng))
+                          for it in remaining_ranges[0][1].rng[::direction]))
+
         
         # not completely convinced this works as intended.
         # doesn't this - also in pulse_template program creation - lead to complications with ParallelConstantChannelTrafo?
@@ -1116,7 +1181,7 @@ class _TranslationState:
         post_dep_state = self.get_dependency_state(node.dependencies())
         # the last index in the iterations may not be initialized in pre_dep_state if the outer loop only sets an index
         # after this loop is in the sequence of the current level,
-        # meaning that an trailing 0 at the end of iterations of each depState in the post_dep_state
+        # meaning that a trailing 0 at the end of iterations of each depState in the post_dep_state
         # should be ignored when comparing.
         # zeros also should only mean a "Set" command, which is not harmful if executed multiple times.
         # if pre_dep_state != post_dep_state:

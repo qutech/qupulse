@@ -1319,3 +1319,8 @@ class WaveformCollection():
                 else:
                     yield item
         return tuple(flatten_tuple(self.waveform_collection))
+    
+    def reversed(self) -> 'WaveformCollection':
+        """Returns a reversed version of this waveformcollection."""
+        rev = tuple(w.reversed() for w in self._waveform_collection[::-1])
+        return WaveformCollection(rev)    

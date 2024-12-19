@@ -135,6 +135,7 @@ class SimpleExpression(Generic[NumVal]):
 class SimpleExpressionStepped(SimpleExpression):
     step_nesting_level: int
     rng: range
+    reverse: int|bool
 
 
 _lambdify_modules.append({'SimpleExpression': SimpleExpression, 'SimpleExpressionStepped': SimpleExpressionStepped})
