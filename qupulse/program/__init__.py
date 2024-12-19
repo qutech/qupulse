@@ -74,6 +74,9 @@ class ProgramBuilder(Protocol):
     def evaluate_nested_stepping(self, scope: Scope, parameter_names: set[str]) -> bool:
         return False
     
+    def time_reversed(self) -> ContextManager['ProgramBuilder']:
+        pass
+    
     def to_program(self, defined_channels: Set[ChannelID]) -> Optional[Program]:
         """Further addition of new elements might fail after finalizing the program."""
 

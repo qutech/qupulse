@@ -817,7 +817,16 @@ class LoopBuilder(ProgramBuilder):
             for value in rng:
                 top_frame.iterating = (index_name, value)
                 yield self
-
+    
+    @contextmanager
+    def time_reversed(self) -> ContextManager['LoopBuilder']:
+        inner_builder = LoopBuilder()
+        yield inner_builder
+        inner_program = inner_builder.to_program()
+        if inner_program:
+            inner_program.reverse_inplace()
+            self._try_append(inner_program, None)
+    
     @contextmanager
     def with_sequence(self, measurements: Optional[Sequence[MeasurementWindow]] = None) -> ContextManager['ProgramBuilder']:
         top_frame = StackFrame(LoopGuard(self._top, measurements), None)
