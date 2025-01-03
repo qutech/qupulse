@@ -416,7 +416,7 @@ class ExpressionScalarTests(unittest.TestCase):
 
     def test_is_nan(self):
         self.assertTrue(ExpressionScalar('nan').is_nan())
-        self.assertTrue(ExpressionScalar('0./0.').is_nan())
+        self.assertTrue((ExpressionScalar(float('inf')) / ExpressionScalar(float('inf'))).is_nan())
 
         self.assertFalse(ExpressionScalar(456).is_nan())
 

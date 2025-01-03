@@ -188,6 +188,9 @@ class Len(sympy.Function):
         if hasattr(arg, '__len__'):
             return sympy.Integer(len(arg))
 
+    def _lambdacode(self, printer) -> str:
+        return f'len({printer._print(self.args[0])})'
+
     is_Integer = True
 Len.__name__ = 'len'
 

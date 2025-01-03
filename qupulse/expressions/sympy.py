@@ -6,8 +6,9 @@
 This module defines the class Expression to represent mathematical expression as well as
 corresponding exception classes.
 """
+import numbers
 import operator
-from typing import Any, Dict, Union, Sequence, Callable, TypeVar, Type, Mapping
+from typing import Any, Dict, Union, Sequence, Callable, TypeVar, Type, Mapping, Optional
 from numbers import Number
 import warnings
 import functools
@@ -373,12 +374,28 @@ class ExpressionScalar(Expression):
         return None if isinstance(result, sympy.Rel) else bool(result)
 
     def __eq__(self, other: Union['ExpressionScalar', Number, sympy.Expr]) -> bool:
-        """Enable comparisons with Numbers"""
+        # the consistency of __hash__ and __eq__ relies on the consistency of the numeric types' behavior.
+        # The types deal with equal floats, integers and rationals for us.
+        
+        num_val = self._try_to_numeric()
+        if num_val is not None:
+            return other == num_val
+        elif isinstance(other, ALLOWED_NUMERIC_SCALAR_TYPES):
+            # self is non-numeric but other is
+            # this is a short-cut to avoid an unnecessary sympify call
+            return False
+
+        rhs = self._sympify(other)
+        lhs = self._sympified_expression
+
         # sympy's __eq__ checks for structural equality to be consistent regarding __hash__ so we do that too
         # see https://github.com/sympy/sympy/issues/18054#issuecomment-566198899
-        return self._sympified_expression == self._sympify(other)
+        return lhs == rhs
 
     def __hash__(self) -> int:
+        num_val = self._try_to_numeric()
+        if num_val is not None:
+            return hash(num_val)
         return hash(self._sympified_expression)
 
     def __add__(self, other: Union['ExpressionScalar', Number, sympy.Expr]) -> 'ExpressionScalar':
@@ -419,6 +436,24 @@ class ExpressionScalar(Expression):
 
     def _sympy_(self):
         return self._sympified_expression
+
+    def _try_to_numeric(self) -> Optional[numbers.Number]:
+        """Returns a numeric representation if the expression has no free variables. The difference to __float__ is
+        the proper treatment of integers and rationals."""
+        if self._variables:
+            return None
+        if isinstance(self._original_expression, ALLOWED_NUMERIC_SCALAR_TYPES):
+            return self._original_expression
+        expr = self._sympified_expression
+        if isinstance(expr, bool):
+            # sympify can return bool
+            return expr
+        if expr.is_Float:
+            return float(expr)
+        if expr.is_Integer:
+            return int(expr)
+        else:
+            return TimeType.from_sympy(expr)
 
     @property
     def original_expression(self) -> Union[str, Number]:
