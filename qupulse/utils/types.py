@@ -288,6 +288,14 @@ class TimeType:
         """
         return cls(numerator, denominator)
 
+    @classmethod
+    def from_sympy(cls, num: sympy.Expr):
+        if num.is_Float:
+            return cls.from_float(float(num))
+        else:
+            p, q = num.as_numer_denom()
+            return cls.from_fraction(int(p), int(q))
+
     def __repr__(self):
         return f'TimeType({self._value.numerator}, {self._value.denominator})'
 
@@ -306,7 +314,7 @@ _converter = {
     float: TimeType.from_float,
     TimeType._InternalType: TimeType,
     fractions.Fraction: TimeType,
-    sympy.Rational: lambda q: TimeType.from_fraction(q.p, q.q),
+    sympy.Rational: lambda q: TimeType.from_fraction(int(q.p), int(q.q)),
     TimeType: lambda x: x
 }
 
