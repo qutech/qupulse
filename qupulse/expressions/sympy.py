@@ -444,7 +444,7 @@ class ExpressionScalar(Expression):
             return None
         if isinstance(self._original_expression, ALLOWED_NUMERIC_SCALAR_TYPES):
             return self._original_expression
-        expr = self._sympified_expression
+        expr = self._sympified_expression.doit()
         if isinstance(expr, bool):
             # sympify can return bool
             return expr
