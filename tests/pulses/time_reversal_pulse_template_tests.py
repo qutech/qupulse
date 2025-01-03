@@ -46,7 +46,7 @@ class TimeReversalPulseTemplateTests(unittest.TestCase):
     def test_time_reversal_linspace(self):
         constant_pt = ConstantPT(4, {'a': '3.0 + x * 1.0 + y * -0.3'})
         function_pt = FunctionPT('sin(t)', 5, channel='a')
-        reversed_function_pt = FunctionPT('sin(5 - t)', 5, channel='a')
+        reversed_function_pt = function_pt.with_time_reversal()
 
         inner = (constant_pt @ function_pt).with_iteration('x', 6)
         inner_manual = (reversed_function_pt @ constant_pt).with_iteration('x', (5, -1, -1))
@@ -61,6 +61,7 @@ class TimeReversalPulseTemplateTests(unittest.TestCase):
 
         commands = to_increment_commands(program)
         manual_commands = to_increment_commands(manual_program)
+        self.assertEqual(commands, manual_commands)
 
         manual_vm = LinSpaceVM(1)
         manual_vm.set_commands(manual_commands)
