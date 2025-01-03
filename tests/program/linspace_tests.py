@@ -216,32 +216,20 @@ class PrePostDepTest(TestCase):
                 # LinSpaceHold(bases=(-1.,),factors=((0.01,),),duration_base=TimeType(10**6),duration_factors=None)
             ),)
 
-
-        key = DepKey.from_voltages((0.01,), DEFAULT_INCREMENT_RESOLUTION)
-
         self.commands = [
             Set(channel=0, value=-0.4, key=DepKey(factors=())),
              Wait(duration=TimeType(100000, 1)),
-             #here is what currently happens:
              Set(channel=0, value=-1.0, key=DepKey(factors=(10000000,))),
              Wait(duration=TimeType(1000000, 1)),
              LoopLabel(idx=0, count=9),
              Wait(duration=TimeType(1000000, 1)),
              LoopJmp(idx=0),
-             #however, i think this is what should happen (maybe also with an additional "Set" before,
-             #which might cause complications if omitted in other contexts like AWG amplitude:
-             #LoopLabel(idx=0, count=10),
-             #Set(channel=0, value=-1.0, key=DepKey(factors=(10000000,))),
-             #Wait(duration=TimeType(1000000, 1)),
-             #LoopJmp(idx=0),
              LoopLabel(idx=1, count=199),
              Set(channel=0, value=-0.4, key=DepKey(factors=())),
              Wait(duration=TimeType(100000, 1)),
              Increment(channel=0, value=0.01, dependency_key=DepKey(factors=(10000000,))),
              Wait(duration=TimeType(1000000, 1)),
              LoopLabel(idx=2, count=9),
-             #also here, an increment 0 may be helpful (at least to be able to force).
-             #Increment(channel=0, value=0, dependency_key=DepKey(factors=(10000000,))),
              Wait(duration=TimeType(1000000, 1)),
              LoopJmp(idx=2),
              LoopJmp(idx=1)
