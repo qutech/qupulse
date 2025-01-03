@@ -55,18 +55,29 @@ jobs:
       run: |
         coverage run -m pytest --junit-xml pytest.xml
 
+    - name: Generate valid name
+      run: |
+        numpy_version = ${{ matrix.numpy-version }}
+        if [[ $numpy_version == *"<2"* ]]; then
+            numpy_version="1"
+        else
+            numpy_version="2"
+        fi
+        MATRIX_NAME="python-${{ matrix.python-version }}-numpy-"$numpy_version
+        echo "MATRIX_NAME=$MATRIX_NAME" >> $GITHUB_ENV
+
     - name: Upload coverage data to coveralls.io
       run: coveralls --service=github
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        COVERALLS_FLAG_NAME: python-${{ matrix.python-version }}-${{ matrix.numpy-version }}
+        COVERALLS_FLAG_NAME: ${{ env.MATRIX_NAME }}
         COVERALLS_PARALLEL: true
     
     - name: Upload Test Results
       if: always()
       uses: actions/upload-artifact@v4
       with:
-        name: Unit Test Results ( ${{ matrix.python-version }}-${{ matrix.numpy-version }} )
+        name: Unit Test Results ( ${{ env.MATRIX_NAME }} )
         path: |
           pytest.xml
 
