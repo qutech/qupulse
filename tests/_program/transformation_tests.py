@@ -129,7 +129,7 @@ class LinearTransformationTests(unittest.TestCase):
 
         data['ignored'] = np.arange(116., 120.)
 
-        transformed = trafo(np.full(4, np.NaN), data)
+        transformed = trafo(np.full(4, np.nan), data)
 
         expected = {'transformed_a': data['a'] - data['b'],
                     'transformed_b': np.sum(raw_data, axis=0),
@@ -140,7 +140,7 @@ class LinearTransformationTests(unittest.TestCase):
         data.pop('c')
         with self.assertRaisesRegex(KeyError, 'Invalid input channels'):
 
-            trafo(np.full(4, np.NaN), data)
+            trafo(np.full(4, np.nan), data)
 
         in_chs = ('a', 'b', 'c')
         out_chs = ('a', 'b', 'c')
@@ -148,7 +148,7 @@ class LinearTransformationTests(unittest.TestCase):
         trafo = LinearTransformation(matrix, in_chs, out_chs)
 
         data_in = {'ignored': np.arange(116., 120.)}
-        transformed = trafo(np.full(4, np.NaN), data_in)
+        transformed = trafo(np.full(4, np.nan), data_in)
         np.testing.assert_equal(transformed, data_in)
         self.assertIs(data_in['ignored'], transformed['ignored'])
 
