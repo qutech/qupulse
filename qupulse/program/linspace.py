@@ -45,6 +45,16 @@ class LinSpaceNode:
         raise NotImplementedError
 
     def reversed(self, offset: int, lengths: list):
+        """Get the time reversed version of this linspace node. Since this is a non-local operation the arguments give
+        the context.
+
+        Args:
+            offset:  Active iterations that are not reserved
+            lengths: Lengths of the currently active iterations that have to be reversed
+
+        Returns:
+            Time reversed version.
+        """
         raise NotImplementedError
 
 
@@ -66,6 +76,8 @@ class LinSpaceHold(LinSpaceNode):
     def reversed(self, offset: int, lengths: list):
         if not lengths:
             return self
+        # If the iteration length is `n`, the starting point is shifted by `n - 1`
+        steps = [length - 1 for length in lengths]
         bases = []
         factors = []
         for ch_base, ch_factors in zip(self.bases, self.factors):
@@ -73,7 +85,8 @@ class LinSpaceHold(LinSpaceNode):
                 bases.append(ch_base)
                 factors.append(ch_factors)
             else:
-                ch_reverse_base = ch_base + sum(length*factor for factor, length in zip(ch_factors[offset:], lengths))
+                ch_reverse_base = ch_base + sum(step * factor
+                                                for factor, step in zip(ch_factors[offset:], steps))
                 reversed_factors = ch_factors[:offset] + tuple(-f for f in ch_factors[offset:])
                 bases.append(ch_reverse_base)
                 factors.append(reversed_factors)
@@ -82,7 +95,8 @@ class LinSpaceHold(LinSpaceNode):
             duration_factors = self.duration_factors
             duration_base = self.duration_base
         else:
-            duration_base = self.duration_base + sum((length*factor for factor, length in zip(self.duration_factors[offset:], lengths)), TimeType(0))
+            duration_base = self.duration_base + sum((step * factor
+                                                      for factor, step in zip(self.duration_factors[offset:], steps)), TimeType(0))
             duration_factors = self.duration_factors[:offset] + tuple(-f for f in self.duration_factors[offset:])
         return LinSpaceHold(tuple(bases), tuple(factors), duration_base=duration_base, duration_factors=duration_factors)
 
