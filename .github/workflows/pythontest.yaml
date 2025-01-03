@@ -57,7 +57,7 @@ jobs:
 
     - name: Generate valid name
       run: |
-        numpy_version = ${{ matrix.numpy-version }}
+        numpy_version="${{ matrix.numpy-version }}"
         if [[ $numpy_version == *"<2"* ]]; then
             numpy_version="1"
         else
