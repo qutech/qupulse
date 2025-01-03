@@ -59,14 +59,14 @@ jobs:
       run: coveralls --service=github
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        COVERALLS_FLAG_NAME: python-${{ matrix.python-version }}-${{ matrix.time-type }}
+        COVERALLS_FLAG_NAME: python-${{ matrix.python-version }}-${{ matrix.numpy-version }}
         COVERALLS_PARALLEL: true
     
     - name: Upload Test Results
       if: always()
       uses: actions/upload-artifact@v4
       with:
-        name: Unit Test Results ( ${{ matrix.python-version }}-${{ matrix.time-type }} )
+        name: Unit Test Results ( ${{ matrix.python-version }}-${{ matrix.numpy-version }} )
         path: |
           pytest.xml
 
