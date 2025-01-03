@@ -477,8 +477,10 @@ def to_increment_commands(linspace_nodes: Sequence[LinSpaceNode]) -> List[Comman
 
 
 class LinSpaceVM:
-    def __init__(self, channels: int):
+    def __init__(self, channels: int,
+                 sample_resolution: TimeType = TimeType.from_fraction(1, 2)):
         self.current_values = [np.nan] * channels
+        self.sample_resolution = sample_resolution
         self.time = TimeType(0)
         self.registers = tuple({} for _ in range(channels))
 
@@ -491,10 +493,10 @@ class LinSpaceVM:
 
     def change_state(self, cmd: Union[Set, Increment, Wait, Play]):
         if isinstance(cmd, Play):
-            num = 17
-            dt = cmd.waveform.duration / num
+            dt = self.sample_resolution
             t = TimeType(0)
-            for _ in range(num):
+            total_duration = cmd.waveform.duration
+            while t <= total_duration and dt > 0:
                 sample_time = np.array([float(t)])
                 values = []
                 for (idx, ch) in enumerate(cmd.channels):
@@ -502,6 +504,7 @@ class LinSpaceVM:
                 self.history.append(
                     (self.time, self.current_values.copy())
                 )
+                dt = min(total_duration - t, self.sample_resolution)
                 self.time += dt
                 t += dt
         elif isinstance(cmd, Wait):
