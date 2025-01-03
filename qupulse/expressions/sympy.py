@@ -373,12 +373,28 @@ class ExpressionScalar(Expression):
         return None if isinstance(result, sympy.Rel) else bool(result)
 
     def __eq__(self, other: Union['ExpressionScalar', Number, sympy.Expr]) -> bool:
-        """Enable comparisons with Numbers"""
+        # the consistency of __hash__ and __eq__ relies on the consistency of the numeric types' behavior.
+        # The types deal with equal floats, integers and rationals for us.
+        
+        num_val = self._try_to_numeric()
+        if num_val is not None:
+            return other == num_val
+        elif isinstance(other, ALLOWED_NUMERIC_SCALAR_TYPES):
+            # self is non-numeric but other is
+            # this is a short-cut to avoid an unnecessary sympify call
+            return False
+
+        rhs = self._sympify(other)
+        lhs = self._sympified_expression
+
         # sympy's __eq__ checks for structural equality to be consistent regarding __hash__ so we do that too
         # see https://github.com/sympy/sympy/issues/18054#issuecomment-566198899
-        return self._sympified_expression == self._sympify(other)
+        return lhs == rhs
 
     def __hash__(self) -> int:
+        num_val = self._try_to_numeric()
+        if num_val is not None:
+            return hash(num_val)
         return hash(self._sympified_expression)
 
     def __add__(self, other: Union['ExpressionScalar', Number, sympy.Expr]) -> 'ExpressionScalar':
