@@ -82,6 +82,9 @@ include = [
     "/qupulse",
 ]
 
+[tool.hatch.envs.hatch-test]
+features = ["default"]
+
 [tool.hatch.envs.docs]
 installer = "uv"
 dependencies = [
