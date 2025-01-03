@@ -7,7 +7,7 @@ This module defines the class Expression to represent mathematical expression as
 corresponding exception classes.
 """
 import operator
-from typing import Any, Dict, Union, Sequence, Callable, TypeVar, Type, Mapping
+from typing import Any, Dict, Union, Sequence, Callable, TypeVar, Type, Mapping, Optional
 from numbers import Number
 import warnings
 import functools
@@ -419,6 +419,24 @@ class ExpressionScalar(Expression):
 
     def _sympy_(self):
         return self._sympified_expression
+
+    def _try_to_numeric(self) -> Optional[Union[*ALLOWED_NUMERIC_SCALAR_TYPES]]:
+        """Returns a numeric representation if the expression has no free variables. The difference to __float__ is
+        the proper treatment of integers and rationals."""
+        if self._variables:
+            return None
+        if isinstance(self._original_expression, ALLOWED_NUMERIC_SCALAR_TYPES):
+            return self._original_expression
+        expr = self._sympified_expression
+        if isinstance(expr, bool):
+            # sympify can return bool
+            return expr
+        if expr.is_Float:
+            return float(expr)
+        if expr.is_Integer:
+            return int(expr)
+        else:
+            return TimeType.from_sympy(expr)
 
     @property
     def original_expression(self) -> Union[str, Number]:
