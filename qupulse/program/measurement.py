@@ -1,9 +1,11 @@
+import collections
 import contextlib
 from typing import Sequence, Mapping, Iterable, Optional, Union, ContextManager, Callable
 from dataclasses import dataclass
 from functools import cached_property
 
-import numpy
+import numba as nb
+import numpy as np
 
 from qupulse.utils.types import TimeType
 from qupulse.program import (ProgramBuilder, Program, HardwareVoltage, HardwareTime,
@@ -177,7 +179,26 @@ class MeasurementBuilder(ProgramBuilder):
     def to_program(self) -> Optional[Program]:
         """Further addition of new elements might fail after finalizing the program."""
         if self._frames[0].keep:
-            return MeasurementInstructions(self._frames[0].commands)
+
+            return MeasurementInstructions(_merge_waits(self._frames[0].commands))
+
+
+def _merge_waits(sequence: Sequence[Command]) -> Sequence[Command]:
+    """Merges consecutive waits and removes trailing waits"""
+    merged = []
+    wait_duration = 0
+    for command in sequence:
+        if isinstance(command, Wait):
+            wait_duration = wait_duration + command.duration
+        else:
+            if wait_duration != 0:
+                merged.append(Wait(wait_duration))
+                wait_duration = 0
+            merged.append(command)
+    if wait_duration != 0:
+        # This is just here to document that we remove trailing waits
+        pass
+    return merged
 
 
 def _reversed_commands(cmds: Sequence[Command]) -> Sequence[Command]:
@@ -211,54 +232,238 @@ class MeasurementVM:
     """A VM that is capable of executing the measurement commands"""
 
     def __init__(self, callback: Callable[[str, float, float], None]):
-        self._time = TimeType(0)
         self._memory = {}
         self._counts = {}
+        self._stack = []
         self._callback = callback
 
     def _eval_hardware_time(self, t: HardwareTime):
         if isinstance(t, SimpleExpression):
             value = t.base
             for (factor_name, factor_val) in t.offsets.items():
-                count = self._counts[self._memory[factor_name]]
+                count = self._stack[self._memory[factor_name]]
                 value += factor_val * count
             return value
         else:
             return t
 
-    def _execute_after_label(self, sequence: Sequence[Command]) -> int:
-        skip = 0
-        for idx, cmd in enumerate(sequence):
-            if idx < skip:
-                continue
+    def _execute(self, sequence: Sequence[Command]):
+        time = TimeType(0)
+        labels = {cmd.idx: pos for pos, cmd in enumerate(sequence) if isinstance(cmd, LoopLabel)}
+
+        memory_map = self._memory
+        stack = self._stack
+
+        current = 0
+        while current < len(sequence):
+            cmd = sequence[current]
             if isinstance(cmd, LoopJmp):
-                return idx
+                stack[-1] += 1
+                pos = labels[cmd.idx]
+                if stack[-1] < sequence[pos].count:
+                    current = pos + 1
+                    continue
+                else:
+                    stack.pop()
+
             elif isinstance(cmd, LoopLabel):
                 if cmd.runtime_name:
-                    self._memory[cmd.runtime_name] = cmd.idx
-
-                for iter_val in range(cmd.count):
-                    self._counts[cmd.idx] = iter_val
-                    pos = self._execute_after_label(sequence[idx + 1:])
-                skip = idx + pos + 2
+                    memory_map[cmd.runtime_name] = len(stack)
+                stack.append(0)
 
             elif isinstance(cmd, Measure):
-                meas_time = float(self._eval_hardware_time(cmd.delay) + self._time)
+                meas_time = float(self._eval_hardware_time(cmd.delay) + time)
                 meas_len = float(self._eval_hardware_time(cmd.length))
                 self._callback(cmd.meas_id, meas_time, meas_len)
 
             elif isinstance(cmd, Wait):
-                self._time += self._eval_hardware_time(cmd.duration)
+                time += self._eval_hardware_time(cmd.duration)
+            current += 1
 
     def execute(self, commands: Sequence[Command]):
-        self._execute_after_label(commands)
+        self._execute(commands)
 
 
-def to_table(commands: Sequence[Command]) -> dict[str, numpy.ndarray]:
+def to_table(commands: Sequence[Command]) -> dict[str, np.ndarray]:
     tables = {}
 
     vm = MeasurementVM(lambda name, begin, length: tables.setdefault(name, []).append((begin, length)))
     vm.execute(commands)
     return {
-        name: numpy.array(values) for name, values in tables.items()
+        name: np.array(values) for name, values in tables.items()
     }
+
+
+_FastCommand = np.dtype([
+    ('op_code', 'u4'),
+    ('loop_count', 'u4'),
+    ('meas_index', 'u4'),
+    ('payload_1', 'i8', (8,)),
+    ('payload_2', 'i8', (8,)),
+])
+
+
+@dataclass
+class FastInstructions:
+    time_base: int
+    measurement_names: tuple[str, ...]
+    measurement_lengths: tuple[int, ...]
+
+    commands: np.ndarray
+
+    def create_tables(self) -> dict[str, np.ndarray]:
+        tables = _execute_fast(self.commands, self.measurement_lengths)
+        return {
+            name: arr.reshape(-1, 2) for name, arr in zip(self.measurement_names, tables)
+        }
+
+    @classmethod
+    def from_commands(cls, time_base: int, sequence: Sequence[Command],
+                      measurement_opcodes: Mapping[MeasurementID, int]) -> 'FastInstructions':
+        """By default all measurements get the opcode ???. measuzrement opcodes allows to spcify that"""
+        measurement_names = {}
+        measurement_stack = [collections.defaultdict(lambda: 0)]
+        
+        loop_counts = {}
+
+        commands = np.zeros_like(sequence, dtype=_FastCommand)
+        stack = []
+        for idx, command in enumerate(sequence):
+            if isinstance(command, LoopJmp):
+                stack.pop()
+
+                for meas_id, meas_count in measurement_stack.pop().items():
+                    measurement_stack[-1][meas_id] += meas_count * loop_counts[command.idx]
+
+                commands['op_code'][idx] = 1
+                commands['loop_count'][idx] = loop_counts[command.idx]
+
+            elif isinstance(command, LoopLabel):
+                stack.append(command.runtime_name)
+                measurement_stack.append(collections.defaultdict(lambda: 0))
+                
+                commands['op_code'][idx] = 2
+                loop_counts[command.idx] = commands['loop_count'][idx] =  command.count
+
+            elif isinstance(command, Measure):
+                measurement_stack[-1][command.meas_id] += 1
+
+                commands['op_code'][idx] = measurement_opcodes.get(command.meas_id, 3)
+                commands['meas_index'][idx] = measurement_names.setdefault(command.meas_id, len(measurement_names))
+                delay_payload = _make_idx(time_base, stack, command.delay)
+                length_payload = _make_idx(time_base, stack, command.length)
+
+                commands['payload_1'][idx] = delay_payload
+                commands['payload_2'][idx] = length_payload
+
+            elif isinstance(command, Wait):
+                commands['op_code'][idx] = 4
+                commands['payload_1'][idx] = _make_idx(time_base, stack, command.duration)
+            else:
+                raise NotImplementedError("Unkonwn command", command)
+
+        measurement_lengths, = measurement_stack
+        meas_lengths = []
+        meas_names = []
+        for meas_id, pos in measurement_names.items():
+            meas_lengths.append(measurement_lengths[meas_id])
+            meas_names.append(meas_id)
+
+        return cls(time_base, tuple(meas_names), tuple(meas_lengths), commands)
+
+
+@nb.njit(inline='always')
+def _evaluate_payload(stack: list[int], payload):
+    value = np.int64(payload[0])
+    for idx, factor in zip(stack, payload[1:]):
+        value += factor * idx
+    return value
+
+
+tuple_type = nb.types.Tuple((nb.types.uint32, nb.types.uint32))
+
+
+@nb.njit
+def _execute_fast(commands,
+                  measurement_lengths: Sequence[int]):
+    tables = [np.zeros(1 + 2 * meas_len, dtype=np.int64)
+              for meas_len in measurement_lengths]
+
+    time = nb.int64(0)
+
+    positions = [0] * 7
+    values = [0] * 7
+    stack_len = 0
+
+    current = nb.uint32(0)
+    while current < len(commands):
+        op_code = commands['op_code'][current]
+        if op_code == 0:
+            # no op
+            current += 1
+
+        elif op_code == 1:
+            # loop jump
+            stack_len -= 1
+            value = values[stack_len] + 1
+            count = commands['loop_count'][current]
+            if values[stack_len] < count:
+                values[stack_len] += value
+                current = positions[stack_len] + 1
+                stack_len += 1
+            else:
+                current += 1
+
+        elif op_code == 2:
+            # loop label
+            positions[stack_len] = current
+            values[stack_len] = 0
+            stack_len += 1
+            current += 1
+
+        elif op_code == 3:
+            # create table entry
+            meas_idx = commands['meas_index'][current]
+            delay_payload = commands['payload_1'][current]
+            length_payload = commands['payload_2'][current]
+
+            delay = _evaluate_payload(values, delay_payload)
+            length = _evaluate_payload(values, length_payload)
+            begin = time + delay
+
+            table = tables[meas_idx]
+            meas_len = table[0]
+            table[1 + meas_len * 2] = begin
+            table[2 + meas_len * 2] = length
+            table[0] += 1
+            current += 1
+
+        elif op_code == 4:
+            duration_payload = commands['payload_1'][current]
+            time += _evaluate_payload(values, duration_payload)
+            current += 1
+
+    return [t[1:].reshape(-1, 2) for t in tables]
+
+
+def _to_int(v) -> int:
+    if isinstance(v, int):
+        return v
+    if isinstance(v, float):
+        assert v.is_integer()
+        return int(v)
+    assert v.denominator == 1
+    return v.numerator
+
+
+def _make_idx(time_base: int, stack: Sequence[str], val: HardwareTime) -> tuple[int, int, int, int, int, int, int, int]:
+    scaled_val = val * time_base
+    if isinstance(scaled_val, SimpleExpression):
+        result = [_to_int(scaled_val.base)] + 7 * [0]
+        for runtime_name, offset in scaled_val.offsets.items():
+            idx = stack.index(runtime_name)
+            assert result[idx] == 0
+            result[idx] = _to_int(offset)
+        return tuple(result)
+    else:
+        return _to_int(scaled_val), 0, 0, 0, 0, 0, 0, 0
