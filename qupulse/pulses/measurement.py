@@ -2,6 +2,7 @@
 #
 # SPDX-License-Identifier: LGPL-3.0-or-later
 
+import warnings
 from typing import Optional, List, Tuple, Union, Dict, Set, Mapping, AbstractSet
 from numbers import Real
 import itertools
@@ -62,8 +63,11 @@ class MeasurementDefiner:
 
             begin_val = begin.evaluate_in_scope(parameters)
             length_val = length.evaluate_in_scope(parameters)
-            if begin_val < 0 or length_val < 0:
-                raise ValueError('Measurement window with negative begin or length: {}, {}'.format(begin, length))
+            try:
+                if begin_val < 0 or length_val < 0:
+                    warnings.warn('Measurement window with negative begin or length: {}, {}'.format(begin, length))
+            except TypeError:
+                pass
 
             resulting_windows.append(
                 (name,
