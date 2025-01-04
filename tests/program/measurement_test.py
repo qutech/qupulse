@@ -26,8 +26,8 @@ class SingleRampTest(TestCase):
 
     def test_commands(self):
         builder = MeasurementBuilder()
-        commands = self.pulse_template.create_program(program_builder=builder)
-        self.assertEqual(self.commands, commands)
+        instructions = self.pulse_template.create_program(program_builder=builder)
+        self.assertEqual(self.commands, instructions.commands)
 
     def test_table(self):
         table = to_table(self.commands)
@@ -37,3 +37,24 @@ class SingleRampTest(TestCase):
         np.testing.assert_array_equal(self.table_b, tab_b)
 
 
+class ComplexPulse(TestCase):
+    def setUp(self):
+        hold = ConstantPT(10 ** 6, {'a': 1}, measurements=[('A', 10, 100), ('B', '1 + ii * 2 + jj', '3 + ii + jj')])
+        dyn_hold = ConstantPT('10 ** 6 - 4 * ii', {'a': 1}, measurements=[('A', 10, 100), ('B', '1 + ii * 2 + jj', '3 + ii + jj')])
+
+        self.pulse_template = SequencePT(
+            hold.with_repetition(2).with_iteration('ii', 100).with_repetition(2).with_iteration('jj', 200),
+            measurements=[('A', 1, 100)]
+        ).with_repetition(2)
+
+        self.commands = []
+
+    def test_commands(self):
+        builder = MeasurementBuilder()
+        commands = self.pulse_template.create_program(program_builder=builder)
+        to_table(commands.commands)
+        raise NotImplementedError("TODO")
+
+    def test_table(self):
+
+        raise NotImplementedError("TODO")
