@@ -44,6 +44,19 @@ class LinSpaceNode:
     def dependencies(self) -> Mapping[int, set]:
         raise NotImplementedError
 
+    def reversed(self, offset: int, lengths: list):
+        """Get the time reversed version of this linspace node. Since this is a non-local operation the arguments give
+        the context.
+
+        Args:
+            offset:  Active iterations that are not reserved
+            lengths: Lengths of the currently active iterations that have to be reversed
+
+        Returns:
+            Time reversed version.
+        """
+        raise NotImplementedError
+
 
 @dataclass
 class LinSpaceHold(LinSpaceNode):
@@ -60,12 +73,45 @@ class LinSpaceHold(LinSpaceNode):
                 for idx, factors in enumerate(self.factors)
                 if factors}
 
+    def reversed(self, offset: int, lengths: list):
+        if not lengths:
+            return self
+        # If the iteration length is `n`, the starting point is shifted by `n - 1`
+        steps = [length - 1 for length in lengths]
+        bases = []
+        factors = []
+        for ch_base, ch_factors in zip(self.bases, self.factors):
+            if ch_factors is None or len(ch_factors) <= offset:
+                bases.append(ch_base)
+                factors.append(ch_factors)
+            else:
+                ch_reverse_base = ch_base + sum(step * factor
+                                                for factor, step in zip(ch_factors[offset:], steps))
+                reversed_factors = ch_factors[:offset] + tuple(-f for f in ch_factors[offset:])
+                bases.append(ch_reverse_base)
+                factors.append(reversed_factors)
+
+        if self.duration_factors is None or len(self.duration_factors) <= offset:
+            duration_factors = self.duration_factors
+            duration_base = self.duration_base
+        else:
+            duration_base = self.duration_base + sum((step * factor
+                                                      for factor, step in zip(self.duration_factors[offset:], steps)), TimeType(0))
+            duration_factors = self.duration_factors[:offset] + tuple(-f for f in self.duration_factors[offset:])
+        return LinSpaceHold(tuple(bases), tuple(factors), duration_base=duration_base, duration_factors=duration_factors)
+
 
 @dataclass
 class LinSpaceArbitraryWaveform(LinSpaceNode):
     """This is just a wrapper to pipe arbitrary waveforms through the system."""
     waveform: Waveform
     channels: Tuple[ChannelID, ...]
+
+    def reversed(self, offset: int, lengths: list):
+        return LinSpaceArbitraryWaveform(
+            waveform=self.waveform.reversed(),
+            channels=self.channels,
+        )
 
 
 @dataclass
@@ -80,6 +126,9 @@ class LinSpaceRepeat(LinSpaceNode):
             for idx, deps in node.dependencies().items():
                 dependencies.setdefault(idx, set()).update(deps)
         return dependencies
+
+    def reversed(self, offset: int, counts: list):
+        return LinSpaceRepeat(tuple(node.reversed(offset, counts) for node in reversed(self.body)), self.count)
 
 
 @dataclass
@@ -99,6 +148,12 @@ class LinSpaceIter(LinSpaceNode):
                 if shortened != {()}:
                     dependencies.setdefault(idx, set()).update(shortened)
         return dependencies
+
+    def reversed(self, offset: int, lengths: list):
+        lengths.append(self.length)
+        reversed_iter = LinSpaceIter(tuple(node.reversed(offset, lengths) for node in reversed(self.body)), self.length)
+        lengths.pop()
+        return reversed_iter
 
 
 class LinSpaceBuilder(ProgramBuilder):
@@ -213,6 +268,14 @@ class LinSpaceBuilder(ProgramBuilder):
         self._ranges.pop()
         if cmds:
             self._stack[-1].append(LinSpaceIter(body=tuple(cmds), length=len(rng)))
+
+    @contextlib.contextmanager
+    def time_reversed(self) -> ContextManager['LinSpaceBuilder']:
+        self._stack.append([])
+        yield self
+        inner = self._stack.pop()
+        offset = len(self._ranges)
+        self._stack[-1].extend(node.reversed(offset, []) for node in reversed(inner))
 
     def to_program(self) -> Optional[Sequence[LinSpaceNode]]:
         if self._root():
@@ -414,8 +477,10 @@ def to_increment_commands(linspace_nodes: Sequence[LinSpaceNode]) -> List[Comman
 
 
 class LinSpaceVM:
-    def __init__(self, channels: int):
+    def __init__(self, channels: int,
+                 sample_resolution: TimeType = TimeType.from_fraction(1, 2)):
         self.current_values = [np.nan] * channels
+        self.sample_resolution = sample_resolution
         self.time = TimeType(0)
         self.registers = tuple({} for _ in range(channels))
 
@@ -428,7 +493,20 @@ class LinSpaceVM:
 
     def change_state(self, cmd: Union[Set, Increment, Wait, Play]):
         if isinstance(cmd, Play):
-            raise NotImplementedError("TODO: Implement arbitrary waveform simulation")
+            dt = self.sample_resolution
+            t = TimeType(0)
+            total_duration = cmd.waveform.duration
+            while t <= total_duration and dt > 0:
+                sample_time = np.array([float(t)])
+                values = []
+                for (idx, ch) in enumerate(cmd.channels):
+                    self.current_values[idx] = values.append(cmd.waveform.get_sampled(channel=ch, sample_times=sample_time)[0])
+                self.history.append(
+                    (self.time, self.current_values.copy())
+                )
+                dt = min(total_duration - t, self.sample_resolution)
+                self.time += dt
+                t += dt
         elif isinstance(cmd, Wait):
             self.history.append(
                 (self.time, self.current_values.copy())

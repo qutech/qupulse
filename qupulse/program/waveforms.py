@@ -1277,3 +1277,6 @@ class ReversedWaveform(Waveform):
 
     def reversed(self) -> 'Waveform':
         return self._inner
+
+    def __repr__(self):
+        return f"ReversedWaveform(inner={self._inner!r})"

@@ -428,6 +428,10 @@ class ExpressionScalarTests(unittest.TestCase):
 
         np.testing.assert_allclose(expected, result)
 
+    def test_try_to_numeric(self):
+        expr = ExpressionScalar('Sum(9, (x, 0, 5), (y, 0, 7))')
+        self.assertEqual(expr._try_to_numeric(), 9*6*8)
+
     def test_evaluate_with_exact_rationals(self):
         expr = ExpressionScalar('1 / 3')
         self.assertEqual(TimeType.from_fraction(1, 3), expr.evaluate_with_exact_rationals({}))
