@@ -327,10 +327,23 @@ class DepState:
     iterations: Tuple[int, ...]
 
     def required_increment_from(self, previous: 'DepState', factors: Sequence[float]) -> float:
-        assert len(self.iterations) == len(factors)
-        assert len(self.iterations) == len(previous.iterations) or all(factor == 0
-                                                                       for factor in factors[len(previous.iterations):])
+        """Calculate the required increment from the previous state to the current given the factors that determine
+        the voltage dependency of each index.
 
+        By convention there are only two possible values for each iteration index integer in self: 0 or the last index
+        The three possible increments for each iteration are none, regular and jump to next line.
+        
+        The previous dependency state can have a different iteration length if the trailing factors now or during the
+        last iteration are zero.
+
+        Args:
+            previous: The previous state to calculate the required increment from. It has to belong to the same DepKey.
+            factors: The number of factors has to be the same as the current number of iterations.
+
+        Returns:
+            The increment
+        """
+        assert len(self.iterations) == len(factors)
 
         increment = self.base - previous.base
         for old, new, factor in zip(previous.iterations, self.iterations, factors):
