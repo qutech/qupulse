@@ -85,50 +85,133 @@ class SequencedRepetitionTest(TestCase):
             )
         
         #not working
-        # self.pulse_template = (dependent_constant @ dependent_constant2.with_repetition(rep_factor) @ (wait.with_iteration('idx_a', rep_factor))).with_iteration('idx_b', rep_factor)\
+        self.pulse_template_1 = (
+                dependent_constant @
+                dependent_constant2.with_repetition(rep_factor) @
+                wait.with_iteration('idx_a', rep_factor)
+        ).with_iteration('idx_b', rep_factor)
+
         #not working
-        self.pulse_template = (dependent_constant2.with_repetition(rep_factor) @ (wait.with_iteration('idx_a', rep_factor))).with_iteration('idx_b', rep_factor)\
-        #working
-        # self.pulse_template = (dependent_constant2.with_repetition(rep_factor)).with_iteration('idx_b', rep_factor)\
-        
-        
-        self.program = []#TODO
-        # self.program = LinSpaceIter(
-        #     length=rep_factor,
-        #     body=(LinSpaceRepeat(body=LinSpaceHold(
-        #         bases=(-0.3,),
-        #         factors=((0.05,),),
-        #         duration_base=TimeType(base_time),
-        #         duration_factors=None
-        #     ),count=rep_factor),)
-        # )
+        self.pulse_template_2 = (
+                dependent_constant2.with_repetition(rep_factor) @
+                wait.with_iteration('idx_a', rep_factor)
+        ).with_iteration('idx_b', rep_factor)
+
+        wait_hold = LinSpaceHold(
+            bases=(-1.0, -0.5),
+            factors=((0.0, 0.01), (0.05, 0.0),),
+            duration_base=TimeType.from_float(base_time),
+            duration_factors=None
+        )
+        dependent_hold_1 = LinSpaceHold(
+            bases=(-1.0, -0.5),
+            factors=(None, (0.05,),),
+            duration_base=TimeType.from_float(base_time),
+            duration_factors=None
+        )
+        dependent_hold_2 = LinSpaceHold(
+            bases=(-0.5, -0.3),
+            factors=(None, (0.05,),),
+            duration_base=TimeType.from_float(base_time),
+            duration_factors=None
+        )
+
+        self.program_1 = LinSpaceIter(
+             length=rep_factor,
+             body=(
+                 dependent_hold_1,
+                 LinSpaceRepeat(body=(dependent_hold_2,), count=rep_factor),
+                 LinSpaceIter(body=(wait_hold,), length=rep_factor),
+             )
+        )
+        self.program_2 = []#TODO
 
         key = DepKey.from_voltages((0.05,), DEFAULT_INCREMENT_RESOLUTION)
 
-        self.commands = [
-        ]#TODO
-        
-        self.output = [
-        ]#TODO
-        
-        # self.output = [
-        #     (TimeType(base_time*r + base_time*rep_factor*idx), [sum([-0.3] + [0.05] * idx)]) for idx in range(rep_factor) for r in range(rep_factor)
-        # ]
+        wait_cmd = Wait(duration=TimeType(100, 1))
 
-    def test_program(self):
+        self.commands_1 = [
+            Set(channel=0, value=-1.0, key=DepKey(factors=())),
+            Set(channel=1, value=-0.5, key=DepKey(factors=(50000000,))),
+            Wait(duration=TimeType(100, 1)),
+
+            Set(channel=0, value=-0.5, key=DepKey(factors=())),
+            Increment(channel=1, value=0.2, dependency_key=DepKey(factors=(50000000,))),
+            Wait(duration=TimeType(100, 1)),
+
+            LoopLabel(idx=0, count=1),
+                Wait(duration=TimeType(100, 1)),
+            LoopJmp(idx=0),
+
+            Set(channel=0, value=-1.0, key=DepKey(factors=(0, 10000000))),
+            Increment(channel=1, value=-0.2, dependency_key=DepKey(factors=(50000000,))),
+            Wait(duration=TimeType(100, 1)),
+
+            LoopLabel(idx=1, count=1),
+                Increment(channel=0, value=0.01, dependency_key=DepKey(factors=(0, 10000000))),
+                Wait(duration=TimeType(100, 1)),
+            LoopJmp(idx=1),
+
+            LoopLabel(idx=2, count=1),
+                Set(channel=0, value=-1.0, key=DepKey(factors=())),
+                Increment(channel=1, value=0.05, dependency_key=DepKey(factors=(50000000,))),
+                Wait(duration=TimeType(100, 1)),
+                Set(channel=0, value=-0.5, key=DepKey(factors=())),
+                Increment(channel=1, value=0.2, dependency_key=DepKey(factors=(50000000,))),
+                Wait(duration=TimeType(100, 1)),
+
+                LoopLabel(idx=3, count=1),
+                    Wait(duration=TimeType(100, 1)),
+                LoopJmp(idx=3),
+
+            Increment(channel=0,
+               value=-0.01,
+               dependency_key=DepKey(factors=(0, 10000000))),
+            Increment(channel=1, value=-0.2, dependency_key=DepKey(factors=(50000000,))),
+            Wait(duration=TimeType(100, 1)),
+            LoopLabel(idx=4, count=1),
+            Increment(channel=0, value=0.01, dependency_key=DepKey(factors=(0, 10000000))),
+            Wait(duration=TimeType(100, 1)),
+            LoopJmp(idx=4),
+            LoopJmp(idx=2)]
+
+
+        self.pulse_template_1 = (
+                dependent_constant @
+                dependent_constant2.with_repetition(rep_factor) @
+                wait.with_iteration('idx_a', rep_factor)
+        ).with_iteration('idx_b', rep_factor)
+
+        time = TimeType(0)
+        self.output_1 = []
+        for idx_b in range(rep_factor):
+            # does not account yet for floating poit errors. We would need to sum here
+            self.output_1.append((time, (-1.0, -0.5 + idx_b * 0.05)))
+            time += TimeType.from_float(base_time)
+
+            for _ in range(rep_factor):
+                self.output_1.append((time, (-0.5, -0.3 + idx_b * 0.05)))
+                time += TimeType.from_float(base_time)
+
+            for idx_a in range(rep_factor):
+                self.output_1.append((time, (-1.0 + 0.01 * idx_a, -0.5 + idx_b * 0.05)))
+                time += TimeType.from_float(base_time)
+
+
+    def test_program_1(self):
         program_builder = LinSpaceBuilder(('a','b'))
-        program = self.pulse_template.create_program(program_builder=program_builder)
-        self.assertEqual([self.program], program)
+        program_1 = self.pulse_template_1.create_program(program_builder=program_builder)
+        self.assertEqual([self.program_1], program_1)
 
-    def test_commands(self):
-        commands = to_increment_commands([self.program])
-        self.assertEqual(self.commands, commands)
+    def test_commands_1(self):
+        commands = to_increment_commands([self.program_1])
+        self.assertEqual(self.commands_1, commands)
 
-    def test_output(self):
+    def test_output_1(self):
         vm = LinSpaceVM(2)
-        vm.set_commands(commands=self.commands)
+        vm.set_commands(commands=self.commands_1)
         vm.run()
-        assert_vm_output_almost_equal(self, self.output, vm.history)
+        assert_vm_output_almost_equal(self, self.output_1, vm.history)
 
         
 

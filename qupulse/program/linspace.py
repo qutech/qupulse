@@ -327,8 +327,10 @@ class DepState:
     iterations: Tuple[int, ...]
 
     def required_increment_from(self, previous: 'DepState', factors: Sequence[float]) -> float:
-        assert len(self.iterations) == len(previous.iterations)
         assert len(self.iterations) == len(factors)
+        assert len(self.iterations) == len(previous.iterations) or all(factor == 0
+                                                                       for factor in factors[len(previous.iterations):])
+
 
         increment = self.base - previous.base
         for old, new, factor in zip(previous.iterations, self.iterations, factors):
