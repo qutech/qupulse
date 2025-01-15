@@ -63,6 +63,75 @@ class SingleRampTest(TestCase):
         assert_vm_output_almost_equal(self, self.output, vm.history)
 
 
+class SequencedRepetitionTest():
+    def setUp(self):
+        
+        base_time = 1e2
+        rep_factor = 2
+          
+        wait = AtomicMultiChannelPT(
+            ConstantPT(f'{base_time}', {'a': '-1. + idx_a * 0.01', }),
+            ConstantPT(f'{base_time}', {'b': '-0.5 + idx_b * 0.05'})
+            )
+        
+        dependent_constant = AtomicMultiChannelPT(
+            ConstantPT(base_time, {'a': '-1.0 '}),
+            ConstantPT(base_time, {'b': '-0.5 + idx_b*0.05',}),            
+            )
+        
+        dependent_constant2 = AtomicMultiChannelPT(
+            ConstantPT(base_time, {'a': '-0.5 '}),
+            ConstantPT(base_time, {'b': '-0.3 + idx_b*0.05',}),            
+            )
+        
+        #not working
+        # self.pulse_template = (dependent_constant @ dependent_constant2.with_repetition(rep_factor) @ (wait.with_iteration('idx_a', rep_factor))).with_iteration('idx_b', rep_factor)\
+        #not working
+        self.pulse_template = (dependent_constant2.with_repetition(rep_factor) @ (wait.with_iteration('idx_a', rep_factor))).with_iteration('idx_b', rep_factor)\
+        #working
+        # self.pulse_template = (dependent_constant2.with_repetition(rep_factor)).with_iteration('idx_b', rep_factor)\
+        
+        
+        self.program = []#TODO
+        # self.program = LinSpaceIter(
+        #     length=rep_factor,
+        #     body=(LinSpaceRepeat(body=LinSpaceHold(
+        #         bases=(-0.3,),
+        #         factors=((0.05,),),
+        #         duration_base=TimeType(base_time),
+        #         duration_factors=None
+        #     ),count=rep_factor),)
+        # )
+
+        key = DepKey.from_voltages((0.05,), DEFAULT_INCREMENT_RESOLUTION)
+
+        self.commands = [
+        ]#TODO
+        
+        self.output = [
+        ]#TODO
+        
+        # self.output = [
+        #     (TimeType(base_time*r + base_time*rep_factor*idx), [sum([-0.3] + [0.05] * idx)]) for idx in range(rep_factor) for r in range(rep_factor)
+        # ]
+
+    def test_program(self):
+        program_builder = LinSpaceBuilder(('a','b'))
+        program = self.pulse_template.create_program(program_builder=program_builder)
+        self.assertEqual([self.program], program)
+
+    def test_commands(self):
+        commands = to_increment_commands([self.program])
+        self.assertEqual(self.commands, commands)
+
+    def test_output(self):
+        vm = LinSpaceVM(2)
+        vm.set_commands(commands=self.commands)
+        vm.run()
+        assert_vm_output_almost_equal(self, self.output, vm.history)
+
+        
+
 class PlainCSDTest(TestCase):
     def setUp(self):
         hold = ConstantPT(10**6, {'a': '-1. + idx_a * 0.01', 'b': '-.5 + idx_b * 0.02'})
