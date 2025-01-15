@@ -63,7 +63,7 @@ class SingleRampTest(TestCase):
         assert_vm_output_almost_equal(self, self.output, vm.history)
 
 
-class SequencedRepetitionTest():
+class SequencedRepetitionTest(TestCase):
     def setUp(self):
         
         base_time = 1e2
