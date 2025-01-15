@@ -85,14 +85,8 @@ class SequencedRepetitionTest(TestCase):
             )
         
         #not working
-        self.pulse_template_1 = (
+        self.pulse_template = (
                 dependent_constant @
-                dependent_constant2.with_repetition(rep_factor) @
-                wait.with_iteration('idx_a', rep_factor)
-        ).with_iteration('idx_b', rep_factor)
-
-        #not working
-        self.pulse_template_2 = (
                 dependent_constant2.with_repetition(rep_factor) @
                 wait.with_iteration('idx_a', rep_factor)
         ).with_iteration('idx_b', rep_factor)
@@ -116,7 +110,7 @@ class SequencedRepetitionTest(TestCase):
             duration_factors=None
         )
 
-        self.program_1 = LinSpaceIter(
+        self.program = LinSpaceIter(
              length=rep_factor,
              body=(
                  dependent_hold_1,
@@ -124,13 +118,8 @@ class SequencedRepetitionTest(TestCase):
                  LinSpaceIter(body=(wait_hold,), length=rep_factor),
              )
         )
-        self.program_2 = []#TODO
 
-        key = DepKey.from_voltages((0.05,), DEFAULT_INCREMENT_RESOLUTION)
-
-        wait_cmd = Wait(duration=TimeType(100, 1))
-
-        self.commands_1 = [
+        self.commands = [
             Set(channel=0, value=-1.0, key=DepKey(factors=())),
             Set(channel=1, value=-0.5, key=DepKey(factors=(50000000,))),
             Wait(duration=TimeType(100, 1)),
@@ -139,6 +128,7 @@ class SequencedRepetitionTest(TestCase):
             Increment(channel=1, value=0.2, dependency_key=DepKey(factors=(50000000,))),
             Wait(duration=TimeType(100, 1)),
 
+            # This is the repetition
             LoopLabel(idx=0, count=1),
                 Wait(duration=TimeType(100, 1)),
             LoopJmp(idx=0),
@@ -160,60 +150,53 @@ class SequencedRepetitionTest(TestCase):
                 Increment(channel=1, value=0.2, dependency_key=DepKey(factors=(50000000,))),
                 Wait(duration=TimeType(100, 1)),
 
+                # next repetition
                 LoopLabel(idx=3, count=1),
                     Wait(duration=TimeType(100, 1)),
                 LoopJmp(idx=3),
 
-            Increment(channel=0,
-               value=-0.01,
-               dependency_key=DepKey(factors=(0, 10000000))),
-            Increment(channel=1, value=-0.2, dependency_key=DepKey(factors=(50000000,))),
-            Wait(duration=TimeType(100, 1)),
-            LoopLabel(idx=4, count=1),
-            Increment(channel=0, value=0.01, dependency_key=DepKey(factors=(0, 10000000))),
-            Wait(duration=TimeType(100, 1)),
-            LoopJmp(idx=4),
+                Increment(channel=0,
+                   value=-0.01,
+                   dependency_key=DepKey(factors=(0, 10000000))),
+                Increment(channel=1, value=-0.2, dependency_key=DepKey(factors=(50000000,))),
+                Wait(duration=TimeType(100, 1)),
+
+                LoopLabel(idx=4, count=1),
+                    Increment(channel=0, value=0.01, dependency_key=DepKey(factors=(0, 10000000))),
+                    Wait(duration=TimeType(100, 1)),
+                LoopJmp(idx=4),
             LoopJmp(idx=2)]
 
-
-        self.pulse_template_1 = (
-                dependent_constant @
-                dependent_constant2.with_repetition(rep_factor) @
-                wait.with_iteration('idx_a', rep_factor)
-        ).with_iteration('idx_b', rep_factor)
-
         time = TimeType(0)
-        self.output_1 = []
+        self.output = []
         for idx_b in range(rep_factor):
             # does not account yet for floating poit errors. We would need to sum here
-            self.output_1.append((time, (-1.0, -0.5 + idx_b * 0.05)))
+            self.output.append((time, (-1.0, -0.5 + idx_b * 0.05)))
             time += TimeType.from_float(base_time)
 
             for _ in range(rep_factor):
-                self.output_1.append((time, (-0.5, -0.3 + idx_b * 0.05)))
+                self.output.append((time, (-0.5, -0.3 + idx_b * 0.05)))
                 time += TimeType.from_float(base_time)
 
             for idx_a in range(rep_factor):
-                self.output_1.append((time, (-1.0 + 0.01 * idx_a, -0.5 + idx_b * 0.05)))
+                self.output.append((time, (-1.0 + 0.01 * idx_a, -0.5 + idx_b * 0.05)))
                 time += TimeType.from_float(base_time)
-
 
     def test_program_1(self):
         program_builder = LinSpaceBuilder(('a','b'))
-        program_1 = self.pulse_template_1.create_program(program_builder=program_builder)
-        self.assertEqual([self.program_1], program_1)
+        program_1 = self.pulse_template.create_program(program_builder=program_builder)
+        self.assertEqual([self.program], program_1)
 
     def test_commands_1(self):
-        commands = to_increment_commands([self.program_1])
-        self.assertEqual(self.commands_1, commands)
+        commands = to_increment_commands([self.program])
+        self.assertEqual(self.commands, commands)
 
     def test_output_1(self):
         vm = LinSpaceVM(2)
-        vm.set_commands(commands=self.commands_1)
+        vm.set_commands(commands=self.commands)
         vm.run()
-        assert_vm_output_almost_equal(self, self.output_1, vm.history)
+        assert_vm_output_almost_equal(self, self.output, vm.history)
 
-        
 
 class PlainCSDTest(TestCase):
     def setUp(self):
