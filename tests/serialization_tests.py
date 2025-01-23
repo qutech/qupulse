@@ -726,6 +726,20 @@ class DeserializationCallbackFinderTests(unittest.TestCase):
                 finder['qupulse.pulses.table_pulse_template.TablePulseTemplate']
             import_module.assert_not_called()
 
+    def test_qctoolkit_import(self):
+        def my_callable():
+            pass
+
+        finder = DeserializationCallbackFinder()
+
+        finder['qupulse.asd'] = my_callable
+        self.assertIs(finder['qctoolkit.asd'], my_callable)
+
+        finder.qctoolkit_alias = False
+        with self.assertRaises(KeyError):
+            # This was a ModuleNotFoundError before the qctoolkit alias package was removed
+            finder['qctoolkit.asd']
+
 
 class SerializableMetaTests(unittest.TestCase):
     def test_native_deserializable(self):
