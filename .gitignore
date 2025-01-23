@@ -9,7 +9,6 @@ dist/*
 doc/source/examples/.ipynb_checkpoints/*
 **.asv
 *.orig
-MATLAB/+qc/personalPaths.mat
 /doc/source/_autosummary/*
 .idea/
 .mypy_cache/*

@@ -55,7 +55,7 @@ The data acquisition backend for AlazarTech cards needs a package that unfortuna
 You can find documentation on how to use this library on [readthedocs](https://qupulse.readthedocs.io/en/latest/) and [IPython notebooks with examples in this repo](doc/source/examples). You can build it locally with `hatch run docs:html`.
 
 ### Folder Structure
-The repository primarily consists of the folders `qupulse` (toolkit core code) and `tests` (toolkit core tests). Additional parts of the project reside in `MATLAB` (MATLAB interface) and `doc` (configuration and source files to build documentation)  
+The repository primarily consists of the folders `qupulse` (source code), `tests` and `doc`.
 
 `qupulse` contains the entire Python source code of the project and is further partitioned the following packages of related modules 
 
