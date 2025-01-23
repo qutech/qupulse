@@ -770,7 +770,15 @@ class Serializer(object):
         else:
             repr_ = dict(representation)
 
-        module_name, class_name = repr_['type'].rsplit('.', 1)
+        package_name, *module_path, class_name = repr_['type'].split('.')
+
+        # the qctoolkit alias was removed. We hack in the new name here directly
+        if package_name == 'qctoolkit':
+            package_name = 'qupulse'
+        module_path.insert(0, package_name)
+
+        module_name = '.'.join(module_path)
+
         module = __import__(module_name, fromlist=[class_name])
         class_ = getattr(module, class_name)
 

@@ -23,9 +23,12 @@ The current feature list is as follows:
 - Hardware model representation
 - High-level pulse to hardware configuration and waveform translation routines 
 - Hardware drivers for Tabor Electronics, Tektronix and Zurich Instruments AWGs and AlazarTech Digitizers
-- MATLAB interface to access qupulse functionality
  
 Pending changes are tracked in the `changes.d` subdirectory and published in [`RELEASE_NOTES.rst`](RELEASE_NOTES.rst) on release using the tool `towncrier`.
+
+### Removed features
+
+The previous name of this package was qctoolkit. It was renamed in 2017 to highlight the pulse focus. The backward compatible alias was removed after the 0.9 release. Furthermore, this repository had a MATLAB interface for a longer time which was removed at the same time.
 
 ## Installation
 qupulse is available on [PyPi](https://pypi.org/project/qupulse/) and the latest release can be installed by executing:
@@ -52,14 +55,15 @@ The data acquisition backend for AlazarTech cards needs a package that unfortuna
 You can find documentation on how to use this library on [readthedocs](https://qupulse.readthedocs.io/en/latest/) and [IPython notebooks with examples in this repo](doc/source/examples). You can build it locally with `hatch run docs:html`.
 
 ### Folder Structure
-The repository primarily consists of the folders `qupulse` (toolkit core code) and `tests` (toolkit core tests). Additional parts of the project reside in `MATLAB` (MATLAB interface) and `doc` (configuration and source files to build documentation)  
+The repository primarily consists of the folders `qupulse` (source code), `tests` and `doc`.
 
-`qupulse` contains the entire Python source code of the project and is further partitioned the following packages of related modules 
+`qupulse` contains the entire Python source code of the project and is further partitioned the following packages of related packages 
 
 - `pulses` which contains all modules related to pulse representation.
 - `hardware` containing classes for hardware representation as well as hardware drivers
 - `utils` containing miscellaneous utility modules or wrapping code for external libraries
-- `_program` contains general and hardware specific representations of instantiated (parameter free) pulses. It is private because there is no stability guarantee.
+- `program` contains general and hardware specific representations of instantiated (parameter free) pulses.
+- `expression` contains the expression interface used by qupulse.
 
 Contents of `tests` mirror the structure of `qupulse`. For every `<module>` somewhere in `qupulse` there should exist a `<module>Tests.py` in the corresponding subdirectory of `tests`.
 
