@@ -86,6 +86,18 @@ class MeasurementBuilder(ProgramBuilder):
         self._frames[-1].keep = True
         return frame.commands
 
+    def _with_loop_scope(self, measurements, loop_name, loop_count):
+        new_commands = yield from self._with_new_frame(measurements)
+        if new_commands is None:
+            return
+        parent = self._frames[-1]
+
+        self._label_counter += 1
+        label_idx = self._label_counter
+        parent.commands.append(LoopLabel(idx=label_idx, runtime_name=loop_name, count=loop_count))
+        parent.commands.extend(new_commands)
+        parent.commands.append(LoopJmp(idx=label_idx))
+
     def inner_scope(self, scope: Scope) -> Scope:
         """This function is necessary to inject program builder specific parameter implementations into the build
         process."""
@@ -115,16 +127,7 @@ class MeasurementBuilder(ProgramBuilder):
     def with_repetition(self, repetition_count: RepetitionCount,
                         measurements: Optional[Sequence[MeasurementWindow]] = None) -> Iterable['ProgramBuilder']:
         """Measurements that are added to the new builder are dropped if the builder is empty upon exit"""
-        new_commands = yield from self._with_new_frame(measurements)
-        if new_commands is None:
-            return
-        parent = self._frames[-1]
-
-        self._label_counter += 1
-        label_idx = self._label_counter
-        parent.commands.append(LoopLabel(idx=label_idx, runtime_name=None, count=repetition_count))
-        parent.commands.extend(new_commands)
-        parent.commands.append(LoopJmp(idx=label_idx))
+        yield from self._with_loop_scope(measurements, loop_name=None, loop_count=repetition_count)
 
     @contextlib.contextmanager
     def with_sequence(self,
@@ -152,17 +155,8 @@ class MeasurementBuilder(ProgramBuilder):
     def with_iteration(self, index_name: str, rng: range,
                        measurements: Optional[Sequence[MeasurementWindow]] = None) -> Iterable['ProgramBuilder']:
         self._ranges.append((index_name, rng))
-        new_commands = yield from self._with_new_frame(measurements)
+        yield from self._with_loop_scope(measurements, loop_name=index_name, loop_count=len(rng))
         self._ranges.pop()
-        if new_commands is None:
-            return
-        parent = self._frames[-1]
-
-        self._label_counter += 1
-        label_idx = self._label_counter
-        parent.commands.append(LoopLabel(idx=label_idx, runtime_name=index_name, count=len(rng)))
-        parent.commands.extend(new_commands)
-        parent.commands.append(LoopJmp(idx=label_idx))
 
     def time_reversed(self) -> ContextManager['ProgramBuilder']:
         self._frames.append(MeasurementFrame([], False))
