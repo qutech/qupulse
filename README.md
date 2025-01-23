@@ -57,12 +57,13 @@ You can find documentation on how to use this library on [readthedocs](https://q
 ### Folder Structure
 The repository primarily consists of the folders `qupulse` (source code), `tests` and `doc`.
 
-`qupulse` contains the entire Python source code of the project and is further partitioned the following packages of related modules 
+`qupulse` contains the entire Python source code of the project and is further partitioned the following packages of related packages 
 
 - `pulses` which contains all modules related to pulse representation.
 - `hardware` containing classes for hardware representation as well as hardware drivers
 - `utils` containing miscellaneous utility modules or wrapping code for external libraries
-- `_program` contains general and hardware specific representations of instantiated (parameter free) pulses. It is private because there is no stability guarantee.
+- `program` contains general and hardware specific representations of instantiated (parameter free) pulses.
+- `expression` contains the expression interface used by qupulse.
 
 Contents of `tests` mirror the structure of `qupulse`. For every `<module>` somewhere in `qupulse` there should exist a `<module>Tests.py` in the corresponding subdirectory of `tests`.
 
