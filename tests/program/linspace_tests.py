@@ -174,8 +174,9 @@ class SequencedRepetitionTest(TestCase):
             self.output.append((time, (-1.0, -0.5 + idx_b * 0.05)))
             time += TimeType.from_float(base_time)
 
+            # The VM does not create noop entries
+            self.output.append((time, (-0.5, -0.3 + idx_b * 0.05)))
             for _ in range(rep_factor):
-                self.output.append((time, (-0.5, -0.3 + idx_b * 0.05)))
                 time += TimeType.from_float(base_time)
 
             for idx_a in range(rep_factor):
