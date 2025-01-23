@@ -736,8 +736,7 @@ class DeserializationCallbackFinderTests(unittest.TestCase):
         self.assertIs(finder['qctoolkit.asd'], my_callable)
 
         finder.qctoolkit_alias = False
-        with self.assertRaises(KeyError):
-            # This was a ModuleNotFoundError before the qctoolkit alias package was removed
+        with self.assertRaises(ModuleNotFoundError):
             finder['qctoolkit.asd']
 
 
