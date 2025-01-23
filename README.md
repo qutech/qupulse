@@ -23,9 +23,12 @@ The current feature list is as follows:
 - Hardware model representation
 - High-level pulse to hardware configuration and waveform translation routines 
 - Hardware drivers for Tabor Electronics, Tektronix and Zurich Instruments AWGs and AlazarTech Digitizers
-- MATLAB interface to access qupulse functionality
  
 Pending changes are tracked in the `changes.d` subdirectory and published in [`RELEASE_NOTES.rst`](RELEASE_NOTES.rst) on release using the tool `towncrier`.
+
+### Removed features
+
+The previous name of this package was qctoolkit. It was renamed in 2017 to highlight the pulse focus. The backward compatible alias was removed after the 0.9 release. Furthermore, this repository had a MATLAB interface for a longer time which was removed at the same time.
 
 ## Installation
 qupulse is available on [PyPi](https://pypi.org/project/qupulse/) and the latest release can be installed by executing:
