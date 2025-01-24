@@ -22,6 +22,7 @@ The increment and set commands do not only carry a channel and a value but also 
 This allows the efficient encoding of
 
 .. code:: python
+
     for idx in range(10):
         set_voltage(CONSTANT) # No dependencies
         set_voltage(OFFSET + idx * FACTOR) # depends on idx with

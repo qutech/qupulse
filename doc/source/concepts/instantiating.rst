@@ -13,7 +13,7 @@ It checks that the provided parameters and mappings are consistent and meet the 
 The translation target is defined by the :class:`.ProgramBuilder` argument.
 
 Each pulse template knows what program builder methods to call to translate itself.
-For example, the :class:`.ConstantPulseTemplate` calls :meth:`.ProgramBuilder.hold` to hold a constant voltage for a limited amount of time while the :class:`.SequncePulseTemplate` forwards the program builder to the sub-templates in order.
+For example, the :class:`.ConstantPulseTemplate` calls :meth:`.ProgramBuilder.hold_voltage` to hold a constant voltage for a defined amount of time while the :class:`.SequncePulseTemplate` forwards the program builder to the sub-templates in order.
 The resulting program is completely backend dependent.
 
 **Historically**, there was only a single program type :class:`.Loop` which is still the default output type.
