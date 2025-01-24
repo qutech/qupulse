@@ -118,42 +118,87 @@ class Program(Protocol):
 
 
 class ProgramBuilder(Protocol):
-    """This protocol is used by :py:meth:`.PulseTemplate.create_program` to build a program via the visitor pattern.
+    """This protocol is used by :py:meth:`.PulseTemplate.create_program` to build a program via a variation of the
+    visitor pattern.
 
-    There is a default implementation which is the loop class.
+    The pulse templates call the methods that correspond to their functionality on the program builder. For example,
+    :py:class:`.ConstantPulseTemplate` translates itself into a simple :py:meth:`.ProgramBuilder.hold_voltage` call while
+    :class:`SequencePulseTemplate` uses :py:meth:`.ProgramBuilder.with_sequence` to signify a logical unit with
+    attached measurements and passes the resulting object to the sequenced sub-templates.
 
-    Other hardware backends can use this protocol to implement easy translation of pulse templates into a hardware
-    compatible format."""
+    Due to backward compatibility the handling of measurements is a bit weird since they have to be omitted in certain
+    cases. However, this is not relevant for HDAWG specific implementations because these are expected to ignore
+    :py:meth:`.ProgramBuilder.measure` calls.
+
+    This interface makes heavy use of context managers and generators/iterators which allows for flexible iteration
+    and repetition implementation.
+    """
 
     def inner_scope(self, scope: Scope) -> Scope:
-        """This function is necessary to inject program builder specific parameter implementations into the build
-        process."""
+        """This function is part of the iteration protocol and necessary to inject program builder specific parameter
+        implementations into the build process. :py:meth:`.ProgramBuilder.with_iteration` and
+        `.ProgramBuilder.with_iteration` callers *must* call this function inside the iteration.
+
+        Args:
+            scope: The parameter scope outside the iteration.
+
+        Returns:
+            The parameter scope inside the iteration.
+        """
 
     def hold_voltage(self, duration: HardwareTime, voltages: Mapping[str, HardwareVoltage]):
-        """Supports dynamic i.e. for loop generated offsets and duration"""
+        """Hold the specified voltage for a given time. Advances the current time by ``duration``. The values are
+        hardware dependent type which are inserted into the parameter scope via :py:meth:`.ProgramBuilder.with_iteration`.
 
-    # further specialized commandos like play_harmoic might be added here
+        Args:
+            duration: Duration of voltage hold
+            voltages: Voltages for each channel
+        """
+
+    # further specialized commandos like play_harmonic might be added here
 
     def play_arbitrary_waveform(self, waveform: Waveform):
-        """"""
+        """Insert the playback of an arbitrary waveform. If possible pulse templates should use more specific commands
+        like :py:meth:`.ProgramBuilder.hold_voltage` (the only more specific command at the time of this writing).
+
+        Args:
+            waveform: The waveform to play
+        """
 
     def measure(self, measurements: Optional[Sequence[MeasurementWindow]]):
-        """Unconditionally add given measurements relative to the current position."""
+        """Unconditionally add given measurements relative to the current position.
+
+        Args:
+            measurements: Measurements to add.
+        """
 
     def with_repetition(self, repetition_count: RepetitionCount,
                         measurements: Optional[Sequence[MeasurementWindow]] = None) -> Iterable['ProgramBuilder']:
-        """Measurements that are added to the new builder are dropped if the builder is empty upon exit"""
+        """Start a new repetition context with given repetition count. The caller has to iterate over the return value
+        and call `:py:meth:`.ProgramBuilder.inner_scope` inside the iteration context.
+
+        Args:
+            repetition_count: Repetition count
+            measurements: These measurements are added relative to the position at the start of the iteration iff the
+                          iteration is not empty.
+
+        Returns:
+            An iterable of :py:class:`ProgramBuilder` instances.
+        """
 
     def with_sequence(self,
                       measurements: Optional[Sequence[MeasurementWindow]] = None) -> ContextManager['ProgramBuilder']:
-        """
+        """Start a new sequence context. The caller has to enter the returned context manager and add the sequenced
+        elements there.
 
         Measurements that are added in to the returned program builder are discarded if the sequence is empty on exit.
 
         Args:
-            measurements: Measurements to attach to the potential child. Is not repeated with repetition_count.
-            repetition_count:
+            measurements: These measurements are added relative to the position at the start of the sequence iff the
+            sequence is not empty.
+
         Returns:
+            A context manager that returns a :py:class:`ProgramBuilder` on entering.
         """
 
     def new_subprogram(self, global_transformation: 'Transformation' = None) -> ContextManager['ProgramBuilder']:
