@@ -43,6 +43,47 @@ Measurements
 Pulses are usually used to manipulate the state of some physical system and the system's response has to be somehow validated and thus measured. qupulse pulse templates allow to define measurement windows that specify at what times measurements should be made and identify those windows with an identifier.
 After the pulse templates are instantiated, uploading the resulting pulses to the hardware setup will cause qupulse to also configure corresponding measurement devices according to the specified measurement windows.
 
+Convenience Functionality
+^^^^^^^^^^^^^^^^^^^^^^^^^
+
+In addition to the fundamental concepts and subclassing structure, :class:`.PulseTemplate` offers a variety of
+**convenience features** that make it easier to combine and modify pulses:
+
+- **Convenience Methods**:
+
+  - :meth:`.PulseTemplate.with_parallel_channels` attaches additional constant channel values in parallel to the
+    existing channels of a pulse.
+  - :meth:`.PulseTemplate.with_repetition` repeats a pulse a specified number of times.
+  - :meth:`.PulseTemplate.with_mapping` enables mapping or renaming of parameters, channel names, and measurement
+    identifiers.
+  - :meth:`.PulseTemplate.with_iteration` wraps a pulse into a loop construct, allowing iteration over an index with a
+    defined range.
+  - :meth:`.PulseTemplate.with_time_reversal` generates a time-reversed version of a pulse.
+  - :meth:`.PulseTemplate.with_appended` concatenates additional pulse templates, creating a sequence which can be more
+    concise than manually building a :class:`.SequencePulseTemplate`.
+
+- **Padding**:
+
+  - :meth:`.PulseTemplate.pad_to` extends the duration of a pulse template to a desired length, automatically appending
+    a constant pulse segment that matches the final output values.
+
+- **Properties**:
+
+  - :attr:`.PulseTemplate.duration` provides an expression for the pulse’s total duration.
+  - :attr:`.PulseTemplate.initial_values` and :attr:`.PulseTemplate.final_values` specify the voltage levels at the
+    start and end of the pulse, respectively.
+  - :attr:`.PulseTemplate.integral` returns an expression evaluating the area under the pulse for each channel.
+
+- **Arithmetic**:
+
+  - Basic arithmetic operators (``+``, ``-``, ``*``, ``/``) are overloaded to allow direct numerical combination or
+    scaling of pulses.
+  - The :meth:`@` operator (matrix multiplication) is repurposed to represent time-wise concatenation of pulses (see
+    :meth:`.SequencePulseTemplate.concatenate`).
+
+These convenience features allow for more compact, readable, and flexible pulse definitions, helping to focus on the
+overall structure of the experiment.
+
 Obtaining a Concrete Pulse (Pulse Instantiation)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
