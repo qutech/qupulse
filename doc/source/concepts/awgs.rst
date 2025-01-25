@@ -1,4 +1,4 @@
-.. _hardware:
+.. _awgs:
 
 How qupulse models AWGs
 -----------------------

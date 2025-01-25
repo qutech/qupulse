@@ -18,7 +18,7 @@ The resulting program is completely backend dependent.
 
 **Historically**, there was only a single program type :class:`.Loop` which is still the default output type.
 As the time of this writing there is the additional :class:`.LinSpaceProgram` which allows for the efficient representation of linearly spaced voltage changes in arbitrary control structures. There is no established way to handle the latter yet.
-The following describes handling of :class:`.Loop` object only via the :class:`.HardwareSetup`.
+The following describes handling of :class:`.Loop` object only via the :class:`qupulse.hardware.HardwareSetup`.
 
 The :class:`.Loop` class was designed as a hardware-independent pulse program tree for waveform table based sequencers.
 Therefore, the translation into a hardware specific format is a two-step process which consists of the loop object creation as a first step
