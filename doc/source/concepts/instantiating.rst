@@ -7,19 +7,25 @@ As already briefly mentioned in :ref:`pulsetemplates`, instantiation of pulses i
 interpretable representation of a concrete pulse ready for execution from the quite high-level :class:`.PulseTemplate`
 object tree structure that defines parameterizable pulses in qupulse.
 
-This is a two-step process that involves
+The entry point is the :meth:`.PulseTemplate.create_program` method of the :class:`.PulseTemplate` hierarchy.
+It accepts the pulse parameters, and allows to rename and/or omit channels or measurements.
+It checks that the provided parameters and mappings are consistent and meet the optionally defined parameter constraints of the pulse template.
+The translation target is defined by the :class:`.ProgramBuilder` argument.
 
-#. Inserting concrete parameter values and obtaining a hardware-independent pulse program tree
-#. Flattening that tree, sampling and merging of leaf waveforms according to needs of hardware
+Each pulse template knows what program builder methods to call to translate itself.
+For example, the :class:`.ConstantPulseTemplate` calls :meth:`.ProgramBuilder.hold_voltage` to hold a constant voltage for a defined amount of time while the :class:`.SequncePulseTemplate` forwards the program builder to the sub-templates in order.
+The resulting program is completely backend dependent.
 
-This separation allows the first step to be performed in a hardware-agnostic way while the second step does not have
-to deal with general functionality and can focus only on hardware-specific tasks. Step 1 is implemented in the
-:meth:`.PulseTemplate.create_program` method of the :class:`.PulseTemplate` hierarchy. It checks parameter consistency
-with parameter constraints and returns an object of type
-:class:`.Loop` which represents a pulse as nested loops of atomic waveforms. This is another object tree structure
-but all parameters (including repetition counts) have been substituted by the corresponding numeric values passed into
-``create_program``. The :class:`.Loop` object acts as your reference to the instantiated pulse.
-See :ref:`/examples/02CreatePrograms.ipynb` for an example on usage of :meth:`.PulseTemplate.create_program`.
+**Historically**, there was only a single program type :class:`.Loop` which is still the default output type.
+As the time of this writing there is the additional :class:`.LinSpaceProgram` which allows for the efficient representation of linearly spaced voltage changes in arbitrary control structures. There is no established way to handle the latter yet.
+The following describes handling of :class:`.Loop` object only via the :class:`qupulse.hardware.HardwareSetup`.
+
+The :class:`.Loop` class was designed as a hardware-independent pulse program tree for waveform table based sequencers.
+Therefore, the translation into a hardware specific format is a two-step process which consists of the loop object creation as a first step
+and the transformation of that tree according to the needs of the hardware as a second step.
+However, the AWGs became more flexibly programmable over the years as discussed in :ref:`awgs`.
+
+The first step of this pulse instantiation is showcased in :ref:`/examples/02CreatePrograms.ipynb` where :meth:`.PulseTemplate.create_program` is used to create a :class:`.Loop` program.
 
 The second step of the instantiation is performed by the hardware backend and transparent to the user. Upon registering
 the pulse with the hardware backend via :meth:`qupulse.hardware.HardwareSetup.register_program`, the backend will determine which
@@ -37,8 +43,6 @@ by the driver with its neighbors in the execution sequence until the minimum wav
 optimizations and merges (or splits) of waveforms for performance are also possible.
 
 In contrast, the Zurich Instruments HDAWG allows arbitrary nesting levels and is only limited by the instruction cache.
+However, this device supports increment commands which allow the efficient representation of linear voltage sweeps which is **not** possible with the :class:`.Loop` class.
 
-However, as already mentioned, the user does not have to be concerned about this in regular use of qupulse, since this
-is dealt with transparently in the hardware backend.
-
-The section :ref:`program` touches the ideas behind the current program implementation i.e. :class:`.Loop`.
+The section :ref:`program` touches the ideas behind the current program implementations i.e. :class:`.Loop` and :class:`.LinSpaceProgram`.

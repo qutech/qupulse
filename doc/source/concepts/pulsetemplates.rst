@@ -20,8 +20,6 @@ In some cases, it is desired to write a pulse which partly consists of placehold
 
 You can do some simple arithmetic with pulses which is implemented via :class:`.ArithmeticPulseTemplate` and :class:`.ArithmeticAtomicPulseTemplate`. The relevant arithmetic operators are overloaded so you do not need to use these classes directly.
 
-In the future might be pulse templates that allow conditional execution like a `BranchPulseTemplate` or a `WhileLoopPulseTemplate`.
-
 All of these pulse template variants can be similarly accessed through the common interface declared by the :class:`.PulseTemplate` base class. [#pattern]_
 
 As the class names are quite long the recommended way for abbreviation is to use the aliases defined in :py:mod:`~qupulse.pulses`. For example :class:`.FunctionPulseTemplate` is aliased as :class:`.FunctionPT`
@@ -52,7 +50,7 @@ To obtain a pulse ready for execution on the hardware from a pulse template, the
 
 In order to translate the object structures that encode the pulse template in the software into a (sequential) representation of the concrete pulse with the given parameter values that is understandable by the hardware, we proceed in several steps.
 
-First, the :meth:`.PulseTemplate.create_program` checks parameter consistency with parameter constraints and translates the pulse template into an instantiated program object, which is then further interpreted and sequenced by the hardware backend code (in :py:mod:`~qupulse.hardware`).
+First, the :meth:`.PulseTemplate.create_program` checks parameter consistency with parameter constraints and translates the pulse template into an instantiated program object. The nature of this program depends on the targeted hardware and is determined by the ``program_builder`` keyword argument. This program is further interpreted and sequenced by the hardware backend code (in :py:mod:`~qupulse.hardware`).
 
 See :ref:`instantiating` for a more in-depth explanation of instantiating pulses.
 

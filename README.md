@@ -52,7 +52,7 @@ The backend for TaborAWGs requires packages that can be found [here](https://git
 The data acquisition backend for AlazarTech cards needs a package that unfortunately is not open source (yet). If you need it or have questions contact <simon.humpohl@rwth-aachen.de>.
 
 ## Documentation
-You can find documentation on how to use this library on [readthedocs](https://qupulse.readthedocs.io/en/latest/) and [IPython notebooks with examples in this repo](doc/source/examples). You can build it locally with `hatch run docs:html`.
+You can find documentation on how to use this library on [readthedocs](https://qupulse.readthedocs.io/en/latest/) and [IPython notebooks with examples in this repo](doc/source/examples). You can build it locally with `hatch run docs:html` if you have pandoc installed.
 
 ### Folder Structure
 The repository primarily consists of the folders `qupulse` (source code), `tests` and `doc`.
