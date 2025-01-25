@@ -2,4 +2,7 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-"""This is a private package meaning there are no stability guarantees."""
+"""This is a private package meaning there are no stability guarantees.
+
+Large parts of this package where stabilized and live now in :py:mod:`qupulse.program`.
+"""
