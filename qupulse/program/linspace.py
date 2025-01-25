@@ -2,12 +2,12 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-import abc
 import contextlib
 import dataclasses
 import numpy as np
 from dataclasses import dataclass
-from typing import Mapping, Optional, Sequence, ContextManager, Iterable, Tuple, Union, Dict, List, Iterator
+from abc import ABC, abstractmethod
+from typing import Mapping, Optional, Sequence, ContextManager, Iterable, Tuple, Union, Dict, List, Set
 
 from qupulse import ChannelID, MeasurementWindow
 from qupulse.parameter_scope import Scope, MappedScope, FrozenDict
@@ -38,10 +38,17 @@ class DepKey:
 
 
 @dataclass
-class LinSpaceNode:
+class LinSpaceNode(ABC):
     """AST node for a program that supports linear spacing of set points as well as nested sequencing and repetitions"""
 
-    def dependencies(self) -> Mapping[int, set]:
+    @abstractmethod
+    def dependencies(self) -> Mapping[int, Set[Tuple[float, ...]]]:
+        """Returns a mapping from channel indices to the iteration indices dependencies that those channels have inside
+        this node.
+
+        Returns:
+             Mapping from channel indices to the iteration indices dependencies
+        """
         raise NotImplementedError
 
     def reversed(self, offset: int, lengths: list):
@@ -106,6 +113,9 @@ class LinSpaceArbitraryWaveform(LinSpaceNode):
     """This is just a wrapper to pipe arbitrary waveforms through the system."""
     waveform: Waveform
     channels: Tuple[ChannelID, ...]
+
+    def dependencies(self) -> Mapping[int, Set[Tuple[float, ...]]]:
+        return {}
 
     def reversed(self, offset: int, lengths: list):
         return LinSpaceArbitraryWaveform(
