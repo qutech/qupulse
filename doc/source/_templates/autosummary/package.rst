@@ -8,7 +8,7 @@
    :toctree:
    :recursive:
 {% for item in modules %}
-   {{ item }}
+   {{ fullname  }}.{{ item }}
 {%- endfor %}
 {% endif %}
 {% endblock %}
