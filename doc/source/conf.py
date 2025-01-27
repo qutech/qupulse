@@ -119,7 +119,10 @@ exclude_patterns = ['_build', '**.ipynb_checkpoints', 'examples/9*.ipynb', 'exam
 
 # If true, the current module name will be prepended to all description
 # unit titles (such as .. function::).
-#add_module_names = True
+add_module_names = False
+
+# A string that determines how domain objects (functions, classes, attributes, etc.) are displayed in their table of contents entry.
+toc_object_entries_show_parents = 'hide'
 
 # If true, sectionauthor and moduleauthor directives will be shown in the
 # output. They are ignored by default.
