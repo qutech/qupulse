@@ -7,7 +7,8 @@
 Classes:
     - Waveform: An instantiated pulse which can be sampled to a raw voltage value array.
 """
-
+import contextlib
+import dataclasses
 import itertools
 import operator
 import warnings
@@ -15,12 +16,14 @@ from abc import ABCMeta, abstractmethod
 from numbers import Real
 from typing import (
     AbstractSet, Any, FrozenSet, Iterable, Mapping, NamedTuple, Sequence, Set,
-    Tuple, Union, cast, Optional, List, Hashable)
+    Tuple, Union, cast, Optional, List, Hashable, ContextManager)
 from weakref import WeakValueDictionary, ref
 
 import numpy as np
 
-from qupulse import ChannelID
+from qupulse import ChannelID, MeasurementWindow
+from qupulse.parameter_scope import Scope
+from qupulse.pulses.range import RangeScope
 from qupulse.utils.performance import is_monotonic
 from qupulse.expressions import ExpressionScalar
 from qupulse.pulses.interpolation import InterpolationStrategy
@@ -1280,3 +1283,80 @@ class ReversedWaveform(Waveform):
 
     def __repr__(self):
         return f"ReversedWaveform(inner={self._inner!r})"
+
+
+@dataclasses.dataclass
+class _SingleWaveformFrame:
+    waveforms: list[Waveform] = dataclasses.field(default_factory=list)
+    iterating: Optional[Tuple[str, int]] = dataclasses.field(default=None)
+
+
+class SingleWaveformBuilder:
+    def __init__(self, channels):
+        self._stack = [_SingleWaveformFrame()]
+
+    def inner_scope(self, scope: Scope) -> Scope:
+        local_vars = self._stack[-1].iterating
+        if local_vars is None:
+            return scope
+        else:
+            return RangeScope(scope, *local_vars)
+
+    def hold_voltage(self, duration: 'HardwareTime', voltages: Mapping[str, 'HardwareVoltage']):
+        self._stack[-1].waveforms.append(ConstantWaveform.from_mapping(duration, voltages))
+
+    def play_arbitrary_waveform(self, waveform: Waveform):
+        self._stack[-1].waveforms.append(waveform)
+
+    def measure(self, measurements: Optional[Sequence[MeasurementWindow]]):
+        pass
+
+    def with_repetition(self, repetition_count: 'RepetitionCount',
+                        measurements: Optional[Sequence[MeasurementWindow]] = None) -> Iterable['ProgramBuilder']:
+        self._stack.append(_SingleWaveformFrame())
+        yield self
+        frame = self._stack.pop()
+        if frame.waveforms:
+            self._stack[-1].waveforms.append(
+                RepetitionWaveform.from_repetition_count(
+                    SequenceWaveform.from_sequence(frame.waveforms),
+                    repetition_count=repetition_count,
+                )
+            )
+
+    @contextlib.contextmanager
+    def with_sequence(self, measurements: Optional[Sequence[MeasurementWindow]] = None) -> ContextManager[
+        'ProgramBuilder']:
+        yield self
+
+    @contextlib.contextmanager
+    def new_subprogram(self, global_transformation: Transformation = None) -> ContextManager['ProgramBuilder']:
+        if global_transformation:
+            self._stack.append(_SingleWaveformFrame())
+            yield self
+            frame = self._stack.pop()
+            self._stack[-1].waveforms.extend(TransformingWaveform.from_transformation(wf, global_transformation)
+                                             for wf in frame.waveforms)
+        else:
+            yield self
+
+
+    def with_iteration(self, index_name: str, rng: range, measurements: Optional[Sequence[MeasurementWindow]] = None) -> Iterable['ProgramBuilder']:
+        self._stack.append(_SingleWaveformFrame([], None, None))
+        top_frame = self._stack[-1]
+        for value in rng:
+            top_frame.iterating = (index_name, value)
+            yield self
+        frame = self._stack.pop()
+        self._stack[-1].waveforms.extend(frame.waveforms)
+
+    @contextlib.contextmanager
+    def time_reversed(self) -> ContextManager['ProgramBuilder']:
+        self._stack.append(_SingleWaveformFrame([], None, None))
+        yield self
+        frame = self._stack.pop()
+        self._stack[-1].waveforms.extend(wf.reversed() for wf in reversed(frame.waveforms))
+
+    def to_program(self) -> Optional['Program']:
+        assert len(self._stack) == 1
+        return SequenceWaveform.from_sequence(self._stack[-1].waveforms)
