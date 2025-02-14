@@ -23,7 +23,7 @@ from qupulse.program import ProgramBuilder
 from qupulse.expressions import ExpressionScalar, ExpressionVariableMissingException, Expression
 from qupulse.utils import checked_int_cast, cached_property
 from qupulse.pulses.parameters import InvalidParameterNameException, ParameterConstrainer, ParameterNotProvidedException
-from qupulse.pulses.pulse_template import PulseTemplate, ChannelID, AtomicPulseTemplate
+from qupulse.pulses.pulse_template import PulseTemplate, ChannelID, AtomicPulseTemplate, SingleWaveformStrategy
 from qupulse.program.waveforms import SequenceWaveform as ForLoopWaveform
 from qupulse.pulses.measurement import MeasurementDefiner, MeasurementDeclaration
 from qupulse.pulses.range import ParametrizedRange, RangeScope
@@ -34,8 +34,9 @@ __all__ = ['ForLoopPulseTemplate', 'LoopPulseTemplate', 'LoopIndexNotUsedExcepti
 class LoopPulseTemplate(PulseTemplate):
     """Base class for loop based pulse templates. This class is still abstract and cannot be instantiated."""
     def __init__(self, body: PulseTemplate,
-                 identifier: Optional[str]):
-        super().__init__(identifier=identifier)
+                 identifier: Optional[str],
+                 to_single_waveform: Optional[SingleWaveformStrategy] = None):
+        super().__init__(identifier=identifier, to_single_waveform=to_single_waveform)
         self.__body = body
 
     @property
@@ -68,6 +69,7 @@ class ForLoopPulseTemplate(LoopPulseTemplate, MeasurementDefiner, ParameterConst
                  *,
                  measurements: Optional[Sequence[MeasurementDeclaration]]=None,
                  parameter_constraints: Optional[Sequence]=None,
+                 to_single_waveform: Optional[SingleWaveformStrategy] = None,
                  registry: PulseRegistryType=None) -> None:
         """
         Args:
@@ -76,7 +78,7 @@ class ForLoopPulseTemplate(LoopPulseTemplate, MeasurementDefiner, ParameterConst
             loop_range: Range to loop through
             identifier: Used for serialization
         """
-        LoopPulseTemplate.__init__(self, body=body, identifier=identifier)
+        LoopPulseTemplate.__init__(self, body=body, identifier=identifier, to_single_waveform=to_single_waveform)
         MeasurementDefiner.__init__(self, measurements=measurements)
         ParameterConstrainer.__init__(self, parameter_constraints=parameter_constraints)
 

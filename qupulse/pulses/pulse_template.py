@@ -35,7 +35,7 @@ from qupulse.parameter_scope import Scope, DictScope
 from qupulse.program import ProgramBuilder, default_program_builder, Program
 
 __all__ = ["PulseTemplate", "AtomicPulseTemplate", "DoubleParameterNameException", "MappingTuple",
-           "UnknownVolatileParameter"]
+           "UnknownVolatileParameter", "SingleWaveformStrategy"]
 
 
 MappingTuple = Union[Tuple['PulseTemplate'],
