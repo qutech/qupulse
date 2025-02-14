@@ -11,8 +11,9 @@ Classes:
         directly translated into a waveform.
 """
 import warnings
+import typing
 from abc import abstractmethod
-from typing import Dict, Tuple, Set, Optional, Union, List, Callable, Any, Generic, TypeVar, Mapping
+from typing import Dict, Tuple, Set, Optional, Union, List, Callable, Any, Generic, TypeVar, Mapping, Literal
 import itertools
 import collections
 from numbers import Real, Number
@@ -43,6 +44,9 @@ MappingTuple = Union[Tuple['PulseTemplate'],
                      Tuple['PulseTemplate', Dict, Dict, Dict]]
 
 
+SingleWaveformStrategy = Literal['always']
+
+
 class PulseTemplate(Serializable):
     """A PulseTemplate represents the parametrized general structure of a pulse.
 
@@ -60,9 +64,19 @@ class PulseTemplate(Serializable):
     _CAST_INT_TO_INT64 = True
 
     def __init__(self, *,
-                 identifier: Optional[str]) -> None:
+                 identifier: Optional[str],
+                 to_single_waveform: Optional[SingleWaveformStrategy] = None) -> None:
         super().__init__(identifier=identifier)
+        if to_single_waveform is not None and to_single_waveform not in typing.get_args(SingleWaveformStrategy):
+            warnings.warn(f"Unknown to_single_waveform parameter: {to_single_waveform!r}")
+        self._to_single_waveform = to_single_waveform
         self.__cached_hash_value = None
+
+    def get_serialization_data(self, serializer: Optional['Serializer'] = None) -> Dict[str, Any]:
+        data = super().get_serialization_data(serializer=serializer)
+        if self._to_single_waveform:
+            data['to_single_waveform'] = self._to_single_waveform
+        return data
 
     @property
     @abstractmethod
@@ -91,7 +105,16 @@ class PulseTemplate(Serializable):
 
     def _is_atomic(self) -> bool:
         """This is (currently a private) a check if this pulse template always is translated into a single waveform."""
-        return False
+        return self._to_single_waveform == 'always'
+
+    @property
+    def to_single_waveform(self) -> Optional[SingleWaveformStrategy]:
+        """This property describes whether this pulse template is translated into a single waveform.
+
+        'always': It is always translated into a single waveform.
+        None: It depends on the `create_program` arguments and the pulse template itself.
+        """
+        return self._to_single_waveform
 
     def __matmul__(self, other: Union['PulseTemplate', MappingTuple]) -> 'SequencePulseTemplate':
         """This method enables using the @-operator (intended for matrix multiplication) for
@@ -244,7 +267,7 @@ class PulseTemplate(Serializable):
                         program_builder: ProgramBuilder):
         """Generic part of create program. This method handles to_single_waveform and the configuration of the
         transformer."""
-        if self.identifier in to_single_waveform or self in to_single_waveform:
+        if self._to_single_waveform == 'always' or self.identifier in to_single_waveform or self in to_single_waveform:
             with program_builder.new_subprogram(global_transformation=global_transformation) as inner_program_builder:
 
                 if not scope.get_volatile_parameters().keys().isdisjoint(self.parameter_names):
