@@ -521,17 +521,32 @@ class LinSpaceVM:
             dt = self.sample_resolution
             t = TimeType(0)
             total_duration = cmd.waveform.duration
-            while t <= total_duration and dt > 0:
-                sample_time = np.array([float(t)])
-                values = []
-                for (idx, ch) in enumerate(cmd.channels):
-                    self.current_values[idx] = values.append(cmd.waveform.get_sampled(channel=ch, sample_times=sample_time)[0])
-                self.history.append(
-                    (self.time, self.current_values.copy())
+            #why?
+            # while t <= total_duration and dt > 0:
+            #     sample_time = np.array([float(t)])
+            #     # values = []
+            #     for (idx, ch) in enumerate(cmd.channels):
+            #         # values.append()
+            #         self.current_values[idx] = cmd.waveform.get_sampled(channel=ch, sample_times=sample_time)[0]
+            #     self.history.append(
+            #         (self.time, self.current_values.copy())
+            #     )
+            #     dt = min(total_duration - t, self.sample_resolution)
+            #     self.time += dt
+            #     t += dt
+            
+            #edge case handling of last step probably not important...
+            # times_array = np.arange(t,total_duration,dt)
+            times_array = np.concatenate((np.arange(t,total_duration,dt,dtype=np.float32),[float(total_duration)]),dtype=np.float32)
+            samples_array = np.empty((len(cmd.channels),len(times_array)),dtype=np.float32)
+            for (idx, ch) in enumerate(cmd.channels):
+                    cmd.waveform.get_sampled(channel=ch, sample_times=times_array, output_array=samples_array[idx,:])
+            self.history.append(
+                    (times_array+float(self.time), samples_array)
                 )
-                dt = min(total_duration - t, self.sample_resolution)
-                self.time += dt
-                t += dt
+            self.time += total_duration
+            #(unnecessary)
+            self.current_values = list(samples_array[:,-1])
         elif isinstance(cmd, Wait):
             self.history.append(
                 (self.time, self.current_values.copy())
