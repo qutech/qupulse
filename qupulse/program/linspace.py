@@ -518,20 +518,21 @@ class LinSpaceVM:
 
     def change_state(self, cmd: Union[Set, Increment, Wait, Play]):
         if isinstance(cmd, Play):
+            # we do arbitrary time resolution sampling here
             dt = self.sample_resolution
-            t = TimeType(0)
             total_duration = cmd.waveform.duration
-            while t <= total_duration and dt > 0:
-                sample_time = np.array([float(t)])
-                values = []
-                for (idx, ch) in enumerate(cmd.channels):
-                    self.current_values[idx] = values.append(cmd.waveform.get_sampled(channel=ch, sample_times=sample_time)[0])
-                self.history.append(
-                    (self.time, self.current_values.copy())
-                )
-                dt = min(total_duration - t, self.sample_resolution)
-                self.time += dt
-                t += dt
+            n_samples = total_duration // dt
+            exact_times = [dt * n for n in range(n_samples)]
+            sample_times = np.array(exact_times, dtype=float)
+            samples = []
+            for ch in cmd.channels:
+                samples.append(cmd.waveform.get_sampled(channel=ch, sample_times=sample_times))
+
+            for t, values in zip(sample_times, zip(*samples)):
+                self.history.append((self.time + t, list(values)))
+                self.current_values[:] = values
+            self.time += total_duration
+
         elif isinstance(cmd, Wait):
             self.history.append(
                 (self.time, self.current_values.copy())
