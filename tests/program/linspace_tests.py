@@ -5,6 +5,7 @@ from unittest import TestCase
 from qupulse.pulses import *
 from qupulse.program.linspace import *
 from qupulse.program.transformation import *
+from qupulse.pulses.function_pulse_template import FunctionPulseTemplate
 
 
 def assert_vm_output_almost_equal(test: TestCase, expected, actual):
@@ -507,3 +508,70 @@ class TransformedRampTest(TestCase):
                                                          global_transformation=self.transformation,
                                                          to_single_waveform={self.pulse_template})
             self.assertEqual([self.program], program)
+
+
+class HarmonicPulseTest(TestCase):
+    def setUp(self):
+        hold = ConstantPT(10 ** 6, {'a': '-1. + idx * 0.01'})
+        sine = FunctionPulseTemplate('sin(2 * pi * t)', duration_expression='1 / pi', channel='a')
+        self.pulse_template = (hold @ sine).with_iteration('idx', 100)
+
+        self.sine_waveform = sine.build_waveform(parameters={}, channel_mapping={'a': 'a'})
+
+        self.program = LinSpaceIter(
+            length=100,
+            body=(LinSpaceHold(
+                bases=(-1.,),
+                factors=((0.01,),),
+                duration_base=TimeType(10 ** 6),
+                duration_factors=None
+            ),
+            LinSpaceArbitraryWaveform(
+                waveform=self.sine_waveform,
+                channels=('a',)
+            )
+            )
+        )
+
+        key = DepKey.from_voltages((0.01,), DEFAULT_INCREMENT_RESOLUTION)
+        self.commands = [
+            Set(0, -1.0, key),
+            Wait(TimeType(10 ** 6)),
+            Play(self.sine_waveform, channels=('a',)),
+            LoopLabel(0, 99),
+            Increment(0, 0.01, key),
+            Wait(TimeType(10 ** 6)),
+            Play(self.sine_waveform, channels=('a',)),
+            LoopJmp(0)
+        ]
+
+        self.sample_resolution = TimeType(1)
+        n_samples = self.sine_waveform.duration // self.sample_resolution
+        ramp_output = [
+            (TimeType(10**6 * idx), [sum([-1.0] + [0.01] * idx)]) for idx in range(200)
+        ]
+        sine_output = [
+            (self.sample_resolution * n, [np.sin(2 * np.pi * float(self.sample_resolution * n))])
+            for n in range(n_samples)
+        ]
+
+        self.output = []
+        for ramp_hold  in ramp_output:
+            self.output.append(ramp_hold)
+            self.output.extend(sine_output)
+
+    def test_program(self):
+        program_builder = LinSpaceBuilder(('a',))
+        program = self.pulse_template.create_program(program_builder=program_builder)
+
+        self.assertEqual([self.program], program)
+
+    def test_commands(self):
+        commands = to_increment_commands([self.program])
+        self.assertEqual(self.commands, commands)
+
+    def test_output(self):
+        vm = LinSpaceVM(1, sample_resolution=self.sample_resolution)
+        vm.set_commands(self.commands)
+        vm.run()
+        assert_vm_output_almost_equal(self, self.output, vm.history)
