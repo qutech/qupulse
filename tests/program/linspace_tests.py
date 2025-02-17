@@ -547,7 +547,7 @@ class HarmonicPulseTest(TestCase):
         ]
 
         self.sample_resolution = TimeType(1)
-        n_samples = int(self.sine_waveform.duration // self.sample_resolution)
+        n_samples = int(math.ceil(self.sine_waveform.duration / self.sample_resolution))
 
         step_duration = hold_duration + self.sine_waveform.duration
 
