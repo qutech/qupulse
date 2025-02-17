@@ -5,13 +5,14 @@ from unittest import TestCase
 from qupulse.pulses import *
 from qupulse.program.linspace import *
 from qupulse.program.transformation import *
+from qupulse.pulses.function_pulse_template import FunctionPulseTemplate
 
 
 def assert_vm_output_almost_equal(test: TestCase, expected, actual):
     """Compare two vm outputs with default TestCase.assertAlmostEqual accuracy"""
     test.assertEqual(len(expected), len(actual))
     for idx, ((t_e, vals_e), (t_a, vals_a)) in enumerate(zip(expected, actual)):
-        test.assertEqual(t_e, t_a, f"Differing times in {idx} element")
+        test.assertEqual(t_e, t_a, f"Differing times in {idx}th element")
         test.assertEqual(len(vals_e), len(vals_a), f"Differing channel count in {idx} element")
         for ch, (val_e, val_a) in enumerate(zip(vals_e, vals_a)):
             test.assertAlmostEqual(val_e, val_a, msg=f"Differing values in {idx} of {len(expected)} element channel {ch}")
@@ -507,3 +508,71 @@ class TransformedRampTest(TestCase):
                                                          global_transformation=self.transformation,
                                                          to_single_waveform={self.pulse_template})
             self.assertEqual([self.program], program)
+
+
+class HarmonicPulseTest(TestCase):
+    def setUp(self):
+        hold_duration = TimeType(10 ** 6)
+        hold = ConstantPT(hold_duration, {'a': '-1. + idx * 0.01'})
+        sine = FunctionPulseTemplate('sin(2 * pi * t)', duration_expression='10 / pi', channel='a')
+        self.pulse_template = (hold @ sine).with_iteration('idx', 100)
+
+        self.sine_waveform = sine.build_waveform(parameters={}, channel_mapping={'a': 'a'})
+
+        self.program = LinSpaceIter(
+            length=100,
+            body=(LinSpaceHold(
+                bases=(-1.,),
+                factors=((0.01,),),
+                duration_base=hold_duration,
+                duration_factors=None
+            ),
+            LinSpaceArbitraryWaveform(
+                waveform=self.sine_waveform,
+                channels=('a',)
+            )
+            )
+        )
+
+        key = DepKey.from_voltages((0.01,), DEFAULT_INCREMENT_RESOLUTION)
+        self.commands = [
+            Set(0, -1.0, key),
+            Wait(hold_duration),
+            Play(self.sine_waveform, channels=('a',)),
+            LoopLabel(0, 99),
+            Increment(0, 0.01, key),
+            Wait(hold_duration),
+            Play(self.sine_waveform, channels=('a',)),
+            LoopJmp(0)
+        ]
+
+        self.sample_resolution = TimeType(1)
+        n_samples = int(math.ceil(self.sine_waveform.duration / self.sample_resolution))
+
+        step_duration = hold_duration + self.sine_waveform.duration
+
+        self.output = []
+        for idx in range(100):
+            hold_ampl = sum([-1.0] + [0.01] * idx)
+            self.output.append((idx * step_duration, [hold_ampl]))
+            for n in range(n_samples):
+                inner_time = n * self.sample_resolution
+                time = idx * step_duration + hold_duration + inner_time
+                value = np.sin(float(2 * np.pi * inner_time))
+                self.output.append((time, [value]))
+
+    def test_program(self):
+        program_builder = LinSpaceBuilder(('a',))
+        program = self.pulse_template.create_program(program_builder=program_builder)
+
+        self.assertEqual([self.program], program)
+
+    def test_commands(self):
+        commands = to_increment_commands([self.program])
+        self.assertEqual(self.commands, commands)
+
+    def test_output(self):
+        vm = LinSpaceVM(1, sample_resolution=self.sample_resolution)
+        vm.set_commands(self.commands)
+        vm.run()
+        assert_vm_output_almost_equal(self, self.output, vm.history)

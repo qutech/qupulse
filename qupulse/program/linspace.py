@@ -5,6 +5,9 @@
 import contextlib
 import dataclasses
 import numpy as np
+import math
+import copy
+
 from dataclasses import dataclass
 from abc import ABC, abstractmethod
 from typing import Mapping, Optional, Sequence, ContextManager, Iterable, Tuple, Union, Dict, List, Set
@@ -516,22 +519,45 @@ class LinSpaceVM:
         self.label_counts = None
         self.current_command = None
 
+    def _play_arbitrary(self, play: Play):
+        """Play an arbitrary waveform.
+
+        This implementation samples the waveform with self.sample_resolution. We reinterpret this as a sequence of
+        Set and Hold commands.
+
+        Args:
+            play: The waveform to play
+        """
+        start_time = copy.copy(self.time)
+
+        # we do arbitrary time resolution sampling in a single batch
+        dt = self.sample_resolution
+        total_duration = play.waveform.duration
+        # we ceil, because we need to cover the complete duration. The last sample can have a shorter duration
+        n_samples = math.ceil(total_duration / dt)
+        exact_times = [dt * n for n in range(n_samples)]
+        sample_times = np.array(exact_times, dtype=np.float64)
+        samples = []
+        for ch in play.channels:
+            samples.append(play.waveform.get_sampled(channel=ch, sample_times=sample_times))
+
+        end_time = self.time + total_duration
+        for values in zip(*samples):
+            # This explicitness is not efficient but desired
+            # "set" the voltages
+            self.current_values[:] = values
+
+            # "wait" for sample time or time until end
+            hold_duration = min(dt, end_time - self.time)
+            self.history.append((self.time, self.current_values.copy()))
+            self.time += hold_duration
+
+        assert self.time == start_time + total_duration
+
     def change_state(self, cmd: Union[Set, Increment, Wait, Play]):
         if isinstance(cmd, Play):
-            dt = self.sample_resolution
-            t = TimeType(0)
-            total_duration = cmd.waveform.duration
-            while t <= total_duration and dt > 0:
-                sample_time = np.array([float(t)])
-                values = []
-                for (idx, ch) in enumerate(cmd.channels):
-                    self.current_values[idx] = values.append(cmd.waveform.get_sampled(channel=ch, sample_times=sample_time)[0])
-                self.history.append(
-                    (self.time, self.current_values.copy())
-                )
-                dt = min(total_duration - t, self.sample_resolution)
-                self.time += dt
-                t += dt
+            self._play_arbitrary(cmd)
+
         elif isinstance(cmd, Wait):
             self.history.append(
                 (self.time, self.current_values.copy())
