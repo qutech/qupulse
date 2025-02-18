@@ -10,7 +10,7 @@ import collections
 from qupulse.utils.types import ChannelID, FrozenDict, FrozenMapping
 from qupulse.expressions import Expression, ExpressionScalar
 from qupulse.parameter_scope import Scope, MappedScope
-from qupulse.pulses.pulse_template import PulseTemplate, MappingTuple
+from qupulse.pulses.pulse_template import PulseTemplate, MappingTuple, SingleWaveformStrategy
 from qupulse.pulses.parameters import ParameterNotProvidedException, ParameterConstrainer
 from qupulse.program.waveforms import Waveform
 from qupulse.program import ProgramBuilder
@@ -38,6 +38,7 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
                  channel_mapping: Optional[Dict[ChannelID, ChannelID]] = None,
                  parameter_constraints: Optional[List[str]]=None,
                  allow_partial_parameter_mapping: bool = None,
+                 to_single_waveform: Optional[SingleWaveformStrategy]=None,
                  registry: PulseRegistryType=None) -> None:
         """Standard constructor for the MappingPulseTemplate.
 
@@ -56,7 +57,7 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
         :param parameter_constraints:
         :param allow_partial_parameter_mapping: If None the value of the class variable ALLOW_PARTIAL_PARAMETER_MAPPING
         """
-        PulseTemplate.__init__(self, identifier=identifier)
+        PulseTemplate.__init__(self, identifier=identifier, to_single_waveform=to_single_waveform)
         ParameterConstrainer.__init__(self, parameter_constraints=parameter_constraints)
 
         if allow_partial_parameter_mapping is None:

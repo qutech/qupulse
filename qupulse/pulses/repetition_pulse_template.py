@@ -19,7 +19,7 @@ from qupulse.parameter_scope import Scope
 from qupulse.utils.types import ChannelID
 from qupulse.expressions import ExpressionScalar
 from qupulse.utils import checked_int_cast
-from qupulse.pulses.pulse_template import PulseTemplate
+from qupulse.pulses.pulse_template import PulseTemplate, SingleWaveformStrategy
 from qupulse.pulses.loop_pulse_template import LoopPulseTemplate
 from qupulse.pulses.parameters import ParameterConstrainer
 from qupulse.pulses.measurement import MeasurementDefiner, MeasurementDeclaration
@@ -44,6 +44,7 @@ class RepetitionPulseTemplate(LoopPulseTemplate, ParameterConstrainer, Measureme
                  *args,
                  parameter_constraints: Optional[List]=None,
                  measurements: Optional[List[MeasurementDeclaration]]=None,
+                 to_single_waveform: Optional[SingleWaveformStrategy] = None,
                  registry: PulseRegistryType=None
                  ) -> None:
         """Create a new RepetitionPulseTemplate instance.
@@ -59,7 +60,7 @@ class RepetitionPulseTemplate(LoopPulseTemplate, ParameterConstrainer, Measureme
         elif args:
             TypeError('RepetitionPulseTemplate expects 3 positional arguments, got ' + str(3 + len(args)))
 
-        LoopPulseTemplate.__init__(self, identifier=identifier, body=body)
+        LoopPulseTemplate.__init__(self, identifier=identifier, body=body, to_single_waveform=to_single_waveform)
         ParameterConstrainer.__init__(self, parameter_constraints=parameter_constraints)
         MeasurementDefiner.__init__(self, measurements=measurements)
 

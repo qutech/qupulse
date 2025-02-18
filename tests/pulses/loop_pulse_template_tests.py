@@ -11,6 +11,7 @@ from qupulse.pulses.parameters import InvalidParameterNameException, ParameterCo
     ParameterNotProvidedException, ParameterConstraint
 
 from qupulse.program.loop import LoopBuilder, Loop
+from qupulse.program.waveforms import SequenceWaveform
 
 from tests.pulses.sequencing_dummies import DummyPulseTemplate, MeasurementWindowTestCase, DummyWaveform
 from tests.serialization_dummies import DummySerializer
@@ -425,6 +426,15 @@ class ForLoopTemplateSequencingTests(MeasurementWindowTestCase):
 
         # not ensure same result as from Sequencer here - we're testing appending to an already existing parent loop
         # which is a use case that does not immediately arise from using Sequencer
+
+    def test_single_waveform(self):
+        inner_wf = DummyWaveform()
+        inner_pt = DummyPulseTemplate(waveform=inner_wf, parameter_names={'idx'})
+
+        flpt = ForLoopPulseTemplate(inner_pt, loop_index='idx', loop_range=3, to_single_waveform='always')
+        program = flpt.create_program()
+        expected = Loop(children=[Loop(repetition_count=1, waveform=SequenceWaveform.from_sequence([inner_wf] * 3))])
+        self.assertEqual(expected, program)
 
 
 class ForLoopPulseTemplateSerializationTests(SerializableTests, unittest.TestCase):
