@@ -428,6 +428,15 @@ class MappingPulseTemplateSequencingTest(MeasurementWindowTestCase):
         with self.assertRaisesRegex(ValueError, 'multiple channels to the same target'):
             MappingPulseTemplate(dpt, channel_mapping={'A': 'X', 'B': 'X'})
 
+    def test_single_waveform(self):
+        inner_wf = DummyWaveform()
+        inner_pt = DummyPulseTemplate(waveform=inner_wf)
+
+        mpt = MappingPulseTemplate(inner_pt, to_single_waveform='always')
+        program = mpt.create_program()
+        expected = Loop(children=[Loop(repetition_count=1, waveform=inner_wf)])
+        self.assertEqual(expected, program)
+
 
 class PulseTemplateParameterMappingExceptionsTests(unittest.TestCase):
 

@@ -3,6 +3,7 @@ import warnings
 from unittest import mock
 
 from qupulse.parameter_scope import Scope, DictScope
+from qupulse.program.waveforms import RepetitionWaveform
 from qupulse.utils.types import FrozenDict
 
 from qupulse.program import default_program_builder
@@ -569,6 +570,15 @@ class RepetitionPulseTemplateSequencingTests(MeasurementWindowTestCase):
                                    global_transformation=None,
                                    program_builder=program_builder)
         self.assertIsNone(program_builder.to_program())
+
+    def test_single_waveform(self):
+        inner_wf = DummyWaveform()
+        inner_pt = DummyPulseTemplate(waveform=inner_wf)
+
+        rpt = RepetitionPulseTemplate(inner_pt, repetition_count=42, to_single_waveform='always')
+        program = rpt.create_program()
+        expected = Loop(children=[Loop(repetition_count=1, waveform=RepetitionWaveform.from_repetition_count(inner_wf, 42))])
+        self.assertEqual(expected, program)
 
 
 class RepetitionPulseTemplateSerializationTests(SerializableTests, unittest.TestCase):
