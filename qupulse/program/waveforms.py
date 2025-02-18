@@ -9,13 +9,16 @@ Classes:
 """
 
 import itertools
+import math
 import operator
 import warnings
+import functools
 from abc import ABCMeta, abstractmethod
 from numbers import Real
 from typing import (
     AbstractSet, Any, FrozenSet, Iterable, Mapping, NamedTuple, Sequence, Set,
     Tuple, Union, cast, Optional, List, Hashable)
+from unittest import case
 from weakref import WeakValueDictionary, ref
 
 import numpy as np
@@ -1280,3 +1283,84 @@ class ReversedWaveform(Waveform):
 
     def __repr__(self):
         return f"ReversedWaveform(inner={self._inner!r})"
+
+
+class WaveformRenderer:
+    def __init__(self, default_sample_rate: TimeType):
+        self.default_sample_rate = default_sample_rate
+
+    def _render_iterable(self, wf_iter: Iterable[Waveform]) -> dict[ChannelID, list[tuple[float, float]]]:
+        sequenced_waveforms = iter(wf_iter)
+        first_waveform = next(sequenced_waveforms)
+        rendered = self.render(first_waveform)
+        time = first_waveform.duration
+        for wf in sequenced_waveforms:
+            for ch, points in self.render(wf):
+                rendered[ch].extend((float(time + t), v) for t, v in points)
+            time = time + wf.duration
+        return rendered
+
+    @functools.singledispatchmethod
+    def render(self, waveform: Waveform) -> dict[ChannelID, list[tuple[float, float]]]:
+        n_samples = int(math.ceil(waveform.duration * self.default_sample_rate))
+        times = np.linspace(0.0, math.nextafter(float(waveform.duration), 0.0), num=n_samples)
+
+        return {
+            ch: list(zip(times, waveform.unsafe_sample(channel=ch, sample_times=times)))
+            for ch in waveform.defined_channels
+        }
+
+
+
+    @render.register
+    def _(self, wf: TableWaveform):
+        points = []
+        entries: Sequence[TableWaveformEntry] = wf._table
+        for entry1, entry2 in pairwise(entries):
+            t1 = float(entry1.t)
+            t2 = float(entry2.t)
+            points.append((t1, entry1.v))
+            interp = str(entry2.interp)
+            match interp:
+                case 'linear':
+                    pass
+                case 'hold':
+                    t_add = math.nextafter(t2, t1)
+                    v_add = entry1.v
+                    points.append((t_add, v_add))
+                case 'jump':
+                    t_add = math.nextafter(t1, t2)
+                    v_add = entry2.v
+                    points.append((t_add, v_add))
+                case _:
+                    raise NotImplementedError(f"Cannot render this interpolation: {entry2.interp!r}")
+
+        if interp == 'linear':
+            t_add = math.nextafter(t2, t1)
+            v_add = entry2.v
+            points.append((t_add, v_add))
+        return {wf._channel_id: points}
+
+    @render.register
+    def _(self, wf: SequenceWaveform):
+        return self._render_iterable(wf.sequenced_waveforms)
+
+    @render.register
+    def _(self, wf: MultiChannelWaveform) -> dict[ChannelID, list[tuple[float, float]]]:
+        rendered = {}
+        for wf in wf._sub_waveforms:
+            rendered.update(self.render(wf))
+        return rendered
+
+    @render.register
+    def _(self, wf: RepetitionWaveform) -> dict[ChannelID, list[tuple[float, float]]]:
+        self._render_iterable(itertools.repeat(wf._body, wf._repetition_count))
+
+    @render.register
+    def _(self, wf: ConstantWaveform) -> dict[ChannelID, list[tuple[float, float]]]:
+        return {
+            wf._channel: [
+                (0.0, wf._amplitude),
+                (math.nextafter(float(wf._duration), 0.0), wf._amplitude)
+            ]
+        }
