@@ -1230,9 +1230,9 @@ class _TranslationState:
     def _free_registers(self,label:int):
         for ch,dep_state_dict in self.dep_states.items():
             for depkey,dep_state in dep_state_dict.items():
-                print(f'LOOKING AT {depkey._free_upon_loop_exit=},{label=}')
+                # print(f'LOOKING AT {depkey._free_upon_loop_exit=},{label=}')
                 if depkey._free_upon_loop_exit==label:
-                    print(f'RESETTING {depkey=}')
+                    # print(f'RESETTING {depkey=}')
                     dep_state_dict[depkey] = 0
     
     def _set_indexed_voltage(self, channel: ChannelID, base: float, factors: Sequence[float]):
@@ -1255,11 +1255,9 @@ class _TranslationState:
         current_dep_state = self.dep_states.setdefault(channel, {}).get(dep_key, None)
         
         if current_dep_state is None or current_dep_state==0:
-            if not all(it == 0 for it in self.iterations):
-                print(self.dep_states)
-                print('#######')
-                print(dep_key)
-                print(channel)
+            # if not all(it == 0 for it in self.iterations):
+            #this is not valid anymore, more intricate check would be necessary
+            #with check againstall iterations 0 for depkey compared without loop property
             # if current_dep_state is None:
             #     assert all(it == 0 for it in self.iterations), self.iterations
             self.commands.append(Set(channel, ResolutionDependentValue((),(),offset=base), dep_key))
