@@ -164,7 +164,9 @@ class DepKey:
     """
     factors: Tuple[int, ...]
     domain: DepDomain
-    _free_upon_loop_exit: Optional[int] = field(hash=False,compare=False)
+    # _free_upon_loop_exit: Optional[int] = field(hash=False,compare=False)
+    _free_upon_loop_exit: Optional[int]
+
     # strategy: DepStrategy
     
     @classmethod
@@ -1086,7 +1088,8 @@ class _TranslationState:
     plain_value: Dict[GeneralizedChannel, Dict[DepDomain,float]] = dataclasses.field(default_factory=dict)
     resolution: float = dataclasses.field(default_factory=lambda: DEFAULT_INCREMENT_RESOLUTION)
     resolution_time: float = dataclasses.field(default_factory=lambda: DEFAULT_TIME_RESOLUTION)
-
+    nesting_lvl_to_loop_label: List[int] = dataclasses.field(default_factory=lambda: [])
+    
     def new_loop(self, count: int):
         label = LoopLabel(self.label_num, count)
         jmp = LoopJmp(self.label_num)
@@ -1102,7 +1105,7 @@ class _TranslationState:
                 dom_to_ch_to_depstates[dom].setdefault(ch,set())
                 for dep in deps:
                     dom_to_ch_to_depstates[dom][ch].add(self.dep_states.get(ch, {}).get(
-                        DepKey.from_domain(dep, self.resolution, dom),None))
+                        DepKey.from_domain(dep, self.resolution, dom, None),None))
         
         return dom_to_ch_to_depstates
         # return {
@@ -1210,18 +1213,31 @@ class _TranslationState:
     def _add_iteration_node(self, node: LinSpaceIter):
         
         self.iterations.append(0)
+        if node.length > 1:
+            label, jmp = self.new_loop(node.length - 1)
+        self.nesting_lvl_to_loop_label.append(label.idx)
         self.add_node(node.body)
 
         if node.length > 1:
             self.iterations[-1] = node.length - 1
-            label, jmp = self.new_loop(node.length - 1)
             self.commands.append(label)
             self.add_node(node.body)
             self.commands.append(jmp)
+        self._free_registers(label.idx)
         self.iterations.pop()
+        self.nesting_lvl_to_loop_label.pop()
         
+    def _free_registers(self,label:int):
+        for ch,dep_state_dict in self.dep_states.items():
+            for depkey,dep_state in dep_state_dict.items():
+                print(f'LOOKING AT {depkey._free_upon_loop_exit=},{label=}')
+                if depkey._free_upon_loop_exit==label:
+                    print(f'RESETTING {depkey=}')
+                    dep_state_dict[depkey] = 0
+    
     def _set_indexed_voltage(self, channel: ChannelID, base: float, factors: Sequence[float]):
-        key = DepKey.from_voltages(voltages=factors, resolution=self.resolution, free_upon_loop_exit=self.label_num)
+        free_upon_nesting_exit = next((i for i, x in enumerate(factors) if x != 0), len(factors))
+        key = DepKey.from_voltages(voltages=factors, resolution=self.resolution, free_upon_loop_exit=self.nesting_lvl_to_loop_label[free_upon_nesting_exit])
         self.set_indexed_value(key, channel, base, factors, domain=DepDomain.VOLTAGE, always_emit_incr=True)
     
     def _set_indexed_lin_time(self, base: TimeType, factors: Sequence[TimeType]):
@@ -1237,12 +1253,21 @@ class _TranslationState:
         )
 
         current_dep_state = self.dep_states.setdefault(channel, {}).get(dep_key, None)
-        if current_dep_state is None:
-            assert all(it == 0 for it in self.iterations), self.iterations
+        
+        if current_dep_state is None or current_dep_state==0:
+            if not all(it == 0 for it in self.iterations):
+                print(self.dep_states)
+                print('#######')
+                print(dep_key)
+                print(channel)
+            # if current_dep_state is None:
+            #     assert all(it == 0 for it in self.iterations), self.iterations
             self.commands.append(Set(channel, ResolutionDependentValue((),(),offset=base), dep_key))
             self.active_dep.setdefault(channel,{})[dep_key.domain] = dep_key
 
         else:
+            print(self.label_num)
+            print(self.iterations)
             inc = new_dep_state.required_increment_from(previous=current_dep_state, factors=factors)
 
             # we insert all inc here (also inc == 0) because it signals to activate this amplitude register
@@ -1291,13 +1316,13 @@ class _TranslationState:
                         # will yield the correct trafo already without having to make adjustments
                         # self.set_non_indexed_value(ch, base, domain)
                     else:
-                        key = DepKey.from_domain(factors, resolution=self.resolution, domain=domain)
+                        key = DepKey.from_domain(factors, resolution=self.resolution, domain=domain, free_upon_loop_exit=self.label_num)
                         self.set_indexed_value(key, ch, base, factors, key.domain)
             
         for st_ch, st_factors in node.index_factors.items():
             #this should not happen:
             assert st_factors is not None
-            key = DepKey.from_domain(st_factors, resolution=self.resolution, domain=DepDomain.STEP_INDEX)
+            key = DepKey.from_domain(st_factors, resolution=self.resolution, domain=DepDomain.STEP_INDEX, free_upon_loop_exit=None)
             self.set_indexed_value(key, st_ch, 0, st_factors, key.domain)
             
             
