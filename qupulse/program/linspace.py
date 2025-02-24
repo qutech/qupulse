@@ -164,24 +164,25 @@ class DepKey:
     """
     factors: Tuple[int, ...]
     domain: DepDomain
+    _free_upon_loop_exit: Optional[int] = field(hash=False,compare=False)
     # strategy: DepStrategy
     
     @classmethod
-    def from_domain(cls, factors, resolution, domain):
+    def from_domain(cls, factors, resolution, domain, free_upon_loop_exit):
         # # remove trailing zeros
         #why was this done in the first place? this seems to introduce more bugs than it solves
         # while factors and factors[-1] == 0:
         #     factors = factors[:-1]
         return cls(tuple(int(round(factor / resolution)) for factor in factors),
-                   domain)
+                   domain, _free_upon_loop_exit=free_upon_loop_exit)
     
     @classmethod
-    def from_voltages(cls, voltages: Sequence[float], resolution: float):
-        return cls.from_domain(voltages, resolution, DepDomain.VOLTAGE)
+    def from_voltages(cls, voltages: Sequence[float], resolution: float, free_upon_loop_exit: Optional[int]=None):
+        return cls.from_domain(voltages, resolution, DepDomain.VOLTAGE, free_upon_loop_exit)
     
     @classmethod
     def from_lin_times(cls, times: Sequence[float], resolution: float):
-        return cls.from_domain(times, resolution, DepDomain.TIME_LIN)
+        return cls.from_domain(times, resolution, DepDomain.TIME_LIN, None)
 
 
 @dataclass
@@ -994,7 +995,7 @@ class Increment:
 class Set:
     channel: Optional[GeneralizedChannel]
     value: Union[ResolutionDependentValue,Tuple[ResolutionDependentValue]]
-    key: DepKey = dataclasses.field(default_factory=lambda: DepKey((),DepDomain.NODEP))
+    key: DepKey = dataclasses.field(default_factory=lambda: DepKey((),DepDomain.NODEP,None))
 
     def __hash__(self):
         return hash((type(self),self.channel,self.value,self.key))
@@ -1149,7 +1150,7 @@ class _TranslationState:
             
     def set_non_indexed_value(self, channel: GeneralizedChannel, value: float,
                               domain: DepDomain, always_emit_set: bool=False):
-        key = DepKey((),domain)
+        key = DepKey((),domain,None)
         # I do not completely get why it would have to be set again if not in active dep.
         # if not key != self.active_dep.get(channel, None)  or
         if self.plain_value.get(channel, {}).get(domain, None) != value or always_emit_set:
@@ -1220,7 +1221,7 @@ class _TranslationState:
         self.iterations.pop()
         
     def _set_indexed_voltage(self, channel: ChannelID, base: float, factors: Sequence[float]):
-        key = DepKey.from_voltages(voltages=factors, resolution=self.resolution)
+        key = DepKey.from_voltages(voltages=factors, resolution=self.resolution, free_upon_loop_exit=self.label_num)
         self.set_indexed_value(key, channel, base, factors, domain=DepDomain.VOLTAGE, always_emit_incr=True)
     
     def _set_indexed_lin_time(self, base: TimeType, factors: Sequence[TimeType]):
@@ -1237,7 +1238,7 @@ class _TranslationState:
 
         current_dep_state = self.dep_states.setdefault(channel, {}).get(dep_key, None)
         if current_dep_state is None:
-            assert all(it == 0 for it in self.iterations)
+            assert all(it == 0 for it in self.iterations), self.iterations
             self.commands.append(Set(channel, ResolutionDependentValue((),(),offset=base), dep_key))
             self.active_dep.setdefault(channel,{})[dep_key.domain] = dep_key
 
