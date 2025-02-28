@@ -1229,7 +1229,7 @@ class _TranslationState:
         
     def _free_registers(self,label:int):
         for ch,dep_state_dict in self.dep_states.items():
-            for depkey,dep_state in dep_state_dict.items():
+            for depkey,dep_state in list(dep_state_dict.items()):
                 # print(f'LOOKING AT {depkey._free_upon_loop_exit=},{label=}')
                 # the _free_upon_loop_exit are not compared/hashed, meaning the
                 # first entry made, stemming from the lowest nesting level,
@@ -1237,7 +1237,9 @@ class _TranslationState:
                 # once this level is reached again.
                 if depkey._free_upon_loop_exit==label:
                     # print(f'RESETTING {depkey=}')
-                    dep_state_dict[depkey] = 0
+                    # dep_state_dict[depkey] = 0
+                    dep_state_dict.pop(depkey)
+
     
     def _set_indexed_voltage(self, channel: ChannelID, base: float, factors: Sequence[float]):
         free_upon_nesting_exit = next((i for i, x in enumerate(factors) if x != 0), len(factors))
