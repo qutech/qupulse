@@ -902,7 +902,7 @@ class LinSpaceBuilder(ProgramBuilder):
             potential_waveform = build_func(build_parameters,channel_mapping=channel_mapping)
             if global_transformation:
                 potential_waveform = TransformingWaveform.from_transformation(potential_waveform, global_transformation)
-                constant_values = potential_waveform.constant_value_dict()
+            constant_values = potential_waveform.constant_value_dict()
         except:
             constant_values = None
         
@@ -1264,8 +1264,8 @@ class _TranslationState:
             self.active_dep.setdefault(channel,{})[dep_key.domain] = dep_key
 
         else:
-            print(self.label_num)
-            print(self.iterations)
+            # print(self.label_num)
+            # print(self.iterations)
             inc = new_dep_state.required_increment_from(previous=current_dep_state, factors=factors)
 
             # we insert all inc here (also inc == 0) because it signals to activate this amplitude register
