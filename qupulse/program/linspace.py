@@ -164,8 +164,8 @@ class DepKey:
     """
     factors: Tuple[int, ...]
     domain: DepDomain
-    # _free_upon_loop_exit: Optional[int] = field(hash=False,compare=False)
-    _free_upon_loop_exit: Optional[int]
+    _free_upon_loop_exit: Optional[int] = field(hash=False,compare=False)
+    # _free_upon_loop_exit: Optional[int]
 
     # strategy: DepStrategy
     
@@ -1231,6 +1231,10 @@ class _TranslationState:
         for ch,dep_state_dict in self.dep_states.items():
             for depkey,dep_state in dep_state_dict.items():
                 # print(f'LOOKING AT {depkey._free_upon_loop_exit=},{label=}')
+                # the _free_upon_loop_exit are not compared/hashed, meaning the
+                # first entry made, stemming from the lowest nesting level,
+                # will have the lowest number, meaning it should only be removed
+                # once this level is reached again.
                 if depkey._free_upon_loop_exit==label:
                     # print(f'RESETTING {depkey=}')
                     dep_state_dict[depkey] = 0
