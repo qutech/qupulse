@@ -1301,6 +1301,12 @@ class WaveformCollection():
         self._waveform_collection = tuple(waveform_collection)
         
     @property
+    def duration(self) -> TimeType:
+        lens = [wf.duration for wf in self.flatten()]
+        assert np.all(np.isclose([float(l) for l in lens], float(lens[0])))
+        return lens[0]
+		
+    @property
     def waveform_collection(self):
         return self._waveform_collection
     
