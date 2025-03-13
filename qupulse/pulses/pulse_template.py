@@ -551,6 +551,10 @@ class AtomicPulseTemplate(PulseTemplate, MeasurementDefiner):
         
         # "hackedy":
         if program_builder.evaluate_nested_stepping(scope,self.parameter_names):
+            measurements = self.get_measurement_windows(parameters=scope,
+                                                        measurement_mapping=measurement_mapping)
+            program_builder.measure(measurements)
+            
             program_builder.dispatch_to_stepped_wf_or_hold(build_func=self.build_waveform,
                                                            build_parameters=scope,
                                                            parameter_names=self.parameter_names,
