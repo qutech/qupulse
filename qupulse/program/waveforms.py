@@ -63,10 +63,11 @@ class Waveform(Comparable, metaclass=ABCMeta):
 
     __sampled_cache = WeakValueDictionary()
 
-    __slots__ = ('_duration',)
+    __slots__ = ('_duration','_pow_2_divisor')
 
-    def __init__(self, duration: TimeType):
+    def __init__(self, duration: TimeType, _pow_2_divisor: int = 0):
         self._duration = duration
+        self._pow_2_divisor = _pow_2_divisor
 
     @property
     def duration(self) -> TimeType:
@@ -1329,4 +1330,10 @@ class WaveformCollection():
     def reversed(self) -> 'WaveformCollection':
         """Returns a reversed version of this waveformcollection."""
         rev = tuple(w.reversed() for w in self._waveform_collection[::-1])
-        return WaveformCollection(rev)    
+        return WaveformCollection(rev)
+    
+    @property
+    def _pow_2_divisor(self) -> int:
+        divs = set(wf._pow_2_divisor for wf in self.flatten())
+        assert len(divs)==1
+        return divs.pop()

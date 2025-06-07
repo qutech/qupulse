@@ -865,7 +865,9 @@ class LinSpaceBuilder(ProgramBuilder):
             parameter_names: set[str],
             channel_mapping: Dict[ChannelID, Optional[ChannelID]],
             #measurements tbd
-            global_transformation: Optional["Transformation"]) -> None:
+            global_transformation: Optional["Transformation"],
+            _pow_2_divisor: int
+            ) -> None:
         
         stepped_vals = {k:v for k,v in build_parameters.items()
                         if isinstance(v,SimpleExpressionStepped) and k in parameter_names}
@@ -880,6 +882,10 @@ class LinSpaceBuilder(ProgramBuilder):
                 waveform = build_func(inner_scope,channel_mapping=channel_mapping)
                 if global_transformation:
                     waveform = TransformingWaveform.from_transformation(waveform, global_transformation)
+                
+                #hacky
+                waveform._pow_2_divisor = _pow_2_divisor
+                
                 #this case should not happen, should have been caught beforehand:
                 # or maybe not, if e.g. amp is zero for some reason
                 # assert waveform.constant_value_dict() is None

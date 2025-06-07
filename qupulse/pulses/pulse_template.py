@@ -62,6 +62,7 @@ class PulseTemplate(Serializable):
                  identifier: Optional[str]) -> None:
         super().__init__(identifier=identifier)
         self.__cached_hash_value = None
+        self._pow_2_divisor: int = 0
 
     @property
     @abstractmethod
@@ -560,7 +561,8 @@ class AtomicPulseTemplate(PulseTemplate, MeasurementDefiner):
                                                            parameter_names=self.parameter_names,
                                                            channel_mapping=channel_mapping,
                                                            #measurements
-                                                           global_transformation=global_transformation
+                                                           global_transformation=global_transformation,
+                                                           _pow_2_divisor=self._pow_2_divisor
                                                            )
             return
         
@@ -573,7 +575,9 @@ class AtomicPulseTemplate(PulseTemplate, MeasurementDefiner):
 
             if global_transformation:
                 waveform = TransformingWaveform.from_transformation(waveform, global_transformation)
-
+                
+            waveform._pow_2_divisor = self._pow_2_divisor
+                
             constant_values = waveform.constant_value_dict()
             if constant_values is None:
                 program_builder.play_arbitrary_waveform(waveform)
