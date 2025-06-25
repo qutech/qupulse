@@ -11,21 +11,32 @@ import sympy
 import numpy
 
 try:
-    from sympy.printing.numpy import NumPyPrinter
+    import scipy
+except ImportError:
+    scipy = None
+
+try:
+    from sympy.printing.numpy import NumPyPrinter, SciPyPrinter
 except ImportError:
     # sympy moved NumPyPrinter in release 1.8
     from sympy.printing.pycode import NumPyPrinter
+    SciPyPrinter = None
     warnings.warn("Please update sympy.", DeprecationWarning)
 
-try:
+if scipy:
     import scipy.special as _special_functions
-except ImportError:
+else:
     _special_functions = {fname: numpy.vectorize(fobject)
                           for fname, fobject in math.__dict__.items()
                           if callable(fobject) and not fname.startswith('_') and fname not in numpy.__dict__}
     warnings.warn('scipy is not installed. This reduces the set of available functions to those present in numpy + '
                   'manually vectorized functions in math.')
 
+if scipy and SciPyPrinter:
+    PrinterBase = SciPyPrinter
+else:
+    PrinterBase = NumPyPrinter
+    
 
 __all__ = ["sympify", "substitute_with_eval", "to_numpy", "get_variables", "get_free_symbols", "recursive_substitution",
            "evaluate_lambdified", "get_most_simple_representation"]
@@ -368,8 +379,13 @@ _math_environment = {**_base_environment, **math.__dict__}
 _numpy_environment = {**_base_environment, **numpy.__dict__}
 _sympy_environment = {**_base_environment, **sympy.__dict__}
 
+
 _lambdify_modules = [{'ceiling': numpy_compatible_ceiling, 'floor': _floor_to_int,
-                      'Broadcast': numpy.broadcast_to}, 'numpy', _special_functions]
+                      'Broadcast': numpy.broadcast_to}, 'numpy', _special_functions,]
+
+if scipy:
+    # this is required for Integral lambdification
+    _lambdify_modules.append("scipy")
 
 
 def evaluate_compiled(expression: sympy.Expr,
@@ -397,7 +413,7 @@ def evaluate_lambdified(expression: Union[sympy.Expr, numpy.ndarray],
     return lambdified(**parameters), lambdified
 
 
-class HighPrecPrinter(NumPyPrinter):
+class HighPrecPrinter(PrinterBase):
     """Custom printer that translates sympy.Rational into TimeType"""
     def _print_Rational(self, expr):
         return f'TimeType.from_fraction({expr.p}, {expr.q})'
