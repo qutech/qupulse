@@ -14,6 +14,11 @@ from typing import Union
 import sympy
 import numpy as np
 
+try:
+    import scipy
+except ImportError:
+    scipy = None
+
 from sympy.abc import a, b, c, d, e, f, k, l, m, n, i, j
 from sympy import sin, Sum, IndexedBase, Rational, Integral
 
@@ -311,6 +316,13 @@ class EvaluationTestsBase:
     def test_integral(self):
         if type(self) is CompiledEvaluationTest:
             raise unittest.SkipTest("Integrals are not representable in pure repr lambdas.")
+
+        if scipy is None:
+            # printer based evaluate requires scipy to print integrals
+            for expr, parameters, _ in eval_integral:
+                with self.assertRaises(NotImplementedError):
+                    self.evaluate(expr, parameters)
+            return
 
         for expr, parameters, expected in eval_integral:
             result = self.evaluate(expr, parameters)
