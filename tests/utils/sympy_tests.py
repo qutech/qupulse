@@ -121,7 +121,7 @@ eval_exact_rational = [
     # (np.array([a, Rational(1, 3)]), {'a': 2}, np.array([2, TimeType.from_fraction(1, 3)]))
 ]
 eval_integral = [
-    (Integral(sin(b * a ** 2 + c * a) / a, (a, 0, c))/b, {'b': 5, 'c': 100.}, None)
+    (Integral(sin(b * a ** 2 + c * a) / a, (a, 0, c))/b, {'b': 5, 'c': 100.}, 0.26302083739430604)
 ]
 
 
