@@ -309,6 +309,9 @@ class EvaluationTestsBase:
                 np.testing.assert_equal(result, expected)
 
     def test_integral(self):
+        if type(self) is CompiledEvaluationTest:
+            raise unittest.SkipTest("Integrals are not representable in pure repr lambdas.")
+
         for expr, parameters, expected in eval_integral:
             result = self.evaluate(expr, parameters)
             try:
