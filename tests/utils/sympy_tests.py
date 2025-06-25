@@ -15,7 +15,7 @@ import sympy
 import numpy as np
 
 from sympy.abc import a, b, c, d, e, f, k, l, m, n, i, j
-from sympy import sin, Sum, IndexedBase, Rational
+from sympy import sin, Sum, IndexedBase, Rational, Integral
 
 a_ = IndexedBase(a)
 b_ = IndexedBase(b)
@@ -119,6 +119,9 @@ eval_exact_rational = [
     (a * Rational('1/3'), {'a': Rational(1, 5)}, TimeType.from_fraction(1, 15)),
     # TODO: this fails
     # (np.array([a, Rational(1, 3)]), {'a': 2}, np.array([2, TimeType.from_fraction(1, 3)]))
+]
+eval_integral = [
+    (Integral(sin(b * a ** 2 + c * a) / a, (a, 0, c))/b, {'b': 5, 'c': 100.}, None)
 ]
 
 
@@ -299,6 +302,14 @@ class EvaluationTestsBase:
 
     def test_eval_exact_rational(self):
         for expr, parameters, expected in eval_exact_rational:
+            result = self.evaluate(expr, parameters)
+            try:
+                self.assertEqual(result, expected)
+            except ValueError:
+                np.testing.assert_equal(result, expected)
+
+    def test_integral(self):
+        for expr, parameters, expected in eval_integral:
             result = self.evaluate(expr, parameters)
             try:
                 self.assertEqual(result, expected)
