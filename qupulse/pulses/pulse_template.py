@@ -10,18 +10,21 @@ Classes:
     - AtomicPulseTemplate: PulseTemplate that does imply any control flow disruptions and can be
         directly translated into a waveform.
 """
+import inspect
+import types
 import warnings
 import typing
 from abc import abstractmethod
 from typing import Dict, Tuple, Set, Optional, Union, List, Callable, Any, Generic, TypeVar, Mapping, Literal
 import itertools
 import collections
+import difflib
 from numbers import Real, Number
 
 import numpy
 import sympy
 
-from qupulse.utils.types import ChannelID, DocStringABCMeta, FrozenDict
+from qupulse.utils.types import ChannelID, DocStringABCMeta, FrozenDict, MetaData
 from qupulse.utils import forced_hash
 from qupulse.serialization import Serializable
 from qupulse.expressions import ExpressionScalar, Expression, ExpressionLike
@@ -44,7 +47,15 @@ MappingTuple = Union[Tuple['PulseTemplate'],
                      Tuple['PulseTemplate', Dict, Dict, Dict]]
 
 
+class TemplateMetaData(MetaData):
+    _DECLARED_FIELDS = collections.ChainMap({}, MetaData._DECLARED_FIELDS)
+
+
 SingleWaveformStrategy = Literal['always']
+TemplateMetaData.declare_field('to_single_waveform',
+                               {'always'},
+                               lambda: 'always')
+
 
 
 class PulseTemplate(Serializable):
@@ -65,17 +76,30 @@ class PulseTemplate(Serializable):
 
     def __init__(self, *,
                  identifier: Optional[str],
-                 to_single_waveform: Optional[SingleWaveformStrategy] = None) -> None:
+                 meta_data: Union[TemplateMetaData, dict] = None) -> None:
         super().__init__(identifier=identifier)
-        if to_single_waveform is not None and to_single_waveform not in typing.get_args(SingleWaveformStrategy):
-            warnings.warn(f"Unknown to_single_waveform parameter: {to_single_waveform!r}")
-        self._to_single_waveform = to_single_waveform
+        if isinstance(meta_data, dict):
+            meta_data = TemplateMetaData(**meta_data)
+        self._meta_data = meta_data
+
         self.__cached_hash_value = None
+
+    @property
+    def meta_data(self) -> TemplateMetaData:
+        """The metadata is intended for information which does not concern the pulse itself but rather its usage.
+
+        Here is the place for program builder optimization hints or tags that are not targeted at qupulse.
+
+        As it is no property of the pulse itself, it is ignored for hashing and equality checks.
+        """
+        if self._meta_data is None:
+            self._meta_data = TemplateMetaData()
+        return self._meta_data
 
     def get_serialization_data(self, serializer: Optional['Serializer'] = None) -> Dict[str, Any]:
         data = super().get_serialization_data(serializer=serializer)
-        if self._to_single_waveform:
-            data['to_single_waveform'] = self._to_single_waveform
+        if self._meta_data:
+            data["meta_data"] = self._meta_data.get_serialization_data()
         return data
 
     @property
@@ -105,7 +129,7 @@ class PulseTemplate(Serializable):
 
     def _is_atomic(self) -> bool:
         """This is (currently a private) a check if this pulse template always is translated into a single waveform."""
-        return self._to_single_waveform == 'always'
+        return self.meta_data.to_single_waveform == 'always'
 
     @property
     def to_single_waveform(self) -> Optional[SingleWaveformStrategy]:
@@ -114,7 +138,9 @@ class PulseTemplate(Serializable):
         'always': It is always translated into a single waveform.
         None: It depends on the `create_program` arguments and the pulse template itself.
         """
-        return self._to_single_waveform
+        warnings.warn("to_single_waveform is deprecated. Use meta_data.to_single_waveform instead.",
+                      category=DeprecationWarning, stacklevel=2)
+        return self.meta_data.to_single_waveform
 
     def __matmul__(self, other: Union['PulseTemplate', MappingTuple]) -> 'SequencePulseTemplate':
         """This method enables using the @-operator (intended for matrix multiplication) for
@@ -491,10 +517,22 @@ class PulseTemplate(Serializable):
         from qupulse.pulses.arithmetic_pulse_template import try_operation
         return try_operation(self, '/', other)
 
+    def _get_compare_key(self):
+        """Compare pulse templates without runtime meta data."""
+        data = self.get_serialization_data()
+        data.pop("meta_data", None)
+        return data
+
     def __hash__(self):
         if self.__cached_hash_value is None:
-            self.__cached_hash_value = forced_hash(self.get_serialization_data())
+            self.__cached_hash_value = forced_hash(self._get_compare_key())
         return self.__cached_hash_value
+
+    def __eq__(self, other):
+        if hasattr(other, '_get_compare_key'):
+            return self._get_compare_key() == other._get_compare_key()
+        else:
+            return NotImplemented
 
 
 class AtomicPulseTemplate(PulseTemplate, MeasurementDefiner):
