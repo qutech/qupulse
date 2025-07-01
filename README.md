@@ -79,4 +79,4 @@ Contents of `tests` mirror the structure of `qupulse`. For every `<module>` some
 
 ## License
 
-The current version of qupulse is available under the `GPL-3.0-or-later` license. Versions up to and including 0.10 were licensed under the MIT license. If you require different licensing terms, please contact us to discuss your needs.
+The current version of qupulse is available under the `LGPL-3.0-or-later` license. Versions up to and including 0.10 were licensed under the MIT license. If you require different licensing terms, please contact us to discuss your needs.
