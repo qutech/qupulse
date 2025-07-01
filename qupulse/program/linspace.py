@@ -4,6 +4,8 @@
 
 import contextlib
 import dataclasses
+import warnings
+
 import numpy as np
 import math
 import copy
@@ -16,7 +18,7 @@ from qupulse import ChannelID, MeasurementWindow
 from qupulse.parameter_scope import Scope, MappedScope, FrozenDict
 from qupulse.program import (ProgramBuilder, HardwareTime, HardwareVoltage, Waveform, RepetitionCount, TimeType,
                              SimpleExpression)
-from qupulse.program.waveforms import MultiChannelWaveform
+from qupulse.program.volatile import VolatileRepetitionCount, InefficientVolatility
 
 # this resolution is used to unify increments
 # the increments themselves remain floats
@@ -256,6 +258,10 @@ class LinSpaceBuilder(ProgramBuilder):
                         measurements: Optional[Sequence[MeasurementWindow]] = None) -> Iterable['ProgramBuilder']:
         if repetition_count == 0:
             return
+        if isinstance(repetition_count, VolatileRepetitionCount):
+            warnings.warn(f"{type(self).__name__} does not support volatile repetition counts.",
+                          category=InefficientVolatility)
+
         self._stack.append([])
         yield self
         blocks = self._stack.pop()
