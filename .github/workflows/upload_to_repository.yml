@@ -1,0 +1,28 @@
+name: Upload artifacts
+
+on:
+  workflow_call:
+    inputs:
+      repository-url:
+        required: true
+        type: string
+    secrets:
+      pypi-token:
+        required: true
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist-files
+          path: dist/
+      - name: Install Twine
+        run: python3 -m pip install --upgrade twine
+      - name: Upload
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.pypi-token }}
+        run: python -m twine upload --repository-url ${{ inputs.repository-url }} dist/*
