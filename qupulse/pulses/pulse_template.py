@@ -411,6 +411,46 @@ class PulseTemplate(Serializable):
         else:
             return self
 
+    def with_mapped_subtemplates(self, map_fn: callable,
+                                 recursion_strategy: str = 'pre') -> 'PulseTemplate':
+        """Create a new pulse template with all subtemplates mapped by `map_fn`.
+
+        This helper function is useful for modification of pulse templates without having to worry about the internal
+        structure.
+
+        Args:
+            map_fn: The function to be applied to the subtemplates according to the recursion strategy.
+            recursion_strategy: Either 'pre', 'post' or 'self'.
+                                 - 'pre': All recursive subtemplates are mapped before the map_fn is applied.
+                                 - 'post': All recursive subtemplates are mapped after the map_fn is applied.
+                                 - 'self': The recursion needs to be done by the map_fn if required.
+
+        Returns:
+            A new pulse template.
+        """
+        assert recursion_strategy in ('pre', 'post', 'self')
+        def map_templates_in_tree(tree):
+            if isinstance(tree, PulseTemplate):
+                if recursion_strategy == 'pre':
+                    tree = tree.with_mapped_subtemplates(map_fn, recursion_strategy)
+                tree = map_fn(tree)
+                if recursion_strategy == 'post':
+                    tree = tree.with_mapped_subtemplates(map_fn, recursion_strategy)
+                return tree
+
+            elif isinstance(tree, tuple):
+                return tuple(map(map_templates_in_tree, tree))
+            elif isinstance(tree, list):
+                return list(map(map_templates_in_tree, tree))
+            elif isinstance(tree, dict):
+                return {key: map_templates_in_tree(value) for key, value in tree.items()}
+            else:
+                return tree
+
+        data = self.get_serialization_data()
+        mapped = map_templates_in_tree(data)
+        return type(self)(**mapped)
+
     def pad_to(self, to_new_duration: Union[ExpressionLike, Callable[[Expression], ExpressionLike]],
                pt_kwargs: Mapping[str, Any] = None) -> 'PulseTemplate':
         """Pad this pulse template to the given duration.
@@ -451,6 +491,45 @@ class PulseTemplate(Serializable):
             return SequencePT(self, pad_pt, **pt_kwargs)
         else:
             return self @ pad_pt
+
+    def pad_selected_subtemplates_to(self,
+                                   to_new_duration: Union[ExpressionLike, Callable[[Expression], ExpressionLike]],
+                                   selector: callable = None,
+                                   pt_kwargs: Mapping[str, Any] = None
+                                   ):
+        """Pad all subtemplates for which the selector returns true with the given padding strategy. If no selector is
+        specified, all atomic subtemplates are padded. Padding non-atomic pulse templates is generally non-sensical when the subtemplates are padded.
+
+        If you need more customization you can use :py:`.PulseTemlate.with_mapped_subtemplates`.
+
+        Args:
+            to_new_duration:
+            selector:
+            pt_kwargs:
+
+        Returns:
+            A new pulsetemlate if any subtemplate needed to be padded.
+        """
+        if selector is None:
+            selector = PulseTemplate._is_atomic
+
+        if selector(self):
+            return self.pad_to(to_new_duration, pt_kwargs)
+
+        def map_fn(pt):
+            if selector(pt):
+                mapped = pt.pad_to(to_new_duration, pt_kwargs)
+                map_fn.was_modified |= mapped is not pt
+                return mapped
+            else:
+                return pt.pad_atomic_subtemplates_to(to_new_duration, selector, pt_kwargs)
+        map_fn.was_modified = False
+
+        mapped_self = self.with_mapped_subtemplates(map_fn, recursion_strategy='self')
+        if map_fn.was_modified:
+            return mapped_self
+        else:
+            return self
 
     def __format__(self, format_spec: str):
         if format_spec == '':
