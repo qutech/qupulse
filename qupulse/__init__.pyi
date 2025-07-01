@@ -8,7 +8,6 @@ from . import utils
 from . import _program
 from . import program
 
-from . import comparable
 from . import expressions
 from . import parameter_scope
 from . import serialization
@@ -21,7 +20,6 @@ __all__ = ['pulses',
            'utils',
            '_program',
            'program',
-           'comparable',
            'expressions',
            'parameter_scope',
            'serialization',
