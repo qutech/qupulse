@@ -13,7 +13,8 @@ from qupulse.utils.types import FrozenDict, FrozenMapping
 from qupulse.utils import is_integer
 
 
-__all__ = ['VolatileProperty', 'VolatileValue', 'VolatileRepetitionCount']
+__all__ = ['VolatileProperty', 'VolatileValue', 'VolatileRepetitionCount',
+           'InefficientVolatility', 'VolatileModificationWarning']
 
 
 VolatileProperty = NamedTuple('VolatileProperty', [('expression', Expression),
@@ -75,3 +76,12 @@ class VolatileRepetitionCount(VolatileValue):
             return self._scope is other._scope and self._expression == other._expression
         else:
             return NotImplemented
+
+
+class InefficientVolatility(RuntimeWarning):
+    """This warning is emitted if the requested volatility of a parameter cannot be implemented efficiently by the backend."""
+
+
+class VolatileModificationWarning(InefficientVolatility):
+    """This warning is emitted if the volatile part of a program gets modified.
+    This might imply that the volatile parameter cannot be changed anymore."""

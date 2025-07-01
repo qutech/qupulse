@@ -15,7 +15,7 @@ import numpy as np
 from qupulse.parameter_scope import Scope
 from qupulse.program import ProgramBuilder, RepetitionCount, HardwareTime, HardwareVoltage
 from qupulse.program.transformation import Transformation
-from qupulse.program.volatile import VolatileRepetitionCount, VolatileProperty
+from qupulse.program.volatile import VolatileRepetitionCount, VolatileProperty, VolatileModificationWarning
 from qupulse.program.waveforms import SequenceWaveform, RepetitionWaveform
 from qupulse.program.waveforms import TransformingWaveform
 from qupulse.program.waveforms import Waveform, ConstantWaveform
@@ -725,11 +725,6 @@ def _repeat_loop_measurements(begin_length_list: List[np.ndarray],
 
 class MakeCompatibleWarning(ResourceWarning):
     pass
-
-
-class VolatileModificationWarning(RuntimeWarning):
-    """This warning is emitted if the colatile part of a program gets modified. This might imply that the volatile
-    parameter cannot be change anymore."""
 
 
 class DroppedMeasurementWarning(RuntimeWarning):
