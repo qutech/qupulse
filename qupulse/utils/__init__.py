@@ -1,6 +1,6 @@
 # SPDX-FileCopyrightText: 2014-2024 Quantum Technology Group and Chair of Software Engineering, RWTH Aachen University
 #
-# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-License-Identifier: LGPL-3.0-or-later
 
 """This package contains utility functions and classes as well as custom sympy extensions(hacks)."""
 

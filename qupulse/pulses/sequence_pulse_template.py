@@ -1,6 +1,6 @@
 # SPDX-FileCopyrightText: 2014-2024 Quantum Technology Group and Chair of Software Engineering, RWTH Aachen University
 #
-# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-License-Identifier: LGPL-3.0-or-later
 
 """This module defines SequencePulseTemplate, a higher-order hierarchical pulse template that
 combines several other PulseTemplate objects for sequential execution."""

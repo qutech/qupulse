@@ -7,7 +7,7 @@ name = "qupulse"
 dynamic = ["version"]
 description = "A Quantum compUting PULse parametrization and SEquencing framework"
 readme = "README.md"
-license = "GPL-3.0-or-later"
+license = "LGPL-3.0-or-later"
 requires-python = ">=3.10"
 authors = [
     { name = "Quantum Technology Group and Chair of Software Engineering, RWTH Aachen University" },
