@@ -11,6 +11,7 @@ import functools
 import warnings
 import collections
 import operator
+import difflib
 
 import numpy
 import sympy

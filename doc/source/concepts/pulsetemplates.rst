@@ -43,6 +43,15 @@ Measurements
 Pulses are usually used to manipulate the state of some physical system and the system's response has to be somehow validated and thus measured. qupulse pulse templates allow to define measurement windows that specify at what times measurements should be made and identify those windows with an identifier.
 After the pulse templates are instantiated, uploading the resulting pulses to the hardware setup will cause qupulse to also configure corresponding measurement devices according to the specified measurement windows.
 
+Metadata
+^^^^^^^^
+
+Pulse templates have a :attr:`.PulseTemplate.metadata` attribute which is the only mutable part of the class. It is the place for translation hints and user-data. Currently, the only effect on qupulse is that all pulse templates that have the metadata field :attr:`.TemplateMetadata.to_single_waveform` set to 'always' are translated into a single waveform.
+
+Since it is a regular python object, you can freely add any fields you like to it without changing the class. All your custom fields will be serialized by qupulse if you want to save the template to disk.
+
+Due to the non-constant nature of the metadata field it is ignored when comparing pulse templates. This is necessary, because pulse templates implement hash.
+
 Convenience Functionality
 ^^^^^^^^^^^^^^^^^^^^^^^^^
 
