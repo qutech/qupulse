@@ -84,8 +84,8 @@ class PulseTemplate(Serializable):
 
     def get_serialization_data(self, serializer: Optional['Serializer'] = None) -> Dict[str, Any]:
         data = super().get_serialization_data(serializer=serializer)
-        if self._metadata:
-            data["metadata"] = self._metadata.get_serialization_data()
+        if self._metadata is not None and (metadata := self._metadata.get_serialization_data()):
+            data["metadata"] = metadata
         return data
 
     @property
