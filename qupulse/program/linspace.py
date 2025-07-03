@@ -514,9 +514,11 @@ class LinSpaceBuilder(ProgramBuilder):
     """
 
     def __init__(self,
-                 # channels: Tuple[ChannelID, ...]
+                 # identifier, loop_index or ForLoopPT which is to be stepped:
                  to_stepping_repeat: TypingSet[Union[str,'ForLoopPT']] = set(),
-                 # identifier, loop_index or ForLoopPT which is to be stepped.
+                 # this can indicate ChannelIDs (of _MarkerChannel_ on which to activate marker output in constant waveforms.)
+                 # this can only be oon or off for the entire program as those waveform samples are reused for efficiency.
+                 # TODO: that could be adapted but the necessity so far was marginal.
                  play_marker_when_constant: bool|set[ChannelID] = False,
                  ):
         super().__init__()
