@@ -500,6 +500,9 @@ class PulseTemplate(Serializable):
         """Pad all subtemplates for which the selector returns true with the given padding strategy. If no selector is
         specified, all atomic subtemplates are padded. Padding non-atomic pulse templates is generally non-sensical when the subtemplates are padded.
 
+        By default newly created `SequencePT`s have the metadata field `to_single_waveform` set to "always".
+        Overwrite pt_kwargs to supply other metadata arguments.
+
         If you need more customization you can use :py:`.PulseTemlate.with_mapped_subtemplates`.
 
         Args:
@@ -512,6 +515,9 @@ class PulseTemplate(Serializable):
         """
         if selector is None:
             selector = PulseTemplate._is_atomic
+
+        if pt_kwargs is None:
+            pt_kwargs = {"metadata": {"to_single_waveform": "always"}}
 
         if selector(self):
             return self.pad_to(to_new_duration, pt_kwargs)
