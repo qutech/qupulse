@@ -3,7 +3,9 @@ from typing import runtime_checkable, Protocol, Mapping, Optional, Sequence, Ite
 
 from qupulse import MeasurementWindow
 from qupulse.parameter_scope import Scope
-from qupulse.program import HardwareTime, HardwareVoltage, Waveform, RepetitionCount, Transformation
+from qupulse.program.waveforms import Waveform
+from qupulse.program.transformation import Transformation
+from qupulse.program.values import RepetitionCount, HardwareTime, HardwareVoltage
 
 from qupulse.utils.types import TimeType
 
