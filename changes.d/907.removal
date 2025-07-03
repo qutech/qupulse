@@ -1,0 +1,2 @@
+The internal structure of `qupulse.program` changed. `Program` and `ProgramBuilder` moved to `qupulse.program.protocol`
+with a backwards compatible import. `SimpleExpression` was renamed to `DynamicLinearValue` and lives now in `qupulse.program.values`.
