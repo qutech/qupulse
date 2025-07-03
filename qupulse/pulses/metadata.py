@@ -31,7 +31,7 @@ class TemplateMetadata:
         return f'{self.__class__.__name__}({args})'
 
     def get_serialization_data(self):
-        data = vars(self)
+        data = vars(self).copy()
 
         for field in dataclasses.fields(self):
             if field.default is not dataclasses.MISSING:
