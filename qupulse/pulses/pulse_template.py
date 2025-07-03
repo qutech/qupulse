@@ -448,14 +448,17 @@ class PulseTemplate(Serializable):
             elif isinstance(tree, list):
                 return list(map(map_templates_in_tree, tree))
             elif isinstance(tree, dict):
-                return {key: map_templates_in_tree(value) for key, value in tree.items()}
+                return {key: map_templates_in_tree(value)
+                        for key, value in tree.items()}
             else:
                 return tree
 
-        identifier = identifier_map(self.identifier)
-        data = self.get_serialization_data()
+        data = {name: value
+                for name, value in self.get_serialization_data().items()
+                if not name.startswith('#')}
         mapped = map_templates_in_tree(data)
-        return type(self)(**mapped, identifier=identifier)
+        identifier = identifier_map(self.identifier)
+        return self.deserialize(**mapped, identifier=identifier)
 
     def pad_to(self, to_new_duration: Union[ExpressionLike, Callable[[Expression], ExpressionLike]],
                pt_kwargs: Mapping[str, Any] = None) -> 'PulseTemplate':
@@ -563,6 +566,8 @@ class PulseTemplate(Serializable):
         kwargs = ','.join('%s=%r' % (key, value)
                           for key, value in self.get_serialization_data().items()
                           if key.isidentifier() and value is not None)
+        if self.identifier:
+            kwargs = f"identifier={self.identifier!r}," + kwargs
         return '{type_name}({kwargs})'.format(type_name=type_name, kwargs=kwargs)
 
     def __add__(self, other: ExpressionLike):

@@ -2,16 +2,17 @@ import unittest
 import math
 from unittest import mock
 
-from typing import Optional, Dict, Set, Any, Union
+from typing import Optional, Dict, Set, Any, Union, Sequence
 
 import frozendict
 import sympy
 
 from qupulse.parameter_scope import Scope, DictScope
+from qupulse.pulses.sequence_pulse_template import SequencePulseTemplate
 from qupulse.utils.types import ChannelID
 from qupulse.expressions import Expression, ExpressionScalar
 from qupulse.pulses import ConstantPT, FunctionPT, RepetitionPT, ForLoopPT, ParallelChannelPT, MappingPT,\
-    TimeReversalPT, AtomicMultiChannelPT
+    TimeReversalPT, AtomicMultiChannelPT, SequencePT
 from qupulse.pulses.pulse_template import AtomicPulseTemplate, PulseTemplate, UnknownVolatileParameter
 from qupulse.pulses.multi_channel_pulse_template import MultiChannelWaveform
 from qupulse.program.loop import Loop
@@ -502,8 +503,10 @@ class PulseTemplateTest(unittest.TestCase):
 
 class WithMethodTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.fpt = FunctionPT(1.4, 'sin(f*t)', 'X')
+        self.fpt = FunctionPT(1.4, 'sin(f*t)', 'X', identifier='fpt')
         self.cpt = ConstantPT(1.4, {'Y': 'start + idx * step'})
+        self.spt = SequencePT(self.cpt, RepetitionPT(self.cpt, 2, identifier='rpt'), identifier='spt')
+
     def test_parallel_channels(self):
         expected = ParallelChannelPT(self.fpt, {'K': 'k'})
         actual = self.fpt.with_parallel_channels({'K': 'k'})
@@ -546,7 +549,64 @@ class WithMethodTests(unittest.TestCase):
         self.assertEqual(expected, actual)
 
     def test_mapped_subtemplates(self):
-        raise NotImplementedError()
+        expected = self.fpt
+        actual = self.fpt.with_mapped_subtemplates(map_fn=lambda x: 0/0)
+        self.assertEqual(expected, actual)
+
+        calls = []
+        def swap_c_and_f(pt):
+            calls.append(pt)
+            if pt == self.cpt:
+                return self.fpt
+            elif pt == self.fpt:
+                return self.cpt
+            else:
+                return pt
+
+        def identifier_map(identifier):
+            if identifier is None:
+                return None
+            else:
+                return identifier + '_mapped'
+
+        # PRE
+        expected_pre = SequencePT(self.fpt,
+                                  RepetitionPT(self.fpt, 2, identifier='rpt_mapped'),
+                                  identifier='spt_mapped')
+        expected_calls_pre = [
+            self.cpt,
+            self.cpt,
+            RepetitionPT(self.fpt, 2, 'rpt_mapped')
+        ]
+        actual_pre = self.spt.with_mapped_subtemplates(map_fn=swap_c_and_f,
+                                                       recursion_strategy='pre',
+                                                       identifier_map=identifier_map)
+        self.assertEqual(
+            expected_calls_pre,
+            calls,
+        )
+        self.assertEqual(expected_pre, actual_pre)
+
+        # POST
+        expected_post = SequencePT(self.fpt.renamed('fpt_mapped'),
+                                  RepetitionPT(self.fpt.renamed('fpt_mapped'), 2, identifier='rpt_mapped'),
+                                  identifier='spt_mapped')
+        expected_calls_post = [
+            self.cpt,
+            RepetitionPT(self.cpt, 2, identifier='rpt'),
+            self.cpt
+        ]
+        calls.clear()
+        actual_post = self.spt.with_mapped_subtemplates(map_fn=swap_c_and_f,
+                                                        identifier_map=identifier_map,
+                                                        recursion_strategy='post')
+        self.assertEqual(expected_calls_post, calls)
+        self.assertEqual(expected_post, actual_post)
+        calls.clear()
+
+        expected_self = SequencePT(self.fpt, self.fpt, identifier='spt_mapped')
+        actual_self = self.spt.with_mapped_subtemplates(map_fn=lambda x: self.fpt, recursion_strategy='self', identifier_map=identifier_map)
+        self.assertEqual(expected_self, actual_self)
 
 
 class AtomicPulseTemplateTests(unittest.TestCase):
