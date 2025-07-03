@@ -12,7 +12,6 @@ class TemplateMetadata:
     """This class is used to store metadata for pulse templates.
 
     It is the only volatile part of pulse templates and thus does not participate in it's equality operation.
-    To enforce that this class does not implement the equality operator.
 
     It implements the serializable protocol.
     """
