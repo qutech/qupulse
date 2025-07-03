@@ -237,11 +237,11 @@ class LinSpaceNode:
 class LinSpaceTopLevel(LinSpaceNode):
     
     body: Tuple[LinSpaceNode, ...]
-    _play_marker_when_constant: bool
+    _play_marker_when_constant: bool|set[ChannelID]
     _defined_channels: TypingSet[ChannelID]
     
     @property
-    def play_marker_when_constant(self) -> bool:
+    def play_marker_when_constant(self) -> bool|set[ChannelID]:
         return self._play_marker_when_constant
     
     @property
@@ -517,7 +517,7 @@ class LinSpaceBuilder(ProgramBuilder):
                  # channels: Tuple[ChannelID, ...]
                  to_stepping_repeat: TypingSet[Union[str,'ForLoopPT']] = set(),
                  # identifier, loop_index or ForLoopPT which is to be stepped.
-                 play_marker_when_constant: bool = False,
+                 play_marker_when_constant: bool|set[ChannelID] = False,
                  ):
         super().__init__()
         # self._name_to_idx = {name: idx for idx, name in enumerate(channels)}
