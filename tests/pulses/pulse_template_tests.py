@@ -439,6 +439,9 @@ class PulseTemplateTest(unittest.TestCase):
         self.assertIsInstance(padded, SequencePT)
         self.assertIs(padded.subtemplates[0], pt)
 
+    def test_pad_selected_subtemplates(self):
+        raise NotImplementedError()
+
     @mock.patch('qupulse.pulses.pulse_template.default_program_builder')
     def test_create_program_none(self, pb_mock) -> None:
         template = PulseTemplateStub(defined_channels={'A'}, parameter_names={'foo'})
@@ -541,6 +544,9 @@ class WithMethodTests(unittest.TestCase):
         expected = AtomicMultiChannelPT(self.fpt, self.cpt)
         actual = self.fpt.with_parallel_atomic(self.cpt)
         self.assertEqual(expected, actual)
+
+    def test_mapped_subtemplates(self):
+        raise NotImplementedError()
 
 
 class AtomicPulseTemplateTests(unittest.TestCase):
