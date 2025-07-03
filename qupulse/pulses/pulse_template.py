@@ -74,6 +74,8 @@ class PulseTemplate(Serializable):
 
         Here is the place for program builder optimization hints or tags that are not targeted at qupulse.
 
+        Currently, qupulse itself only uses the "to_single_waveform" attribute to allow danymic atomicity during translation.
+
         As it is no property of the pulse itself, it is ignored for hashing and equality checks.
         """
         if (metadata := self._metadata) is None:
