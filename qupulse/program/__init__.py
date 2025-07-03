@@ -24,10 +24,15 @@ used/required/possible with (purified) silicon samples.
 """
 
 from qupulse.program.protocol import Program, ProgramBuilder
-from qupulse.program.values import DynamicLinearValue
+from qupulse.program.values import DynamicLinearValue, HardwareTime, HardwareVoltage
 from qupulse.program.waveforms import Waveform
 from qupulse.program.transformation import Transformation
 from qupulse.program.volatile import VolatileRepetitionCount
+
+
+# backwards compatibility
+# DEPRECATED but writing warning code for this is too complex
+SimpleExpression = DynamicLinearValue
 
 
 def default_program_builder() -> ProgramBuilder:
