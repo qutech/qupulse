@@ -61,7 +61,7 @@ autodoc_default_options = {
 autosummary_mock_imports = autodoc_mock_imports = ['atsaverage', 'zhinst', 'teawg', 'tek_awg', 'matplotlib',
                                                    'tabor_control', 'pyvisa', 'scipy']
 
-autoclass_content = 'both'
+autoclass_content = 'init'
 autosummary_generate = True
 napoleon_include_init_with_doc = True
 

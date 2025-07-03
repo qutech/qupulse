@@ -8,7 +8,7 @@ import warnings
 
 from qupulse import ChannelID
 from qupulse.expressions import ExpressionScalar
-from qupulse.serialization import PulseRegistryType, Serializable
+from qupulse.serialization import PulseRegistryType
 from qupulse.pulses.pulse_template import PulseTemplate
 
 
@@ -16,6 +16,8 @@ __all__ = ["AbstractPulseTemplate", "UnlinkWarning"]
 
 
 class AbstractPulseTemplate(PulseTemplate):
+
+
     _PROPERTY_DOC = """Abstraction of :py:attr:`.PulseTemplate.{name}`. Raises :class:`.NotSpecifiedError` if the
     abstract template is unlinked or the property was not specified."""
 
@@ -27,7 +29,7 @@ class AbstractPulseTemplate(PulseTemplate):
                  integral: Optional[Dict[ChannelID, ExpressionScalar]]=None,
                  duration: Optional[ExpressionScalar]=None,
                  registry: Optional[PulseRegistryType]=None):
-        """This pulse template can be used as a place holder for a pulse template with a defined interface. Pulse
+        """This pulse template can be used as a placeholder for a pulse template with a defined interface. Pulse
         template properties like :func:`defined_channels` can be passed on initialization to declare those properties who make
         up the interface. Omitted properties raise an :class:`.NotSpecifiedError` exception if accessed. Properties
         which have been accessed are marked as "frozen".
@@ -84,7 +86,7 @@ class AbstractPulseTemplate(PulseTemplate):
 
         Args:
             target: Forward all getattr calls to this pulse template
-            serialize_linked: If true, serialization will be forwarded. Otherwise serialization will ignore the link
+            serialize_linked: If true, serialization will be forwarded. Otherwise, serialization will ignore the link
         """
         if self._linked_target:
             raise RuntimeError('Cannot is already linked. If you REALLY need to relink call unlink() first.')

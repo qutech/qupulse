@@ -4,9 +4,6 @@
 
 """This module defines the FunctionPulseTemplate, one of the elementary pulse templates and its
 waveform representation.
-
-Classes:
-    - FunctionPulseTemplate: Defines a pulse via a mathematical function.
 """
 
 
@@ -48,8 +45,7 @@ class FunctionPulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
                  measurements: Optional[List[MeasurementDeclaration]]=None,
                  parameter_constraints: Optional[List[Union[str, ParameterConstraint]]]=None,
                  registry: PulseRegistryType=None) -> None:
-        """Creates a new FunctionPulseTemplate object.
-
+        """
         Args:
             expression: The function represented by this FunctionPulseTemplate
                 as a mathematical expression where 't' denotes the time variable and other variables
@@ -62,7 +58,8 @@ class FunctionPulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
             measurements: A list of measurement declarations forwarded to the
                 :class:`~qupulse.pulses.measurement.MeasurementDefiner` superclass
             parameter_constraints: A list of parameter constraints forwarded to the
-                :class:`~qupulse.pulses.measurement.ParameterConstrainer` superclass
+                :py:class:`~qupulse.pulses.measurement.ParameterConstrainer` superclass
+            registry: After initialization this pulse is registered in the given mapping if an identifier is provided.
         """
         AtomicPulseTemplate.__init__(self, identifier=identifier, measurements=measurements)
         ParameterConstrainer.__init__(self, parameter_constraints=parameter_constraints)
