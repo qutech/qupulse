@@ -13,7 +13,8 @@ from typing import *
 import numpy as np
 
 from qupulse.parameter_scope import Scope
-from qupulse.program import ProgramBuilder, RepetitionCount, HardwareTime, HardwareVoltage
+from qupulse.program import ProgramBuilder
+from qupulse.program.values import RepetitionCount, HardwareTime, HardwareVoltage
 from qupulse.program.transformation import Transformation
 from qupulse.program.volatile import VolatileRepetitionCount, VolatileProperty, VolatileModificationWarning
 from qupulse.program.waveforms import SequenceWaveform, RepetitionWaveform

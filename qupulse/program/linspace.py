@@ -16,8 +16,8 @@ from typing import Mapping, Optional, Sequence, ContextManager, Iterable, Tuple,
 
 from qupulse import ChannelID, MeasurementWindow
 from qupulse.parameter_scope import Scope, MappedScope, FrozenDict
-from qupulse.program import (ProgramBuilder, HardwareTime, HardwareVoltage, Waveform, RepetitionCount, TimeType,
-                             SimpleExpression)
+from qupulse.program.protocol import (ProgramBuilder, Waveform, )
+from qupulse.program.values import RepetitionCount, HardwareTime, HardwareVoltage, DynamicLinearValue, TimeType
 from qupulse.program.volatile import VolatileRepetitionCount, InefficientVolatility
 
 # this resolution is used to unify increments
@@ -199,7 +199,7 @@ class LinSpaceBuilder(ProgramBuilder):
         process."""
         if self._ranges:
             name, _ = self._ranges[-1]
-            return scope.overwrite({name: SimpleExpression(base=0, offsets={name: 1})})
+            return scope.overwrite({name: DynamicLinearValue(base=0, factors={name: 1})})
         else:
             return scope
 
@@ -218,7 +218,7 @@ class LinSpaceBuilder(ProgramBuilder):
                 bases.append(value)
                 factors.append(None)
                 continue
-            offsets = value.offsets
+            offsets = value.factors
             base = value.base
             incs = []
             for rng_name, rng in ranges.items():
@@ -233,8 +233,8 @@ class LinSpaceBuilder(ProgramBuilder):
             factors.append(tuple(incs))
             bases.append(base)
 
-        if isinstance(duration, SimpleExpression):
-            duration_factors = duration.offsets
+        if isinstance(duration, DynamicLinearValue):
+            duration_factors = duration.factors
             duration_base = duration.base
         else:
             duration_base = duration
