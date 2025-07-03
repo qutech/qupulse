@@ -575,7 +575,7 @@ class RepetitionPulseTemplateSequencingTests(MeasurementWindowTestCase):
         inner_wf = DummyWaveform()
         inner_pt = DummyPulseTemplate(waveform=inner_wf)
 
-        rpt = RepetitionPulseTemplate(inner_pt, repetition_count=42, to_single_waveform='always')
+        rpt = RepetitionPulseTemplate(inner_pt, repetition_count=42, metadata=dict(to_single_waveform='always'))
         program = rpt.create_program()
         expected = Loop(children=[Loop(repetition_count=1, waveform=RepetitionWaveform.from_repetition_count(inner_wf, 42))])
         self.assertEqual(expected, program)

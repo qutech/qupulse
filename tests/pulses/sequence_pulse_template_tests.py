@@ -83,7 +83,7 @@ class SequencePulseTemplateTest(unittest.TestCase):
         wfs = [DummyWaveform(), DummyWaveform()]
         pts = [DummyPulseTemplate(waveform=wf) for wf in wfs]
 
-        spt = SequencePulseTemplate(*pts, to_single_waveform='always')
+        spt = SequencePulseTemplate(*pts, metadata=dict(to_single_waveform='always'))
         program = spt.create_program()
         expected = Loop(children=[Loop(repetition_count=1, waveform=SequenceWaveform.from_sequence(wfs))])
         self.assertEqual(expected, program)

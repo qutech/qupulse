@@ -16,7 +16,8 @@ from qupulse.program import ProgramBuilder
 from qupulse.parameter_scope import Scope
 from qupulse.utils import cached_property
 from qupulse.utils.types import MeasurementWindow, ChannelID, TimeType
-from qupulse.pulses.pulse_template import PulseTemplate, AtomicPulseTemplate, SingleWaveformStrategy
+from qupulse.pulses.pulse_template import PulseTemplate, AtomicPulseTemplate
+from qupulse.pulses.metadata import TemplateMetadata
 from qupulse.pulses.parameters import ConstraintLike, ParameterConstrainer
 from qupulse.pulses.mapping_pulse_template import MappingPulseTemplate, MappingTuple
 from qupulse.program.waveforms import SequenceWaveform
@@ -44,7 +45,7 @@ class SequencePulseTemplate(PulseTemplate, ParameterConstrainer, MeasurementDefi
                  identifier: Optional[str]=None,
                  parameter_constraints: Optional[Iterable[ConstraintLike]]=None,
                  measurements: Optional[List[MeasurementDeclaration]]=None,
-                 to_single_waveform: Optional[SingleWaveformStrategy]=None,
+                 metadata: Union[TemplateMetadata, dict] = None,
                  registry: PulseRegistryType=None) -> None:
         """Create a new SequencePulseTemplate instance.
 
@@ -65,7 +66,7 @@ class SequencePulseTemplate(PulseTemplate, ParameterConstrainer, MeasurementDefi
                 SequencePulseTemplate as tuples of the form (PulseTemplate, Dict(str -> str)).
             identifier (str): A unique identifier for use in serialization. (optional)
         """
-        PulseTemplate.__init__(self, identifier=identifier, to_single_waveform=to_single_waveform)
+        PulseTemplate.__init__(self, identifier=identifier, metadata=metadata)
         ParameterConstrainer.__init__(self, parameter_constraints=parameter_constraints)
         MeasurementDefiner.__init__(self, measurements=measurements)
 

@@ -432,7 +432,7 @@ class MappingPulseTemplateSequencingTest(MeasurementWindowTestCase):
         inner_wf = DummyWaveform()
         inner_pt = DummyPulseTemplate(waveform=inner_wf)
 
-        mpt = MappingPulseTemplate(inner_pt, to_single_waveform='always')
+        mpt = MappingPulseTemplate(inner_pt, metadata=dict(to_single_waveform='always'))
         program = mpt.create_program()
         expected = Loop(children=[Loop(repetition_count=1, waveform=inner_wf)])
         self.assertEqual(expected, program)

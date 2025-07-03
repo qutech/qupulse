@@ -431,7 +431,7 @@ class ForLoopTemplateSequencingTests(MeasurementWindowTestCase):
         inner_wf = DummyWaveform()
         inner_pt = DummyPulseTemplate(waveform=inner_wf, parameter_names={'idx'})
 
-        flpt = ForLoopPulseTemplate(inner_pt, loop_index='idx', loop_range=3, to_single_waveform='always')
+        flpt = ForLoopPulseTemplate(inner_pt, loop_index='idx', loop_range=3, metadata=dict(to_single_waveform='always'))
         program = flpt.create_program()
         expected = Loop(children=[Loop(repetition_count=1, waveform=SequenceWaveform.from_sequence([inner_wf] * 3))])
         self.assertEqual(expected, program)
