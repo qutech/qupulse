@@ -513,8 +513,14 @@ class PulseTemplate(Serializable):
         return self.__cached_hash_value
 
     def __eq__(self, other):
-        if hasattr(other, '_get_compare_key'):
-            return self._get_compare_key() == other._get_compare_key()
+        if hasattr(other, '_get_compare_key') and hasattr(other, 'metadata'):
+            equal = self._get_compare_key() == other._get_compare_key()
+            if equal and self.metadata != other.metadata:
+                warnings.warn("PulseTemplate differ only in their metadata and are therefore regarded as equal. "
+                              "This is required because the metadata field is mutable and the hash implementation requires consistent equality checks.",
+                              stacklevel=2,
+                              category=MetadataComparison)
+            return equal
         else:
             return NotImplemented
 
@@ -642,4 +648,8 @@ class DoubleParameterNameException(Exception):
 
 
 class UnknownVolatileParameter(RuntimeWarning):
+    pass
+
+
+class MetadataComparison(RuntimeWarning):
     pass
