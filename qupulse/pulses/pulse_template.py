@@ -12,7 +12,7 @@ Classes:
 """
 import warnings
 from abc import abstractmethod
-from typing import Dict, Tuple, Set, Optional, Union, List, Callable, Any, Mapping
+from typing import Dict, Tuple, Set, Optional, Union, List, Callable, Any, Mapping, Literal
 import collections
 from numbers import Real, Number
 
@@ -411,8 +411,86 @@ class PulseTemplate(Serializable):
         else:
             return self
 
-    def pad_to(self, to_new_duration: Union[ExpressionLike, Callable[[Expression], ExpressionLike]],
-               pt_kwargs: Mapping[str, Any] = None) -> 'PulseTemplate':
+    def with_mapped_subtemplates(self,
+                                 map_fn: Callable[['PulseTemplate'], 'PulseTemplate'], *,
+                                 identifier_map: Callable[[Optional[str]], Optional[str]] = lambda x: x,
+                                 always_new_template: bool = False,
+                                 recursion_strategy: Literal['pre', 'post', 'self'] = 'pre') -> 'PulseTemplate':
+        """Return a new pulse template with all subtemplates mapped by ``map_fn``.
+
+        If ``map_fn`` returns the same object for all subtemplates no new pulse template is created unless ``always_new_template`` is true.
+
+        If a new template is created the identifier of the old template is passed to ``ìdentifier_map`` to determine the new identifier. It is the same by default.
+
+        By default, this function visits all subtemplates recursively. The ``recursion_strategy`` determines the order of recursion and ``map_fn`` calls.
+        For the default 'pre' the recursive subtemplates are mapped first before the direct subtemplates are mapped.
+        For 'post' the direct subtemplates are mapped first before the recursive subtemplates are visited.
+        For 'self' there is no recursion, i.e. the potential recursion can be implemented in ``map_fn`` itself.
+
+        This helper function is useful for modification of pulse templates without having to worry about the internal
+        structure.
+
+        The pulse registry feature is not yet supported by the method. When you need it, please open an issue on github.
+
+        Args:
+            map_fn: The function to be applied to the subtemplates according to the recursion strategy.
+            identifier_map: This function is called to map the identifiers of pulse templates that need to be newly created because their subtemplates changed.
+            always_new_template: If True, a new pulse template will be created even if the mapped subtemplates are identical.
+            recursion_strategy: Either 'pre', 'post' or 'self'.
+                                 - 'pre': All recursive subtemplates are mapped before the map_fn is applied.
+                                 - 'post': All recursive subtemplates are mapped after the map_fn is applied.
+                                 - 'Self': The recursion needs to be done by the map_fn if required.
+
+        Returns:
+            A pulse template with mapped subtemplates.
+        """
+        assert recursion_strategy in ('pre', 'post', 'self')
+
+        def map_templates_in_tree(tree):
+            if isinstance(tree, PulseTemplate):
+                pt = tree
+                if recursion_strategy == 'pre':
+                    pt = pt.with_mapped_subtemplates(map_fn,
+                                                     identifier_map=identifier_map,
+                                                     always_new_template=always_new_template,
+                                                     recursion_strategy=recursion_strategy,
+                                                     )
+                pt = map_fn(pt)
+                if recursion_strategy == 'post':
+                    pt = pt.with_mapped_subtemplates(map_fn,
+                                                     identifier_map=identifier_map,
+                                                     always_new_template=always_new_template,
+                                                     recursion_strategy=recursion_strategy,
+                                                     )
+                map_templates_in_tree.tree_changed |= pt is not tree
+                return pt
+
+            elif isinstance(tree, tuple):
+                return tuple(map(map_templates_in_tree, tree))
+            elif isinstance(tree, list):
+                return list(map(map_templates_in_tree, tree))
+            elif isinstance(tree, dict):
+                return {key: map_templates_in_tree(value)
+                        for key, value in tree.items()}
+            else:
+                return tree
+        map_templates_in_tree.tree_changed = always_new_template
+
+        data = {name: value
+                for name, value in self.get_serialization_data().items()
+                if not name.startswith('#')}
+        mapped = map_templates_in_tree(data)
+        if map_templates_in_tree.tree_changed:
+            identifier = identifier_map(self.identifier)
+            return self.deserialize(**mapped, identifier=identifier)
+        else:
+            return self
+
+    def pad_to(self,
+               to_new_duration: Union[ExpressionLike, Callable[[Expression], ExpressionLike]],
+               spt_kwargs: Mapping[str, Any] = None,
+               pt_kwargs: Mapping[str, Any] = None,
+               ) -> 'PulseTemplate':
         """Pad this pulse template to the given duration.
         The target duration can be numeric, symbolic or a callable that returns a new duration from the current
         duration.
@@ -431,12 +509,20 @@ class PulseTemplate(Serializable):
             >>> padded_4 = my_pt.pad_to(to_next_multiple(1, 16))
         Args:
             to_new_duration: Duration or callable that maps the current duration to the new duration
-            pt_kwargs: Keyword arguments for the newly created sequence pulse template.
+            spt_kwargs: Keyword arguments for an optionally newly created sequence pulse template.
+            pt_kwargs: Deprecated! Similar to ``spt_kwargs`` but enforces sequence pt creation even if no padding required.
 
         Returns:
             A pulse template that has the duration given by ``to_new_duration``. It can be ``self`` if the duration is
-            already as required. It is never ``self`` if ``pt_kwargs`` is non-empty.
+            already as required. It is never ``self`` if ``pt_kwargs`` is non-empty (deprecated feated).
         """
+        if pt_kwargs:
+            warnings.warn('pt_kwargs is deprecated and will be removed in a post 1.0 release. '
+                          'Please use spt_kwargs instead.',
+                          DeprecationWarning, stacklevel=2)
+        spt_kwargs = spt_kwargs or {}
+        pt_kwargs = pt_kwargs or {}
+
         from qupulse.pulses import ConstantPT, SequencePT
         current_duration = self.duration
         if callable(to_new_duration):
@@ -444,13 +530,62 @@ class PulseTemplate(Serializable):
         else:
             new_duration = ExpressionScalar(to_new_duration)
         pad_duration = new_duration - current_duration
+
         if not pt_kwargs and pad_duration == 0:
             return self
+
         pad_pt = ConstantPT(pad_duration, self.final_values)
-        if pt_kwargs:
-            return SequencePT(self, pad_pt, **pt_kwargs)
+        if pt_kwargs or spt_kwargs:
+            return SequencePT(self, pad_pt, **pt_kwargs, **spt_kwargs)
         else:
             return self @ pad_pt
+
+    def pad_selected_subtemplates_to(self,
+                                     to_new_duration: Union[ExpressionLike, Callable[[Expression], ExpressionLike]],
+                                     selector: Callable[['PulseTemplate'], bool] = None,
+                                     spt_kwargs: Mapping[str, Any] = None,
+                                     identity_map: Callable[[Optional[str]], Optional[str]] = lambda x: x if x is None else f"{x}_padded",
+                                   ):
+        """Pad all subtemplates for which the selector returns true with the given padding strategy. If no selector is
+        specified, all atomic subtemplates are padded. Padding non-atomic pulse templates is generally non-sensical when the subtemplates are padded.
+
+        By default newly created `SequencePT`s have the metadata field `to_single_waveform` set to "always".
+        Overwrite `pt_kwargs` to supply other metadata arguments.
+
+        If you need more customization, you can use :py:meth:`.PulseTemplate.with_mapped_subtemplates`.
+
+        !!! Note: This method needs to create new pulse templates and removes all parent tempates identifiers
+
+        Args:
+            to_new_duration: Specity how to pad. See :func:`pad_to`.
+            selector: Select which subtemplates to pad.
+            spt_kwargs: Passed to newly created sequence pulse templates required for padding. By default ``{"metadata": {"to_single_waveform": "always"}}`` is passed to make them atomic.
+            identity_map: Provide a function to map the identifiers of composite templates whos subtemplates are padded.
+
+        Returns:
+            A new pulse template if any subtemplate needed to be padded.
+        """
+        if selector is None:
+            def selector(pt: PulseTemplate) -> bool:
+                return pt._is_atomic()
+
+        if spt_kwargs is None:
+            spt_kwargs = {"metadata": {"to_single_waveform": "always"}}
+
+        if selector(self):
+            return self.pad_to(to_new_duration, spt_kwargs)
+
+        def map_fn(pt: PulseTemplate) -> PulseTemplate:
+            if selector(pt):
+                mapped = pt.pad_to(to_new_duration, spt_kwargs)
+                return mapped
+            else:
+                return pt.pad_selected_subtemplates_to(to_new_duration, selector, spt_kwargs)
+
+        return self.with_mapped_subtemplates(map_fn,
+                                             identifier_map=identity_map,
+                                             recursion_strategy='self')
+
 
     def __format__(self, format_spec: str):
         if format_spec == '':
@@ -473,6 +608,8 @@ class PulseTemplate(Serializable):
         kwargs = ','.join('%s=%r' % (key, value)
                           for key, value in self.get_serialization_data().items()
                           if key.isidentifier() and value is not None)
+        if self.identifier:
+            kwargs = f"identifier={self.identifier!r}," + kwargs
         return '{type_name}({kwargs})'.format(type_name=type_name, kwargs=kwargs)
 
     def __add__(self, other: ExpressionLike):

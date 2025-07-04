@@ -1,0 +1,1 @@
+The ``pt_kwargs`` keyword argument of ``PulseTemplate.pad_to`` is now deprecated and was replaced by the ``spt_kwargs`` argument which no longer enforces sequence pulse template creation even if no padding is required.

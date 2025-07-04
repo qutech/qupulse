@@ -75,6 +75,8 @@ In addition to the fundamental concepts and subclassing structure, :class:`.Puls
 
   - :meth:`.PulseTemplate.pad_to` extends the duration of a pulse template to a desired length, automatically appending
     a constant pulse segment that matches the final output values.
+  - :meth:`.PulseTemplate.pad_selected_subtemplates_to` extends the duration selected subtemplates to a desired length, automatically appending
+    a constant pulse segment that matches the final output values. By default it pads all atomic subtemplates.
 
 - **Properties**:
 
@@ -89,6 +91,10 @@ In addition to the fundamental concepts and subclassing structure, :class:`.Puls
     scaling of pulses.
   - The :meth:`@` operator (matrix multiplication) is repurposed to represent time-wise concatenation of pulses (see
     :meth:`.SequencePulseTemplate.concatenate`).
+
+- **Utility**:
+
+ - :meth:`.PulseTemplate.with_mapped_subtemplates` allows mapping some or all subtemplates with a configurable recursion strategy. It is used to implement :meth:`.PulseTemplate.pad_selected_subtemplates_to`.
 
 These convenience features allow for more compact, readable, and flexible pulse definitions, helping to focus on the
 overall structure of the experiment.
