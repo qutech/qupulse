@@ -5,9 +5,10 @@ from functools import cached_property
 
 import numpy
 
-from qupulse.utils.types import TimeType
-from qupulse.program import (ProgramBuilder, Program, HardwareVoltage, HardwareTime,
-                             MeasurementWindow, Waveform, RepetitionCount, SimpleExpression)
+from qupulse.utils.types import TimeType, MeasurementWindow
+from qupulse.program.protocol import ProgramBuilder, Program
+from qupulse.program.values import RepetitionCount, HardwareTime, HardwareVoltage, DynamicLinearValue, TimeType
+from qupulse.program.waveforms import Waveform
 from qupulse.parameter_scope import Scope
 
 
@@ -103,7 +104,7 @@ class MeasurementBuilder(ProgramBuilder):
         process."""
         if self._ranges:
             name, rng = self._ranges[-1]
-            return scope.overwrite({name: SimpleExpression(base=rng.start, offsets={name: rng.step})})
+            return scope.overwrite({name: DynamicLinearValue(base=rng.start, offsets={name: rng.step})})
         else:
             return scope
 
@@ -188,7 +189,7 @@ def _reversed_commands(cmds: Sequence[Command]) -> Sequence[Command]:
             reversed_cmds.append(jump)
 
         elif isinstance(cmd, Measure):
-            if isinstance(cmd.delay, SimpleExpression) or isinstance(cmd.delay, SimpleExpression):
+            if isinstance(cmd.delay, DynamicLinearValue) or isinstance(cmd.delay, DynamicLinearValue):
                 raise NotImplementedError("TODO")
             reversed_cmds.append(Measure(meas_id=cmd.meas_id,
                                          delay=-(cmd.delay + cmd.length),
@@ -211,7 +212,7 @@ class MeasurementVM:
         self._callback = callback
 
     def _eval_hardware_time(self, t: HardwareTime):
-        if isinstance(t, SimpleExpression):
+        if isinstance(t, DynamicLinearValue):
             value = t.base
             for (factor_name, factor_val) in t.offsets.items():
                 count = self._counts[self._memory[factor_name]]
