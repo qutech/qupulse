@@ -373,8 +373,6 @@ class PulseTemplateTest(unittest.TestCase):
         _internal_create_program.assert_called_once_with(**expected_internal_kwargs, program_builder=program_builder)
 
     def test_pad_to(self):
-        from qupulse.pulses import SequencePT
-
         def to_multiple_of_192(x: Expression) -> Expression:
             return (x + 191) // 192 * 192
 
@@ -588,8 +586,8 @@ class WithMethodTests(unittest.TestCase):
         self.assertEqual(expected_pre, actual_pre)
 
         # POST
-        expected_post = SequencePT(self.fpt.renamed('fpt_mapped'),
-                                  RepetitionPT(self.fpt.renamed('fpt_mapped'), 2, identifier='rpt_mapped'),
+        expected_post = SequencePT(self.fpt.renamed('fpt'),
+                                  RepetitionPT(self.fpt.renamed('fpt'), 2, identifier='rpt_mapped'),
                                   identifier='spt_mapped')
         expected_calls_post = [
             self.cpt,

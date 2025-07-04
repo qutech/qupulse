@@ -12,7 +12,7 @@ Classes:
 """
 import warnings
 from abc import abstractmethod
-from typing import Dict, Tuple, Set, Optional, Union, List, Callable, Any, Mapping
+from typing import Dict, Tuple, Set, Optional, Union, List, Callable, Any, Mapping, Literal
 import collections
 from numbers import Real, Number
 
@@ -412,10 +412,20 @@ class PulseTemplate(Serializable):
             return self
 
     def with_mapped_subtemplates(self,
-                                 map_fn: callable,
-                                 identifier_map: callable = lambda x: x,
-                                 recursion_strategy: str = 'pre') -> 'PulseTemplate':
-        """Create a new pulse template with all subtemplates mapped by `map_fn`.
+                                 map_fn: Callable[['PulseTemplate'], 'PulseTemplate'], *,
+                                 identifier_map: Callable[[Optional[str]], Optional[str]] = lambda x: x,
+                                 always_new_template: bool = False,
+                                 recursion_strategy: Literal['pre', 'post', 'self'] = 'pre') -> 'PulseTemplate':
+        """Return a new pulse template with all subtemplates mapped by ``map_fn``.
+
+        If ``map_fn`` returns the same object for all subtemplates no new pulse template is created unless ``always_new_template`` is true.
+
+        If a new template is created the identifier of the old template is passed to ``ìdentifier_map`` to determine the new identifier. It is the same by default.
+
+        By default, this function visits all subtemplates recursively. The ``recursion_strategy`` determines the order of recursion and ``map_fn`` calls.
+        For the default 'pre' the recursive subtemplates are mapped first before the direct subtemplates are mapped.
+        For 'post' the direct subtemplates are mapped first before the recursive subtemplates are visited.
+        For 'self' there is no recursion, i.e. the potential recursion can be implemented in ``map_fn`` itself.
 
         This helper function is useful for modification of pulse templates without having to worry about the internal
         structure.
@@ -424,24 +434,36 @@ class PulseTemplate(Serializable):
 
         Args:
             map_fn: The function to be applied to the subtemplates according to the recursion strategy.
-            identifier_map:
+            identifier_map: This function is called to map the identifiers of pulse templates that need to be newly created because their subtemplates changed.
+            always_new_template: If True, a new pulse template will be created even if the mapped subtemplates are identical.
             recursion_strategy: Either 'pre', 'post' or 'self'.
                                  - 'pre': All recursive subtemplates are mapped before the map_fn is applied.
                                  - 'post': All recursive subtemplates are mapped after the map_fn is applied.
-                                 - 'self': The recursion needs to be done by the map_fn if required.
+                                 - 'Self': The recursion needs to be done by the map_fn if required.
 
         Returns:
-            A new pulse template.
+            A pulse template with mapped subtemplates.
         """
         assert recursion_strategy in ('pre', 'post', 'self')
+
         def map_templates_in_tree(tree):
             if isinstance(tree, PulseTemplate):
+                pt = tree
                 if recursion_strategy == 'pre':
-                    tree = tree.with_mapped_subtemplates(map_fn, identifier_map, recursion_strategy)
-                tree = map_fn(tree)
+                    pt = pt.with_mapped_subtemplates(map_fn,
+                                                     identifier_map=identifier_map,
+                                                     always_new_template=always_new_template,
+                                                     recursion_strategy=recursion_strategy,
+                                                     )
+                pt = map_fn(pt)
                 if recursion_strategy == 'post':
-                    tree = tree.with_mapped_subtemplates(map_fn, identifier_map, recursion_strategy)
-                return tree
+                    pt = pt.with_mapped_subtemplates(map_fn,
+                                                     identifier_map=identifier_map,
+                                                     always_new_template=always_new_template,
+                                                     recursion_strategy=recursion_strategy,
+                                                     )
+                map_templates_in_tree.tree_changed |= pt is not tree
+                return pt
 
             elif isinstance(tree, tuple):
                 return tuple(map(map_templates_in_tree, tree))
@@ -452,13 +474,17 @@ class PulseTemplate(Serializable):
                         for key, value in tree.items()}
             else:
                 return tree
+        map_templates_in_tree.tree_changed = always_new_template
 
         data = {name: value
                 for name, value in self.get_serialization_data().items()
                 if not name.startswith('#')}
         mapped = map_templates_in_tree(data)
-        identifier = identifier_map(self.identifier)
-        return self.deserialize(**mapped, identifier=identifier)
+        if map_templates_in_tree.tree_changed:
+            identifier = identifier_map(self.identifier)
+            return self.deserialize(**mapped, identifier=identifier)
+        else:
+            return self
 
     def pad_to(self, to_new_duration: Union[ExpressionLike, Callable[[Expression], ExpressionLike]],
                pt_kwargs: Mapping[str, Any] = None) -> 'PulseTemplate':
