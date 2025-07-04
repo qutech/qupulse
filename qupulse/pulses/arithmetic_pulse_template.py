@@ -204,20 +204,20 @@ class ArithmeticPulseTemplate(PulseTemplate):
                  *,
                  identifier: Optional[str] = None,
                  registry: PulseRegistryType = None):
-        """Implements the arithmetics between an aribrary pulse template and scalar values. The values can be the same
+        """Implements the arithmetics between an arbitrary pulse template and scalar values. The values can be the same
         for all channels, channel specific or only for a subset of the inner pulse templates defined channels.
-        The expression may be time dependent if the pulse template is atomic.
+        The expression may be time-dependent if the pulse template is atomic.
 
-        A channel dependent scalar is represented by a mapping of ChannelID -> Expression.
+        A channel dependent scalar is represented by a :py:class:`.Mapping[ChannelID, Expression]`.
 
         The allowed operations are:
-            scalar + pulse_template
-            scalar - pulse_template
-            scalar * pulse_template
-            pulse_template + scalar
-            pulse_template - scalar
-            pulse_template * scalar
-            pulse_template / scalar
+            - ``scalar + pulse_template``
+            - ``scalar - pulse_template``
+            - ``scalar * pulse_template``
+            - ``pulse_template + scalar``
+            - ``pulse_template - scalar``
+            - ``pulse_template * scalar``
+            - ``pulse_template / scalar``
 
         Args:
             lhs: Left hand side operand
@@ -548,8 +548,8 @@ class ArithmeticPulseTemplate(PulseTemplate):
 def try_operation(lhs: Union[PulseTemplate, ExpressionLike, Mapping[ChannelID, ExpressionLike]],
                   op: str,
                   rhs: Union[PulseTemplate, ExpressionLike, Mapping[ChannelID, ExpressionLike]],
-                  **kwargs) -> Union['ArithmeticPulseTemplate', type(NotImplemented)]:
-    """
+                  **kwargs) -> Union[ArithmeticPulseTemplate, ArithmeticAtomicPulseTemplate, type(NotImplemented)]:
+    """Helper implementation for arithmetic operations.
 
     Args:
         lhs: Left hand side operand
@@ -558,8 +558,10 @@ def try_operation(lhs: Union[PulseTemplate, ExpressionLike, Mapping[ChannelID, E
         **kwargs: Forwarded to class init
 
     Returns:
-        ArithmeticPulseTemplate if the desired operation is valid and returns a pulse template
-        NotImplemented otherwise
+        One of the following
+         - :py:class:`.ArithmeticPulseTemplate` if the desired operation is valid and returns a pulse template or
+         - :py:class:`.ArithmeticAtomicPulseTemplate` if the operands are valid atomic pulse templates or
+         - :py:class:`.NotImplemented` otherwise.
     """
     try:
         # returns if only one of the operands is a pulse template and the operation is valid

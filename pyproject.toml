@@ -92,8 +92,8 @@ template = "default"
 installer = "uv"
 dependencies = [
   "qupulse[default,zurich-instruments]",
-  "sphinx",
-  "nbsphinx",
+  "sphinx~=8.1",
+  "nbsphinx~=0.9.6",
   "sphinx-rtd-theme"
 ]
 [tool.hatch.envs.docs.scripts]

@@ -15,6 +15,13 @@ MeasurementDeclaration = Tuple[str, Union[Expression, str, Real], Union[Expressi
 
 class MeasurementDefiner:
     def __init__(self, measurements: Optional[List[MeasurementDeclaration]]):
+        """This is a superclass for pulse templates that define measurements.
+
+        Args:
+            measurements: Sequence of ``(name, begin, length)`` tuples which define which measurements to be associated
+                with this object. The ``begin`` times are relative to the beginning of the defining pulse.
+        """
+
         if measurements is None:
             self._measurement_windows = []
         else:

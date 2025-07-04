@@ -348,13 +348,14 @@ class DocStringABCMeta(abc.ABCMeta):
 
                 for base in abstract_bases:
                     if name in base.__dict__ and name in base.__abstractmethods__:
+                        base_name = base.__name__
                         base_member = getattr(base, name)
 
                         if member is base_member or not base_member.__doc__:
                             continue
 
                         base_member_name = '.'.join([base.__module__, base.__qualname__, name])
-                        member.__doc__ = 'Implements {}`~{}`.'.format(member_type, base_member_name)
+                        member.__doc__ = f'Implements {member_type}`.{base_name}.{name}`.'
                         break
         return cls
 

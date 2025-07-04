@@ -2,8 +2,10 @@
 #
 # SPDX-License-Identifier: LGPL-3.0-or-later
 
-"""This module defines LoopPulseTemplate, a higher-order hierarchical pulse template that loops
-another PulseTemplate based on a condition."""
+"""
+This module defines LoopPulseTemplate, a higher-order hierarchical pulse template that loops its body PulseTemplate.
+
+"""
 import dataclasses
 import functools
 import itertools
@@ -54,9 +56,9 @@ class LoopPulseTemplate(PulseTemplate):
 
 
 class ForLoopPulseTemplate(LoopPulseTemplate, MeasurementDefiner, ParameterConstrainer):
-    """This pulse template allows looping through an parametrized integer range and provides the loop index as a
+    """This pulse template allows looping through a parametrized integer range and provides the loop index as a
     parameter to the body. If you do not need the index in the pulse template, consider using
-    :class:`~qupulse.pulses.repetition_pulse_template.RepetitionPulseTemplate`"""
+    :py:class:`~qupulse.pulses.repetition_pulse_template.RepetitionPulseTemplate`"""
     def __init__(self,
                  body: PulseTemplate,
                  loop_index: str,
@@ -77,7 +79,13 @@ class ForLoopPulseTemplate(LoopPulseTemplate, MeasurementDefiner, ParameterConst
             body: The loop body. It is expected to have `loop_index` as an parameter
             loop_index: Loop index of the for loop
             loop_range: Range to loop through
-            identifier: Used for serialization
+            identifier: Used for serialization and the pulse registry
+            measurements: Measurements passed to :py:class:`~qupulse.pulses.measurement.MeasurementDefiner` superclass
+            parameter_constraints: Constraints passed to :py:class:`~qupulse.pulses.pulse_template.ParameterConstrainer` superclass
+            registry: The pulse
+
+        Raises:
+            :py:class:`.LoopIndexNotUsedException` if the loop index is no parameter of the body
         """
         LoopPulseTemplate.__init__(self, body=body, identifier=identifier, metadata=metadata)
         MeasurementDefiner.__init__(self, measurements=measurements)

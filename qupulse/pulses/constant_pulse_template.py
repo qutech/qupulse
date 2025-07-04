@@ -2,12 +2,7 @@
 #
 # SPDX-License-Identifier: LGPL-3.0-or-later
 
-"""This module defines the ConstantPulseTemplate, a pulse tempalte representating a pulse with constant values on all channels
-
-Classes:
-    - ConstantPulseTemplate: Defines a pulse via channel-value pairs
-    - ConstantPulseWaveform: A waveform instantiated from a TablePulseTemplate by providing values for its
-        declared parameters.
+"""This module defines the ConstantPulseTemplate, a pulse template representing a pulse with constant values on all channels.
 """
 
 import logging
@@ -22,21 +17,28 @@ from qupulse.pulses.multi_channel_pulse_template import MultiChannelWaveform
 from qupulse.pulses.pulse_template import AtomicPulseTemplate, MeasurementDeclaration
 from qupulse.serialization import PulseRegistryType
 
+
 __all__ = ["ConstantPulseTemplate"]
 
 
 class ConstantPulseTemplate(AtomicPulseTemplate):  # type: ignore
-    def __init__(self, duration: ExpressionLike, amplitude_dict: Dict[ChannelID, ExpressionLike],
+    def __init__(self, duration: ExpressionLike,
+                 amplitude_dict: Dict[ChannelID, ExpressionLike],
                  identifier: Optional[str] = None,
                  name: Optional[str] = None,
                  measurements: Optional[List[MeasurementDeclaration]] = None,
                  registry: PulseRegistryType=None) -> None:
         """An atomic pulse template qupulse representing a multi-channel pulse with constant values.
+
+        As an optimization, this class does not convert plain floats or ints to qupulse expressions.
         
         Args:
             duration: Duration of the template
             amplitude_dict: Dictionary with values for the channels
+            identifier: Optional identifier for the pulse
             name: Name for the template. Not used by qupulse
+            measurements: Passed to :py:class:`.MeasurementDefiner` superclass
+            registry: The pulse is registered in this mapping after construction if an identifier is provided
         """
         super().__init__(identifier=identifier, measurements=measurements)
 
