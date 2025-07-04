@@ -602,8 +602,9 @@ class WithMethodTests(unittest.TestCase):
         self.assertEqual(expected_post, actual_post)
         calls.clear()
 
-        expected_self = SequencePT(self.fpt, self.fpt, identifier='spt_mapped')
-        actual_self = self.spt.with_mapped_subtemplates(map_fn=lambda x: self.fpt, recursion_strategy='self', identifier_map=identifier_map)
+        inner = RepetitionPT(self.fpt, 2, identifier='new_rpt')
+        expected_self = SequencePT(inner, inner, identifier='spt_mapped')
+        actual_self = self.spt.with_mapped_subtemplates(map_fn=lambda x: inner, recursion_strategy='self', identifier_map=identifier_map)
         self.assertEqual(expected_self, actual_self)
 
 
