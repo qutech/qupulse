@@ -486,8 +486,11 @@ class PulseTemplate(Serializable):
         else:
             return self
 
-    def pad_to(self, to_new_duration: Union[ExpressionLike, Callable[[Expression], ExpressionLike]],
-               pt_kwargs: Mapping[str, Any] = None) -> 'PulseTemplate':
+    def pad_to(self,
+               to_new_duration: Union[ExpressionLike, Callable[[Expression], ExpressionLike]],
+               spt_kwargs: Mapping[str, Any] = None,
+               pt_kwargs: Mapping[str, Any] = None,
+               ) -> 'PulseTemplate':
         """Pad this pulse template to the given duration.
         The target duration can be numeric, symbolic or a callable that returns a new duration from the current
         duration.
@@ -506,12 +509,20 @@ class PulseTemplate(Serializable):
             >>> padded_4 = my_pt.pad_to(to_next_multiple(1, 16))
         Args:
             to_new_duration: Duration or callable that maps the current duration to the new duration
-            pt_kwargs: Keyword arguments for the newly created sequence pulse template.
+            spt_kwargs: Keyword arguments for an optionally newly created sequence pulse template.
+            pt_kwargs: Deprecated! Similar to ``spt_kwargs`` but enforces sequence pt creation even if no padding required.
 
         Returns:
             A pulse template that has the duration given by ``to_new_duration``. It can be ``self`` if the duration is
-            already as required. It is never ``self`` if ``pt_kwargs`` is non-empty.
+            already as required. It is never ``self`` if ``pt_kwargs`` is non-empty (deprecated feated).
         """
+        if pt_kwargs:
+            warnings.warn('pt_kwargs is deprecated and will be removed in a post 1.0 release. '
+                          'Please use spt_kwargs instead.',
+                          DeprecationWarning, stacklevel=2)
+        spt_kwargs = spt_kwargs or {}
+        pt_kwargs = pt_kwargs or {}
+
         from qupulse.pulses import ConstantPT, SequencePT
         current_duration = self.duration
         if callable(to_new_duration):
@@ -519,19 +530,21 @@ class PulseTemplate(Serializable):
         else:
             new_duration = ExpressionScalar(to_new_duration)
         pad_duration = new_duration - current_duration
+
         if not pt_kwargs and pad_duration == 0:
             return self
+
         pad_pt = ConstantPT(pad_duration, self.final_values)
-        if pt_kwargs:
-            return SequencePT(self, pad_pt, **pt_kwargs)
+        if pt_kwargs or spt_kwargs:
+            return SequencePT(self, pad_pt, **pt_kwargs, **spt_kwargs)
         else:
             return self @ pad_pt
 
     def pad_selected_subtemplates_to(self,
                                      to_new_duration: Union[ExpressionLike, Callable[[Expression], ExpressionLike]],
-                                     selector: callable = None,
-                                     pt_kwargs: Mapping[str, Any] = None,
-                                     identity_map: callable = lambda x: x if x is None else f"{x}_padded",
+                                     selector: Callable[['PulseTemplate'], bool] = None,
+                                     spt_kwargs: Mapping[str, Any] = None,
+                                     identity_map: Callable[[Optional[str]], Optional[str]] = lambda x: x if x is None else f"{x}_padded",
                                    ):
         """Pad all subtemplates for which the selector returns true with the given padding strategy. If no selector is
         specified, all atomic subtemplates are padded. Padding non-atomic pulse templates is generally non-sensical when the subtemplates are padded.
@@ -546,29 +559,32 @@ class PulseTemplate(Serializable):
         Args:
             to_new_duration: Specity how to pad. See :func:`pad_to`.
             selector: Select which subtemplates to pad.
-            pt_kwargs: Passed to the newly created padding pulse template.
+            spt_kwargs: Passed to newly created sequence pulse templates required for padding. By default ``{"metadata": {"to_single_waveform": "always"}}`` is passed to make them atomic.
             identity_map: Provide a function to map the identifiers of composite templates whos subtemplates are padded.
 
         Returns:
-            A new pulsetemlate if any subtemplate needed to be padded.
+            A new pulse template if any subtemplate needed to be padded.
         """
         if selector is None:
-            selector = PulseTemplate._is_atomic
+            def selector(pt: PulseTemplate) -> bool:
+                return pt._is_atomic()
 
-        if pt_kwargs is None:
-            pt_kwargs = {"metadata": {"to_single_waveform": "always"}}
+        if spt_kwargs is None:
+            spt_kwargs = {"metadata": {"to_single_waveform": "always"}}
 
         if selector(self):
-            return self.pad_to(to_new_duration, pt_kwargs)
+            return self.pad_to(to_new_duration, spt_kwargs)
 
-        def map_fn(pt):
+        def map_fn(pt: PulseTemplate) -> PulseTemplate:
             if selector(pt):
-                mapped = pt.pad_to(to_new_duration, pt_kwargs)
+                mapped = pt.pad_to(to_new_duration, spt_kwargs)
                 return mapped
             else:
-                return pt.pad_atomic_subtemplates_to(to_new_duration, selector, pt_kwargs)
+                return pt.pad_selected_subtemplates_to(to_new_duration, selector, spt_kwargs)
 
-        return self.with_mapped_subtemplates(map_fn, identity_map, recursion_strategy='self')
+        return self.with_mapped_subtemplates(map_fn,
+                                             identifier_map=identity_map,
+                                             recursion_strategy='self')
 
 
     def __format__(self, format_spec: str):

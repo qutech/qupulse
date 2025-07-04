@@ -398,14 +398,16 @@ class PulseTemplateTest(unittest.TestCase):
         self.assertIsInstance(padded, SequencePT)
         self.assertIs(padded.subtemplates[0], pt)
 
-        padded = pt.pad_to(20, pt_kwargs=dict(measurements=measurements))
+        with self.assertWarns(DeprecationWarning):
+            padded = pt.pad_to(20, pt_kwargs=dict(measurements=measurements))
         self.assertEqual(padded.duration, 20)
         self.assertEqual(padded.final_values, final_values)
         self.assertIsInstance(padded, SequencePT)
         self.assertIs(padded.subtemplates[0], pt)
         self.assertEqual(measurements, padded.measurement_declarations)
 
-        padded = pt.pad_to(10, pt_kwargs=dict(measurements=measurements))
+        with self.assertWarns(DeprecationWarning):
+            padded = pt.pad_to(10, pt_kwargs=dict(measurements=measurements))
         self.assertEqual(padded.duration, 10)
         self.assertEqual(padded.final_values, final_values)
         self.assertIsInstance(padded, SequencePT)
@@ -418,6 +420,14 @@ class PulseTemplateTest(unittest.TestCase):
         self.assertEqual(padded.final_values, final_values)
         self.assertIsInstance(padded, SequencePT)
         self.assertIs(padded.subtemplates[0], pt)
+
+        # padding with metadata
+        padded = pt.pad_to(to_multiple_of_192, spt_kwargs=dict(metadata={'to_single_waveform': 'always'}))
+        self.assertEqual(padded.duration, 192)
+        self.assertEqual(padded.final_values, final_values)
+        self.assertIsInstance(padded, SequencePT)
+        self.assertIs(padded.subtemplates[0], pt)
+        self.assertEqual(padded.metadata.get_serialization_data(), {'to_single_waveform': 'always'})
 
         # padding with symbolic durations
 
@@ -438,8 +448,84 @@ class PulseTemplateTest(unittest.TestCase):
         self.assertIsInstance(padded, SequencePT)
         self.assertIs(padded.subtemplates[0], pt)
 
+        # padding with metadata
+        padded = pt.pad_to(to_multiple_of_192, spt_kwargs=dict(metadata={'to_single_waveform': 'always'}))
+        self.assertEqual(padded.duration, '(duration + 191) // 192 * 192')
+        self.assertEqual(padded.final_values, final_values)
+        self.assertIsInstance(padded, SequencePT)
+        self.assertIs(padded.subtemplates[0], pt)
+        self.assertEqual(padded.metadata.get_serialization_data(), {'to_single_waveform': 'always'})
+
+
     def test_pad_selected_subtemplates(self):
-        raise NotImplementedError()
+        def to_multiple_of_192(x: Expression) -> Expression:
+            return (x + 191) // 192 * 192
+
+        final_values = frozendict.frozendict({'A': ExpressionScalar(0.1), 'B': ExpressionScalar('a')})
+
+        class DummyAPT(AtomicPulseTemplateStub):
+            @property
+            def final_values(self):
+                return final_values
+
+            @property
+            def defined_channels(self):
+                return final_values.keys()
+
+            def get_serialization_data(self, serializer=None) -> Dict[str, Any]:
+                assert not serializer
+                return {'duration': self.duration}
+
+
+        pt_10 = DummyAPT(duration=ExpressionScalar(10))
+        padded_10 = pt_10.pad_to(to_multiple_of_192)
+        padded_10_atomic = pt_10.pad_to(to_multiple_of_192, spt_kwargs=dict(metadata={'to_single_waveform': 'always'}))
+        pt_192 = DummyAPT(duration=ExpressionScalar(192))
+        pt_192_padded = pt_192.pad_to(to_multiple_of_192)
+        pt_192_padded_atomic = pt_192.pad_to(to_multiple_of_192, spt_kwargs=dict(metadata={'to_single_waveform': 'always'}))
+        pt_dyn = DummyAPT(duration=ExpressionScalar('duration'))
+        pt_dyn_padded = pt_dyn.pad_to(to_multiple_of_192)
+        pt_dyn_padded_atomic = pt_dyn.pad_to(to_multiple_of_192, spt_kwargs=dict(metadata={'to_single_waveform': 'always'}))
+        self.assertEqual(pt_dyn_padded, pt_dyn_padded_atomic)
+        self.assertEqual(padded_10, padded_10_atomic)
+        self.assertFalse(padded_10._is_atomic())
+        self.assertFalse(pt_dyn_padded._is_atomic())
+        self.assertTrue(padded_10_atomic._is_atomic())
+        self.assertTrue(pt_dyn_padded_atomic._is_atomic())
+        self.assertIs(pt_192_padded, pt_192)
+        self.assertIs(pt_192_padded_atomic, pt_192)
+
+        flat_spt = SequencePT(pt_10, pt_192, pt_dyn)
+
+        padded_flat = flat_spt.pad_selected_subtemplates_to(to_multiple_of_192)
+        expected = SequencePT(padded_10_atomic, pt_192, pt_dyn_padded_atomic)
+        self.assertEqual(expected, padded_flat)
+        for subpt in padded_flat.subtemplates:
+            self.assertTrue(subpt._is_atomic())
+
+        padded_flat_non_atomic = flat_spt.pad_selected_subtemplates_to(to_multiple_of_192, spt_kwargs=dict(metadata={}))
+        expected = SequencePT(padded_10, pt_192, pt_dyn_padded)
+        self.assertEqual(expected, padded_flat_non_atomic)
+        for expected_subpt, actual_subpt in zip(expected.subtemplates, padded_flat_non_atomic.subtemplates):
+            self.assertEqual(expected_subpt._is_atomic(), actual_subpt._is_atomic())
+
+        nested_pt = SequencePT(
+            pt_dyn,
+            RepetitionPT(pt_10, 2, 'rpt_10'),
+            RepetitionPT(pt_192, 2, 'rpt_192'),
+            pt_192,
+        )
+        nested_pt_padded = nested_pt.pad_selected_subtemplates_to(to_multiple_of_192)
+        expected = SequencePT(
+            pt_dyn_padded_atomic,
+            RepetitionPT(padded_10_atomic, 2, 'rpt_10_padded'),
+            RepetitionPT(pt_192, 2, 'rpt_192'),
+            pt_192,
+        )
+        self.assertEqual(expected, nested_pt_padded)
+        for subpt in nested_pt_padded.subtemplates:
+            expected_atomic = getattr(subpt, 'body', subpt)
+            self.assertTrue(expected_atomic._is_atomic())
 
     @mock.patch('qupulse.pulses.pulse_template.default_program_builder')
     def test_create_program_none(self, pb_mock) -> None:
