@@ -56,9 +56,15 @@ class LoopPulseTemplate(PulseTemplate):
 
 
 class ForLoopPulseTemplate(LoopPulseTemplate, MeasurementDefiner, ParameterConstrainer):
-    """This pulse template allows looping through a parametrized integer range and provides the loop index as a
+    """
+    This pulse template allows looping through a parametrized integer range and provides the loop index as a
     parameter to the body. If you do not need the index in the pulse template, consider using
-    :py:class:`~qupulse.pulses.repetition_pulse_template.RepetitionPulseTemplate`"""
+    :py:class:`~qupulse.pulses.repetition_pulse_template.RepetitionPulseTemplate`.
+
+    Besides direct creation, you can construct this pulse template with the :py:meth:`.PulseTemplate.with_iteration`
+    helper method.
+
+    """
     def __init__(self,
                  body: PulseTemplate,
                  loop_index: str,
@@ -75,14 +81,19 @@ class ForLoopPulseTemplate(LoopPulseTemplate, MeasurementDefiner, ParameterConst
                  metadata: Union[TemplateMetadata, dict] = None,
                  registry: PulseRegistryType=None) -> None:
         """
+        You can associate an identifier, measurements and parameter constraints with this pulse template. If the pulse template
+        does not result in any output (for example, because the range evaluates to an empty range or the body is empty at runtime)
+        the measurements are dropped as well.
+
         Args:
-            body: The loop body. It is expected to have `loop_index` as an parameter
-            loop_index: Loop index of the for loop
-            loop_range: Range to loop through
+            body: The loop body. It is expected to have ``loop_index`` as a parameter.
+            loop_index: Loop index of the loop.
+            loop_range: Range to loop through. Used to construct a :py:class:`.ParametrizedRange`.
             identifier: Used for serialization and the pulse registry
             measurements: Measurements passed to :py:class:`~qupulse.pulses.measurement.MeasurementDefiner` superclass
             parameter_constraints: Constraints passed to :py:class:`~qupulse.pulses.pulse_template.ParameterConstrainer` superclass
-            registry: The pulse
+            registry: The new pulse is registered there after initialization.
+            metadata: Used to initialize :py:attr:`.PulseTemplate.metadata`
 
         Raises:
             :py:class:`.LoopIndexNotUsedException` if the loop index is no parameter of the body
