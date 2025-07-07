@@ -2,6 +2,8 @@
 #
 # SPDX-License-Identifier: LGPL-3.0-or-later
 
+"""Transformations to be applied to sampled waveform data (offset/scale/virtual gates)."""
+
 from typing import Any, Mapping, Set, Tuple, Sequence, AbstractSet, Union, TYPE_CHECKING, Hashable
 from abc import abstractmethod
 from numbers import Real

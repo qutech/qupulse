@@ -2,6 +2,8 @@
 #
 # SPDX-License-Identifier: LGPL-3.0-or-later
 
+"""Program builder implementation that creates the legacy :py:class:`.Loop`."""
+
 import reprlib
 import warnings
 from collections import defaultdict
