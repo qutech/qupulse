@@ -48,13 +48,25 @@ class RepetitionPulseTemplate(LoopPulseTemplate, ParameterConstrainer, Measureme
                  metadata: Union[TemplateMetadata, dict] = None,
                  registry: PulseRegistryType=None
                  ) -> None:
-        """Create a new RepetitionPulseTemplate instance.
+        """
+        Furthermore, this class allows associating an identifier, measurements, and parameter constraints with this sequence.
+        If the body evaluates to nothing during instantiation, the associated measurements are dropped.
+
+        Translation into a single waveform can be forced by passing ``to_single_waveform == 'always'`` in the ``metadata``.
+
+        The default creation does not flatten multiple nested repetition pulse templates.
+        Use :py:meth:`.RepetitionPulseTemplate.with_repetition` which will do that if ``identifier`` and ```metadata`` are not set.
+
+        Raises:
+            ValueError: If the repetition count is negative
 
         Args:
-            body (PulseTemplate): The PulseTemplate which will be repeated.
-            repetition_count (int or ParameterDeclaration): The number of repetitions either as a
-                constant integer value or as a parameter declaration.
-            identifier (str): A unique identifier for use in serialization. (optional)
+            body: The PulseTemplate which will be repeated.
+            repetition_count: The number of repetitions.
+            identifier: A unique identifier for use in serialization.
+            parameter_constraints: See :py:class:`.ParameterConstrainer` for details
+            metadata: Used to initialize :py:attr:`.PulseTemplate.metadata`
+            registry: This pulse template registers itself there under the given identifier if supplied.
         """
         if len(args) == 1 and parameter_constraints is None:
             warn('You used parameter_constraints as a positional argument. It will be keyword only in a future version.', DeprecationWarning)
