@@ -35,6 +35,7 @@ class SequencePulseTemplate(PulseTemplate, ParameterConstrainer, MeasurementDefi
     right after one another.
 
     Furthermore, this class allows associating an identifier, measurements, and parameter constraints with this sequence.
+    If none of the subtemplates evaluate to anything during instantiation, the associated measurements are dropped.
 
     For more concise syntax, the subtemplate can be stated in the form of a "mapping tuple" that is passed to :py:func:`.MappingPulseTemplate.from_tuple`.
     This allows the mathematical mapping if pulse parameters and renaming of channels and measurement declarations.
