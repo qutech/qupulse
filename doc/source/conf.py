@@ -334,10 +334,10 @@ nbsphinx_execute_arguments = [
 ]
 
 
-def skip(app, what, name, obj, skip, options):
+def skip_init(app, what, name, obj, skip, options):
     if name == "__init__" and hasattr(obj, '__doc__') and isinstance(obj.__doc__, str) and len(obj.__doc__):
         return True
-    return skip
+    return None
 
 def change_property_rtype_to_type(app, what, name, obj, options, lines):
     if what == 'attribute':
@@ -346,5 +346,5 @@ def change_property_rtype_to_type(app, what, name, obj, options, lines):
             lines[i] = line.replace(':rtype: :py:class:', ':type:')
 
 def setup(app):
-    app.connect('autodoc-skip-member', skip)
+    app.connect('autodoc-skip-member', skip_init)
     #app.connect('autodoc-process-docstring', change_property_rtype_to_type)
