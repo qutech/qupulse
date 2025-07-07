@@ -17,7 +17,6 @@ def get_pulse():
     marker_on = FPT('1', 'tau', channel='trigger')
 
     multi = MPT([sine, marker_on], {'tau', 'U'})
-    multi.atomicity = True
 
     assert sine.defined_channels == {'out'}
     assert multi.defined_channels == {'out', 'trigger'}
