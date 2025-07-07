@@ -49,17 +49,17 @@ class SequencePulseTemplate(PulseTemplate, ParameterConstrainer, MeasurementDefi
                  metadata: Union[TemplateMetadata, dict] = None,
                  registry: PulseRegistryType=None) -> None:
         """
-        The only required arguments are the subtemplates. Besides creating :py:class:`MappingPulseTemplate`s from tuples,
+        The only required arguments are the subtemplates. Besides creating :py:class:`.MappingPulseTemplate` s from tuples,
         the subtemplates are not modified and particularly nested sequences are not flattened in hierarchy.
-        Use :py:`.SequencePulseTemplate.concatenate` or the `@` operator if you want automatic flattening.
+        Use :py:meth:`.SequencePulseTemplate.concatenate` or the ``@`` operator if you want automatic flattening.
 
         You can specify ``to_single_waveform == 'always'`` in the metadata to enforce translation into a single waveform.
 
         Raises:
-            ValueError if the subtemplates are defined on different channels.
+            ValueError: if the subtemplates are defined on different channels.
 
         Args:
-            subtemplates: The subtemplates given as `PulseTemplate` or as a tuple compatible with :py:`.MappingPulseTemplate.from_tuple`.
+            subtemplates: The subtemplates given as `PulseTemplate` or as a tuple compatible with :py:meth:`.MappingPulseTemplate.from_tuple`.
             identifier: A unique identifier for use in serialization.
             parameter_constraints: A list of constraints checked on instantiation.
             measurements: A list of measurement declarations associated with this sequence.
