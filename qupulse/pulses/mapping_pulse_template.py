@@ -19,7 +19,7 @@ from qupulse.pulses.metadata import SingleWaveformStrategy, TemplateMetadata
 from qupulse.pulses.parameters import ParameterNotProvidedException, ParameterConstrainer
 from qupulse.program.waveforms import Waveform
 from qupulse.program import ProgramBuilder
-from qupulse.serialization import Serializer, PulseRegistryType
+from qupulse.serialization import Serializer, PulseRegistryType, SerializableMeta
 
 __all__ = [
     "MappingPulseTemplate",
@@ -466,3 +466,6 @@ class MappingCollisionException(AutoMappingMatchingException):
 
     def __str__(self) -> str:
         return self.message + '\n'.join(str(mapping) for mapping in self.mappings)
+
+# backward compatibility with very old pulse deserialization
+SerializableMeta.deserialization_callbacks["qupulse.pulses.pulse_template_parameter_mapping.MappingPulseTemplate"] = SerializableMeta.deserialization_callbacks[MappingPulseTemplate.get_type_identifier()]

@@ -23,15 +23,6 @@ from qupulse.pulses.arithmetic_pulse_template import ArithmeticPulseTemplate as 
     ArithmeticAtomicPulseTemplate as ArithmeticAtomicPT
 from qupulse.pulses.time_reversal_pulse_template import TimeReversalPulseTemplate as TimeReversalPT
 
-import warnings
-with warnings.catch_warnings():
-    warnings.simplefilter('ignore')
-    # ensure this is included.. it adds a deserialization handler for pulse_template_parameter_mapping.MappingPT
-    # which is not present otherwise
-    import qupulse.pulses.pulse_template_parameter_mapping
-    del qupulse
-del warnings
-
 
 __all__ = ["FunctionPT", "ForLoopPT", "AtomicMultiChannelPT", "MappingPT", "RepetitionPT", "SequencePT", "TablePT",
            "PointPT", "ConstantPT", "AbstractPT", "ParallelConstantChannelPT", "ArithmeticPT", "ArithmeticAtomicPT",
