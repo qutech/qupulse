@@ -30,14 +30,14 @@ __all__ = ["SequencePulseTemplate"]
 class SequencePulseTemplate(PulseTemplate, ParameterConstrainer, MeasurementDefiner):
     """A sequence of different PulseTemplates.
     
-    SequencePulseTemplate allows to group several
-    PulseTemplates (subtemplates) into one larger sequence,
-    i.e., when instantiating a pulse from a SequencePulseTemplate
-    all pulses instantiated from the subtemplates are queued for
-    execution right after one another.
-    SequencePulseTemplate requires to specify a mapping of
-    parameter declarations from its subtemplates to its own, enabling
-    renaming and mathematical transformation of parameters.
+    SequencePulseTemplate allows grouping several PulseTemplates (subtemplates) into one larger sequence.
+    When instantiating a pulse from a SequencePulseTemplate all pulses instantiated from the subtemplates are queued
+    right after one another.
+
+    Furthermore, this class allows associating an identifier, measurements, and parameter constraints with this sequence.
+
+    For more concise syntax, the subtemplate can be stated in the form of a "mapping tuple" that is passed to :py:func:`.MappingPulseTemplate.from_tuple`.
+    This allows the mathematical mapping if pulse parameters and renaming of channels and measurement declarations.
     """
 
     def __init__(self,
@@ -47,24 +47,23 @@ class SequencePulseTemplate(PulseTemplate, ParameterConstrainer, MeasurementDefi
                  measurements: Optional[List[MeasurementDeclaration]]=None,
                  metadata: Union[TemplateMetadata, dict] = None,
                  registry: PulseRegistryType=None) -> None:
-        """Create a new SequencePulseTemplate instance.
+        """
+        The only required arguments are the subtemplates. Besides creating :py:class:`MappingPulseTemplate`s from tuples,
+        the subtemplates are not modified and particularly nested sequences are not flattened in hierarchy.
+        Use :py:`.SequencePulseTemplate.concatenate` or the `@` operator if you want automatic flattening.
 
-        Requires a (correctly ordered) list of subtemplates in the form
-        (PulseTemplate, Dict(str -> str)) where the dictionary is a mapping between the external
-        parameters exposed by this SequencePulseTemplate to the parameters declared by the
-        subtemplates, specifying how the latter are derived from the former, i.e., the mapping is
-        subtemplate_parameter_name -> mapping_expression (as str) where the free variables in the
-        mapping_expression are parameters declared by this SequencePulseTemplate.
+        You can specify ``to_single_waveform == 'always'`` in the metadata to enforce translation into a single waveform.
 
-        The following requirements must be satisfied:
-            - for each parameter declared by a subtemplate, a mapping expression must be provided
-            - each free variable in a mapping expression must be declared as an external parameter
-                of this SequencePulseTemplate
+        Raises:
+            ValueError if the subtemplates are defined on different channels.
 
         Args:
-            subtemplates (List(Subtemplate)): The list of subtemplates of this
-                SequencePulseTemplate as tuples of the form (PulseTemplate, Dict(str -> str)).
-            identifier (str): A unique identifier for use in serialization. (optional)
+            subtemplates: The subtemplates given as `PulseTemplate` or as a tuple compatible with :py:`.MappingPulseTemplate.from_tuple`.
+            identifier: A unique identifier for use in serialization.
+            parameter_constraints: A list of constraints checked on instantiation.
+            measurements: A list of measurement declarations associated with this sequence.
+            metadata: An optional metadata associated with this sequence.
+            registry: A PulseRegistryType or a subclass of PulseRegistryType.
         """
         PulseTemplate.__init__(self, identifier=identifier, metadata=metadata)
         ParameterConstrainer.__init__(self, parameter_constraints=parameter_constraints)
