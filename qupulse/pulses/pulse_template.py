@@ -685,11 +685,6 @@ class AtomicPulseTemplate(PulseTemplate, MeasurementDefiner):
         else:
             return self
 
-    @property
-    def atomicity(self) -> bool:
-        warnings.warn("Deprecated since neither maintained nor properly designed.", category=DeprecationWarning)
-        return True
-
     def _is_atomic(self) -> bool:
         return True
 
