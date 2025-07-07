@@ -102,6 +102,21 @@ class RepetitionPulseTemplateTest(unittest.TestCase):
         pt = RepetitionPulseTemplate(DummyPulseTemplate(parameter_names={'a'}), 'n', parameter_constraints=['a<c'])
         self.assertEqual(pt.parameter_names, {'a','c', 'n'})
 
+    def test_with_repetition(self):
+        dpt = DummyPulseTemplate(parameter_names={'a'})
+
+        rpt = RepetitionPulseTemplate(dpt, 'n', parameter_constraints=['a<c'])
+        m_rpt = rpt.with_repetition('m')
+        self.assertIs(dpt, m_rpt.body)
+
+        rpt = RepetitionPulseTemplate(dpt, 'n', parameter_constraints=['a<c'], identifier='foo')
+        m_rpt = rpt.with_repetition('m')
+        self.assertIs(rpt, m_rpt.body)
+
+        rpt = RepetitionPulseTemplate(dpt, 'n', parameter_constraints=['a<c'], metadata={'to_single_waveform': 'always'})
+        m_rpt = rpt.with_repetition('m')
+        self.assertIs(rpt, m_rpt.body)
+
 
 class RepetitionPulseTemplateSequencingTests(MeasurementWindowTestCase):
     def test_internal_create_program(self):

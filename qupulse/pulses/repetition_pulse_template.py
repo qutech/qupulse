@@ -77,8 +77,9 @@ class RepetitionPulseTemplate(LoopPulseTemplate, ParameterConstrainer, Measureme
 
         self._register(registry=registry)
 
-    def with_repetition(self, repetition_count: Union[int, str, ExpressionScalar]) -> 'PulseTemplate':
-        if self.identifier:
+    def with_repetition(self, repetition_count: Union[int, str, ExpressionScalar]) -> 'RepetitionPulseTemplate':
+        repetition_count = ExpressionScalar.make(repetition_count)
+        if self.identifier or self.metadata:
             return RepetitionPulseTemplate(self, repetition_count)
         else:
             return RepetitionPulseTemplate(
