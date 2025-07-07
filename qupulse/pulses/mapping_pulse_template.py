@@ -320,11 +320,29 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
             raise TypeError('Values of parameter dict are neither all Parameter nor Real')
 
     def get_updated_measurement_mapping(self, measurement_mapping: Dict[str, str]) -> Dict[str, str]:
+        """This function integrates this object's measurement mapping with the supplied ``measurement_mapping`` i.e., it translates
+        a mapping that is valid in the outer namespace to a mapping that is valid in the inner namespace.
+
+        Args:
+            measurement_mapping: Measurement mapping to translate.
+
+        Returns:
+            The measurement mapping translated for the inner template to consume.
+        """
         return {k: measurement_mapping[v] for k, v in self.__measurement_mapping.items()}
 
     def get_updated_channel_mapping(self, channel_mapping: Dict[ChannelID,
                                                                 Optional[ChannelID]]) -> Dict[ChannelID,
                                                                                               Optional[ChannelID]]:
+        """This function integrates this object's channel mapping with the supplied ``channel_mapping`` i.e., it translates
+        a mapping that is valid in the outer namespace to a mapping that is valid in the inner namespace.
+
+        Args:
+            channel_mapping: Channel mapping to translate.
+
+        Returns:
+            The channel mapping translated for the inner template to consume.
+        """
         # do not look up the mapped outer channel if it is None (this marks a deleted channel)
         return {inner_ch: None if outer_ch is None else channel_mapping[outer_ch]
                 for inner_ch, outer_ch in self.__channel_mapping.items()}
