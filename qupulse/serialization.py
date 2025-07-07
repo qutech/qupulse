@@ -775,6 +775,11 @@ class Serializer(object):
         # the qctoolkit alias was removed. We hack in the new name here directly
         if package_name == 'qctoolkit':
             package_name = 'qupulse'
+
+        # this alias was removed so we hack in the "new" location
+        if module_path and module_path[-1] == 'pulse_template_parameter_mapping':
+            module_path[-1] = 'mapping_pulse_template'
+
         module_path.insert(0, package_name)
 
         module_name = '.'.join(module_path)
