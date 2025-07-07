@@ -134,6 +134,7 @@ class SequencePulseTemplateTest(unittest.TestCase):
         spt_id = SequencePulseTemplate(a, b, identifier='id')
         spt_meas = SequencePulseTemplate(a, b, measurements=[('m', 0, 'd')])
         spt_constr = SequencePulseTemplate(a, b, parameter_constraints=['a < b'])
+        spt_metadata = SequencePulseTemplate(a, b, metadata={'to_single_waveform': 'always'})
 
         merged = SequencePulseTemplate.concatenate(a, spt_anon, b)
         self.assertEqual(merged.subtemplates, [a, a, b, b])
@@ -146,6 +147,9 @@ class SequencePulseTemplateTest(unittest.TestCase):
 
         result = SequencePulseTemplate.concatenate(a, spt_constr, b)
         self.assertEqual(result.subtemplates, [a, spt_constr, b])
+
+        result = SequencePulseTemplate.concatenate(a, spt_metadata, b)
+        self.assertEqual(result.subtemplates, [a, spt_metadata, b])
 
 
 class SequencePulseTemplateSerializationTests(SerializableTests, unittest.TestCase):

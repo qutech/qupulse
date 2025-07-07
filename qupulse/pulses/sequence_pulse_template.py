@@ -98,6 +98,7 @@ class SequencePulseTemplate(PulseTemplate, ParameterConstrainer, MeasurementDefi
             if (isinstance(pt, SequencePulseTemplate)
                     and pt.identifier is None
                     and not pt.measurement_declarations
+                    and not pt.metadata
                     and not pt.parameter_constraints):
                 parsed.extend(pt.subtemplates)
             else:
