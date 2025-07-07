@@ -2,13 +2,17 @@
 #
 # SPDX-License-Identifier: LGPL-3.0-or-later
 
+"""
+Defines the pulse template for parameter, channel and measurement mapping.
+"""
+
 from typing import Optional, Set, Dict, Union, List, Any, Tuple, Mapping
 import itertools
 import numbers
 import collections
 
 from qupulse.utils.types import ChannelID, FrozenDict, FrozenMapping
-from qupulse.expressions import Expression, ExpressionScalar
+from qupulse.expressions import Expression, ExpressionScalar, ExpressionLike
 from qupulse.parameter_scope import Scope, MappedScope
 from qupulse.pulses.pulse_template import PulseTemplate, MappingTuple
 from qupulse.pulses.metadata import SingleWaveformStrategy, TemplateMetadata
@@ -25,38 +29,62 @@ __all__ = [
 
 
 class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
-    """This class can be used to remap parameters, the names of measurement windows and the names of channels. Besides
-    the standard constructor, there is a static member function from_tuple for convenience. The class also allows
-    constraining parameters by deriving from ParameterConstrainer"""
+    """This class can be used to map a pulse template's parameters with mathematical expressions and rename its measurements and channels.
 
+    Besides the standard constructor which is intended for verbose construction with keyword arguments,
+    there is :py:meth:`.MappingPulseTemplate.from_tuple` which allows compact code style.
+    It is also used by the convenience function :py:meth:`.PulseTemplate.with_mapping`.
+
+    The class allows constraining the newly mapped parameters by deriving from :py:class:`.ParameterConstrainer`.
+    """
+
+    #: Default value for ``allow_partial_parameter_mapping`` of the initialization.
     ALLOW_PARTIAL_PARAMETER_MAPPING = True
-    """Default value for allow_partial_parameter_mapping of the __init__ method."""
 
     def __init__(self, template: PulseTemplate, *,
                  identifier: Optional[str]=None,
-                 parameter_mapping: Optional[Dict[str, str]]=None,
-                 measurement_mapping: Optional[Dict[str, str]] = None,
-                 channel_mapping: Optional[Dict[ChannelID, ChannelID]] = None,
+                 parameter_mapping: Optional[Dict[str, ExpressionLike]]=None,
+                 measurement_mapping: Optional[Dict[str, Optional[str]]] = None,
+                 channel_mapping: Optional[Dict[ChannelID, Optional[ChannelID]]] = None,
                  parameter_constraints: Optional[List[str]]=None,
                  allow_partial_parameter_mapping: bool = None,
                  metadata: Union[TemplateMetadata, dict]=None,
                  registry: PulseRegistryType=None) -> None:
-        """Standard constructor for the MappingPulseTemplate.
+        """
+        Mappings that are not specified are defaulted to identity mappings.
+        Channels and measurement names of the encapsulated template can be mapped partially by default.
+        For example, if ``channel_mapping`` only contains one of two channels the other channel name is mapped to itself.
 
-        Mappings that are not specified are defaulted to identity mappings. Channels and measurement names of the
-        encapsulated template can be mapped partially by default. F.i. if channel_mapping only contains one of two
-        channels the other channel name is mapped to itself. Channels that are mapped to None are dropped.
-        However, if a parameter mapping is specified and one or more parameters are not mapped a MissingMappingException
-        is raised. To allow partial mappings and enable the same behaviour as for the channel and measurement name
-        mapping allow_partial_parameter_mapping must be set to True.
-        Furthermore parameter constrains can be specified.
-        
-        :param template: The encapsulated pulse template whose parameters, measurement names and channels are mapped
-        :param parameter_mapping: if not none, mappings for all parameters must be specified
-        :param measurement_mapping: mappings for other measurement names are inserted
-        :param channel_mapping: mappings for other channels are auto inserted. Mapping to None drops the channel.
-        :param parameter_constraints:
-        :param allow_partial_parameter_mapping: If None the value of the class variable ALLOW_PARTIAL_PARAMETER_MAPPING
+        >>> from qupulse.pulses import *
+        >>> inner = ConstantPT(duration=1, amplitude_dict={'A': 1.0, 'B': 2.0})
+        >>> inner.defined_channels
+        {'A', 'B'}
+        >>> mapped = MappingPT(inner, channel_mapping={'A': 'X'})
+        >>> mapped.defined_channels
+        {'X', 'B'}
+
+        Channels that are mapped to None are dropped.
+
+        >>> mapped = MappingPT(inner, channel_mapping={'A': None})
+        >>> mapped.defined_channels
+        {'B'}
+
+        However, ``allow_partial_parameter_mapping`` is set False or if it is unset and the default value
+        :py:attr:`MappingPulseTemplate.ALLOW_PARTIAL_PARAMETER_MAPPING` is used, the parameter mappings must map all parameters.
+        Otherwise, a :py:class:`.MissingMappingException` is raised.
+
+        Raises:
+            ValueError: If the channel mapping maps multiple channels to the same channel.
+
+        Args:
+            template: The encapsulated pulse template whose parameters, measurement names and channels are mapped
+            parameter_mapping: if not none, mappings for all parameters must be specified
+            measurement_mapping: mappings for other measurement names are inserted
+            channel_mapping: mappings for other channels are auto inserted. Mapping to None drops the channel.
+            parameter_constraints: See :py:class:`.ParameterConstrainer`
+            allow_partial_parameter_mapping: If None it defaults to :py:attr:`MappingPulseTemplate.ALLOW_PARTIAL_PARAMETER_MAPPING`
+            metadata: Used to initialize :py:attr:`.PulseTemplate.metadata`.
+            registry: If specified, the new pulse template is registered there after initialization.
         """
         PulseTemplate.__init__(self, identifier=identifier, metadata=metadata)
         ParameterConstrainer.__init__(self, parameter_constraints=parameter_constraints)
@@ -292,11 +320,29 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
             raise TypeError('Values of parameter dict are neither all Parameter nor Real')
 
     def get_updated_measurement_mapping(self, measurement_mapping: Dict[str, str]) -> Dict[str, str]:
+        """This function integrates this object's measurement mapping with the supplied ``measurement_mapping`` i.e., it translates
+        a mapping that is valid in the outer namespace to a mapping that is valid in the inner namespace.
+
+        Args:
+            measurement_mapping: Measurement mapping to translate.
+
+        Returns:
+            The measurement mapping translated for the inner template to consume.
+        """
         return {k: measurement_mapping[v] for k, v in self.__measurement_mapping.items()}
 
     def get_updated_channel_mapping(self, channel_mapping: Dict[ChannelID,
                                                                 Optional[ChannelID]]) -> Dict[ChannelID,
                                                                                               Optional[ChannelID]]:
+        """This function integrates this object's channel mapping with the supplied ``channel_mapping`` i.e., it translates
+        a mapping that is valid in the outer namespace to a mapping that is valid in the inner namespace.
+
+        Args:
+            channel_mapping: Channel mapping to translate.
+
+        Returns:
+            The channel mapping translated for the inner template to consume.
+        """
         # do not look up the mapped outer channel if it is None (this marks a deleted channel)
         return {inner_ch: None if outer_ch is None else channel_mapping[outer_ch]
                 for inner_ch, outer_ch in self.__channel_mapping.items()}

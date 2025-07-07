@@ -1,3 +1,5 @@
+"""Runtime variable value implementations."""
+
 from dataclasses import dataclass
 from numbers import Real
 from typing import TypeVar, Generic, Mapping, Union
@@ -23,13 +25,12 @@ class DynamicLinearValue(Generic[NumVal]):
     expressions can be calculated via simple increments.
 
     This class tries to pass a number and a :py:class:`sympy.expr.Expr` on best effort basis.
-
-    Attributes:
-        base: The part of this expression which is not runtime parameter-dependent
-        factors: A mapping of inner parameter names to the factor with which they contribute to the final value.
     """
 
+    #: The part of this expression which is not runtime parameter-dependent
     base: NumVal
+
+    #: A mapping of inner parameter names to the factor with which they contribute to the final value.
     factors: Mapping[str, NumVal]
 
     def __post_init__(self):

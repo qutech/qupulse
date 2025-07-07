@@ -1,3 +1,5 @@
+"""Definition of the program builder protocol."""
+
 from abc import abstractmethod
 from typing import runtime_checkable, Protocol, Mapping, Optional, Sequence, Iterable, ContextManager
 
