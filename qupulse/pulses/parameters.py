@@ -18,7 +18,13 @@ from qupulse.expressions import Expression
 from qupulse.parameter_scope import Scope, ParameterNotProvidedException
 from qupulse.utils.sympy import sympify
 
-__all__ = ["ParameterNotProvidedException", "ParameterConstraintViolation", "ParameterConstraint"]
+__all__ = [
+    "ParameterNotProvidedException",
+    "ParameterConstraintViolation",
+    "ParameterConstraint",
+    "ParameterConstrainer",
+    "ConstrainedParameterIsVolatileWarning",
+]
 
 
 class ParameterConstraint(AnonymousSerializable):
