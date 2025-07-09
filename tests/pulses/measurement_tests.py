@@ -47,10 +47,10 @@ class MeasurementDefinerTest(unittest.TestCase):
         pulse = self.to_test_constructor(measurements=[('mw', 'a', 'd')])
         measurement_mapping = {'mw': 'mw'}
 
-        with self.assertRaises(ValueError):
+        with self.assertWarnsRegex(UserWarning, "negative begin or length"):
             pulse.get_measurement_windows(measurement_mapping=measurement_mapping,
                                           parameters=dict(length=10, a=-1, d=3))
-        with self.assertRaises(ValueError):
+        with self.assertWarnsRegex(UserWarning, "negative begin or length"):
             pulse.get_measurement_windows(measurement_mapping=measurement_mapping,
                                           parameters=dict(length=10, a=3, d=-1))
 
