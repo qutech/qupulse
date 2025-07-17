@@ -898,7 +898,6 @@ class LinSpaceBuilder(ProgramBuilder):
             if pt_obj in self._to_stepping_repeat or pt_obj.identifier in self._to_stepping_repeat \
                 or pt_obj.loop_index in self._to_stepping_repeat:
                 stepped = True
-            self._stack[-1].append(LinSpaceIter(body=tuple(cmds), length=len(rng), to_be_stepped=stepped))
             iteration = LinSpaceIter(body=tuple(cmds), length=len(rng), to_be_stepped=stepped)
             if measurements: iteration._measurement_memory.add_measurements(measurements)
             self._stack[-1].append(iteration)
