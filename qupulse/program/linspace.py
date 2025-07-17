@@ -365,7 +365,41 @@ class LinSpaceArbitraryWaveformIndexed(LinSpaceNodeChannelSpecific):
         if self._cached_body_duration is None:
             self._cached_body_duration = self.waveform.duration
         return self._cached_body_duration
+
+
+#!!! this is merely to catch measurements added to a sequencePT...
+#(same as LinSpaceRepeat but with count=1; do not inherit to not confuse isinstance checks unintentionally)
+@dataclass
+class LinSpaceSequence(LinSpaceNode):
+    """Repeat the body count times."""
+    body: Tuple[LinSpaceNode, ...]
+
+    def dependencies(self):
+        dependencies = {}
+        for node in self.body:
+            for dom, ch_to_deps in node.dependencies().items():
+                for ch, deps in ch_to_deps.items():
+                    dependencies.setdefault(dom,{}).setdefault(ch, set()).update(deps)
+        return dependencies
     
+    @property
+    def body_duration(self) -> TimeType:
+        if self._cached_body_duration is None:
+            self._cached_body_duration = sum(b.body_duration for b in self.body)
+        return self._cached_body_duration
+    
+    def _get_measurement_windows(self,) -> Mapping[str, np.ndarray]:
+        """Private implementation of get_measurement_windows with a slightly different data format for easier tiling.
+        Returns:
+              A dictionary (measurement_name -> array) with begin == array[:, 0] and length == array[:, 1]
+        """
+        return _get_measurement_windows_loop(self._measurement_memory.measurements,1,self.body)
+    
+    def _reverse_body(self):
+        self.body = self.body[::-1]
+        for node in self.body:
+            node._reverse_body()
+
 
 @dataclass
 class LinSpaceRepeat(LinSpaceNode):
@@ -463,6 +497,7 @@ def _get_measurement_windows_loop(measurements: List[MeasurementWindow], count: 
           A dictionary (measurement_name -> array) with begin == array[:, 0] and length == array[:, 1]
     """
     temp_meas_windows = defaultdict(list)
+    temp_meas_windows_children = defaultdict(list)
     if measurements:
         for (mw_name, begin, length) in measurements:
             temp_meas_windows[mw_name].append((begin, length))
@@ -474,7 +509,7 @@ def _get_measurement_windows_loop(measurements: List[MeasurementWindow], count: 
     for child in body:
         for mw_name, begins_length_array in child._get_measurement_windows().items():
             begins_length_array[:, 0] += float(offset)
-            temp_meas_windows[mw_name].append(begins_length_array)
+            temp_meas_windows_children[mw_name].append(begins_length_array)
         offset += child.body_duration
 
     body_duration = float(offset)
@@ -483,8 +518,12 @@ def _get_measurement_windows_loop(measurements: List[MeasurementWindow], count: 
     result = {}
 
     # repeat and add repetition based offset
-    for mw_name, begin_length_list in temp_meas_windows.items():
+    #!!! but only for children
+    for mw_name, begin_length_list in temp_meas_windows_children.items():
         result[mw_name] = _repeat_loop_measurements(begin_length_list, count, body_duration)
+        
+    for mw_name, begin_length_list in temp_meas_windows.items():
+        result[mw_name] = _repeat_loop_measurements(begin_length_list, 1, body_duration)
 
     return result
 
@@ -797,10 +836,13 @@ class LinSpaceBuilder(ProgramBuilder):
         yield self
         blocks = self._stack.pop()
         if blocks:
-            self._stack[-1].append(LinSpaceRepeat(body=tuple(blocks), count=repetition_count))
+            repeat = LinSpaceRepeat(body=tuple(blocks), count=repetition_count,)
+            if measurements: repeat._measurement_memory.add_measurements(measurements)
+            self._stack[-1].append(repeat)
     
     @contextlib.contextmanager
     def time_reversed(self, measurements: Optional[Sequence[MeasurementWindow]] = None) -> ContextManager['ProgramBuilder']:
+        if measurements: raise NotImplementedError('TODO')
         self._reversed_counter += 1
         self._stack.append([])
         yield self
@@ -814,7 +856,13 @@ class LinSpaceBuilder(ProgramBuilder):
     @contextlib.contextmanager
     def with_sequence(self,
                       measurements: Optional[Sequence[MeasurementWindow]] = None) -> ContextManager['ProgramBuilder']:
+        self._stack.append([])
         yield self
+        blocks = self._stack.pop()
+        if blocks:
+            sequence = LinSpaceSequence(body=tuple(blocks),)
+            if measurements: sequence._measurement_memory.add_measurements(measurements)
+            self._stack[-1].append(sequence)
 
     def new_subprogram(self, global_transformation: 'Transformation' = None) -> ContextManager['ProgramBuilder']:
         
@@ -851,6 +899,9 @@ class LinSpaceBuilder(ProgramBuilder):
                 or pt_obj.loop_index in self._to_stepping_repeat:
                 stepped = True
             self._stack[-1].append(LinSpaceIter(body=tuple(cmds), length=len(rng), to_be_stepped=stepped))
+            iteration = LinSpaceIter(body=tuple(cmds), length=len(rng), to_be_stepped=stepped)
+            if measurements: iteration._measurement_memory.add_measurements(measurements)
+            self._stack[-1].append(iteration)
             
             
     def evaluate_nested_stepping(self, scope: Scope, parameter_names: set[str]) -> bool:
@@ -1348,7 +1399,11 @@ class _TranslationState:
         if isinstance(node, Sequence):
             for lin_node in node:
                 self.add_node(lin_node)
-
+                
+        elif isinstance(node, LinSpaceSequence):
+            for node in node.body:
+                self.add_node(node)
+        
         elif isinstance(node, LinSpaceRepeat):
             self._add_repetition_node(node)
 
