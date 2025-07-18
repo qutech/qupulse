@@ -571,6 +571,7 @@ class LinSpaceBuilder(ProgramBuilder):
         self._pt_channels = None
         self._meas_queue = []
         self._reversed_counter = 0
+        self._current_rollout_vars = {}
         
     def _root(self):
         return self._stack[0]
@@ -583,19 +584,26 @@ class LinSpaceBuilder(ProgramBuilder):
         process."""
         if self._ranges:
             name, rng, reverse = self._ranges[-1]
-            if pt_obj and (pt_obj in self._to_stepping_repeat or pt_obj.identifier in self._to_stepping_repeat \
+            
+            #hack in: if a loop was rolled out, skip the simpleexpression assignment
+            if name in self._current_rollout_vars:
+                pass
+            
+            elif pt_obj and (pt_obj in self._to_stepping_repeat or pt_obj.identifier in self._to_stepping_repeat \
                 or pt_obj.loop_index in self._to_stepping_repeat):
                     # the nesting level should be simply the amount of this type in the scope.
                     nest = len(tuple(v for v in scope.values() if isinstance(v,SimpleExpressionStepped)))
-                    return scope.overwrite({name:SimpleExpressionStepped(
+                    return_scope = scope.overwrite({name:SimpleExpressionStepped(
                         base=0,offsets={name: 1},step_nesting_level=nest+1,rng=rng,reverse=reverse)})
             else:
                 if isinstance(scope.get(name,None),SimpleExpressionStepped):
-                    return scope
+                    return_scope = scope
                 else:
-                    return scope.overwrite({name: SimpleExpression(base=0, offsets={name: 1})})
+                    return_scope = scope.overwrite({name: SimpleExpression(base=0, offsets={name: 1})})
         else:
-            return scope
+            return_scope = scope
+            
+        return return_scope.overwrite(self._current_rollout_vars)
 
     def _get_ranges(self):
         return dict(r[:2] for r in self._ranges)
@@ -888,6 +896,21 @@ class LinSpaceBuilder(ProgramBuilder):
                        measurements: Optional[Sequence[MeasurementWindow]] = None) -> Iterable['ProgramBuilder']:
         if len(rng) == 0:
             return
+        
+        #semi-hacky: if the body duration expression has variables,
+        #this must lead to rolling out the pulse with inner mapping
+        #this effectively disables the efficient t-looping for ConstantPTs, but
+        #that would probably be rarely used anyway
+        #(cause measurements not implemented, which is more of a headache than this).
+        if durvars:=pt_obj.body.duration.variables:
+            # assert index_name in durvars, 'expected iteration index ot be in duration expression of body' #doesn't have to be the case if nested loops
+            with self.with_sequence(measurements):
+                for value in rng:
+                    self._current_rollout_vars[index_name] = value
+                    yield self
+                    self._current_rollout_vars.pop(index_name)
+            return
+        
         self._stack.append([])
         self._ranges.append((index_name, rng, self._reversed_counter%2))
         yield self
