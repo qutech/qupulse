@@ -17,7 +17,7 @@ from qupulse.parameter_scope import Scope, MappedScope, FrozenDict
 # from qupulse.pulses import ForLoopPT
 from qupulse.program import ProgramBuilder, HardwareTime, HardwareVoltage, Waveform, RepetitionCount, TimeType
 from qupulse.expressions.simple import SimpleExpression, NumVal, SimpleExpressionStepped
-from qupulse.program.waveforms import MultiChannelWaveform, TransformingWaveform, WaveformCollection
+from qupulse.program.waveforms import MultiChannelWaveform, TransformingWaveform, WaveformCollection, SequenceWaveform
 
 from qupulse.program.transformation import ChainedTransformation, ScalingTransformation, OffsetTransformation,\
     IdentityTransformation, ParallelChannelTransformation, Transformation
@@ -558,7 +558,11 @@ class LinSpaceBuilder(ProgramBuilder):
                  # this can only be on or off for the entire program as those waveform samples are reused for efficiency.
                  # TODO: that could be adapted but the necessity so far was marginal.
                  play_marker_when_constant: bool|set[ChannelID] = False,
+                 #loop indices that are supposed to be rolled out:
                  to_rollout: set[str]|None = None,
+                 #tuple of (max_wf_len,max_total_len) of successive wfs that should be
+                 #concatenated to save waveform memory
+                 concatenate_wfs: tuple[TimeType|float,TimeType|float]|None = None,
                  ):
         super().__init__()
         # self._name_to_idx = {name: idx for idx, name in enumerate(channels)}
@@ -573,6 +577,7 @@ class LinSpaceBuilder(ProgramBuilder):
         self._reversed_counter = 0
         self._to_rollout = to_rollout or set()
         self._current_rollout_vars = {}
+        self._concatenate_wfs = concatenate_wfs
         
         assert not any(d in self._to_rollout for d in self._to_stepping_repeat)
         
@@ -871,6 +876,12 @@ class LinSpaceBuilder(ProgramBuilder):
         yield self
         blocks = self._stack.pop()
         if blocks:
+            
+            #try to concatenate waveforms that are plain succession of things?
+            #as to_single_waveform is not implemented yet here / might serve different purpose
+            if self._concatenate_wfs is not None:
+                blocks = _get_concatenated_blocks(blocks,*self._concatenate_wfs)
+            
             sequence = LinSpaceSequence(body=tuple(blocks),)
             if measurements: sequence._measurement_memory.add_measurements(measurements)
             self._stack[-1].append(sequence)
@@ -905,7 +916,7 @@ class LinSpaceBuilder(ProgramBuilder):
         #this effectively disables the efficient t-looping for ConstantPTs, but
         #that would probably be rarely used anyway
         #(cause measurements not implemented, which is more of a headache than this).
-        if durvars:=pt_obj.body.duration.variables or index_name in self._to_rollout:
+        if (durvars:=pt_obj.body.duration.variables) or index_name in self._to_rollout:
             if any(d not in self._current_rollout_vars for d in durvars) or index_name in self._to_rollout:
                 # assert index_name in durvars, 'expected iteration index ot be in duration expression of body' #doesn't have to be the case if nested loops
                 with self.with_sequence(measurements):
@@ -1059,6 +1070,47 @@ def reduce_non_swept(val: Union[SimpleExpression,NumVal]) -> Union[SimpleExpress
         return val.base
     return val
 
+
+def _get_concatenated_blocks(blocks: Sequence[LinSpaceNode],
+                             max_wf_len: TimeType|float,
+                             max_total_len: TimeType|float) -> Sequence[LinSpaceNode]:
+    concat_blocks = []
+    current_blocks, current_len = [], 0.
+    
+    def combine_nodes_into_one(nodes: Sequence[LinSpaceArbitraryWaveform]) -> LinSpaceArbitraryWaveform:
+        assert all(isinstance(n,LinSpaceArbitraryWaveform) for n in nodes), 'can only combine type LinSpaceArbitraryWaveform'
+        seq_wf = SequenceWaveform.from_sequence([n.waveform for n in nodes])
+        combined_labwf = LinSpaceArbitraryWaveform(waveform=seq_wf,channels=seq_wf.defined_channels)
+        return combined_labwf
+        
+    
+    for node in blocks:
+        if not isinstance(node,LinSpaceArbitraryWaveform):
+            if current_blocks: concat_blocks.append(combine_nodes_into_one(current_blocks))
+            concat_blocks.append(node)
+            current_blocks, current_len = [], 0.
+        else:
+            append_to_current = True
+            if len(current_blocks):
+                #we'll ignore the difficulty of the hacky feature of the reduced sample rate playback
+                #by starting new subblocks when that quantity changes
+                if current_blocks[-1].waveform._pow_2_divisor != node.waveform._pow_2_divisor or\
+                    node.waveform.duration > max_wf_len or\
+                    current_len+node.waveform.duration > max_total_len:
+                    append_to_current = False
+                
+            if append_to_current:
+                current_blocks.append(node)
+                current_len += node.waveform.duration
+            else:
+                concat_blocks.append(combine_nodes_into_one(current_blocks))
+                current_blocks = [node,]
+                current_len = node.waveform.duration
+                
+    #append last
+    if current_blocks: concat_blocks.append(combine_nodes_into_one(current_blocks))
+    return concat_blocks
+    
 
 @dataclass
 class LoopLabel:
