@@ -247,7 +247,7 @@ class LinSpaceTopLevel(LinSpaceNode):
     @property
     def body_duration(self) -> TimeType:
         if self._cached_body_duration is None:
-            self._cached_body_duration = self.duration_base
+            self._cached_body_duration = sum(b.body_duration for b in self.body)
         return self._cached_body_duration
     
     def _get_measurement_windows(self) -> Mapping[str, np.ndarray]:
