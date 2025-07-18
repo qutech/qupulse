@@ -371,7 +371,6 @@ class LinSpaceArbitraryWaveformIndexed(LinSpaceNodeChannelSpecific):
 #(same as LinSpaceRepeat but with count=1; do not inherit to not confuse isinstance checks unintentionally)
 @dataclass
 class LinSpaceSequence(LinSpaceNode):
-    """Repeat the body count times."""
     body: Tuple[LinSpaceNode, ...]
 
     def dependencies(self):
@@ -574,6 +573,8 @@ class LinSpaceBuilder(ProgramBuilder):
         self._reversed_counter = 0
         self._to_rollout = to_rollout or set()
         self._current_rollout_vars = {}
+        
+        assert not any(d in self._to_rollout for d in self._to_stepping_repeat)
         
     def _root(self):
         return self._stack[0]
@@ -876,7 +877,7 @@ class LinSpaceBuilder(ProgramBuilder):
 
     def new_subprogram(self, global_transformation: 'Transformation' = None) -> ContextManager['ProgramBuilder']:
         
-        inner_builder = LinSpaceBuilder(self._to_stepping_repeat,self._play_marker_when_constant)
+        inner_builder = LinSpaceBuilder(self._to_stepping_repeat,self._play_marker_when_constant,self._to_rollout)
         yield inner_builder
         inner_program = inner_builder.to_program()
         
