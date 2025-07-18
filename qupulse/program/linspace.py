@@ -554,11 +554,12 @@ class LinSpaceBuilder(ProgramBuilder):
 
     def __init__(self,
                  # identifier, loop_index or ForLoopPT which is to be stepped:
-                 to_stepping_repeat: TypingSet[Union[str,'ForLoopPT']] = set(),
+                 to_stepping_repeat: TypingSet[Union[str,'ForLoopPT']] = None,
                  # this can indicate ChannelIDs (of _MarkerChannel_ on which to activate marker output in constant waveforms.)
                  # this can only be on or off for the entire program as those waveform samples are reused for efficiency.
                  # TODO: that could be adapted but the necessity so far was marginal.
                  play_marker_when_constant: bool|set[ChannelID] = False,
+                 to_rollout: set[str]|None = None,
                  ):
         super().__init__()
         # self._name_to_idx = {name: idx for idx, name in enumerate(channels)}
@@ -566,11 +567,12 @@ class LinSpaceBuilder(ProgramBuilder):
 
         self._stack = [[]]
         self._ranges = []
-        self._to_stepping_repeat = to_stepping_repeat
+        self._to_stepping_repeat = to_stepping_repeat or set()
         self._play_marker_when_constant = play_marker_when_constant
         self._pt_channels = None
         self._meas_queue = []
         self._reversed_counter = 0
+        self._to_rollout = to_rollout or set()
         self._current_rollout_vars = {}
         
     def _root(self):
@@ -902,14 +904,15 @@ class LinSpaceBuilder(ProgramBuilder):
         #this effectively disables the efficient t-looping for ConstantPTs, but
         #that would probably be rarely used anyway
         #(cause measurements not implemented, which is more of a headache than this).
-        if durvars:=pt_obj.body.duration.variables:
-            # assert index_name in durvars, 'expected iteration index ot be in duration expression of body' #doesn't have to be the case if nested loops
-            with self.with_sequence(measurements):
-                for value in rng:
-                    self._current_rollout_vars[index_name] = value
-                    yield self
-                    self._current_rollout_vars.pop(index_name)
-            return
+        if durvars:=pt_obj.body.duration.variables or index_name in self._to_rollout:
+            if any(d not in self._current_rollout_vars for d in durvars) or index_name in self._to_rollout:
+                # assert index_name in durvars, 'expected iteration index ot be in duration expression of body' #doesn't have to be the case if nested loops
+                with self.with_sequence(measurements):
+                    for value in rng:
+                        self._current_rollout_vars[index_name] = value
+                        yield self
+                        self._current_rollout_vars.pop(index_name)
+                return
         
         self._stack.append([])
         self._ranges.append((index_name, rng, self._reversed_counter%2))
