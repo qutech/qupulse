@@ -140,4 +140,11 @@ class ToNextMultipleTests(unittest.TestCase):
         expected = 16.
         self.assertEqual(evaluated, expected)
         
+        #bracket silent bug
+        duration = ExpressionScalar('51 + q*51')
+        evaluated = to_next_multiple(sample_rate=1.0,quantum=16,min_quanta=1)(duration).evaluate_in_scope(
+                        dict(q=3.14159,))
+        expected = 224.
+        self.assertEqual(evaluated, expected)
+        
         
