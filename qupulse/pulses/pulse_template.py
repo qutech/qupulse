@@ -378,7 +378,7 @@ class PulseTemplate(Serializable):
 
     def pad_to(self, to_new_duration: Union[ExpressionLike, Callable[[Expression], ExpressionLike]],
                as_single_wf: bool = False,
-               pt_kwargs: Mapping[str, Any] = {}) -> 'PulseTemplate':
+               pt_kwargs: Mapping[str, Any] = None) -> 'PulseTemplate':
         """Pad this pulse template to the given duration.
         The target duration can be numeric, symbolic or a callable that returns a new duration from the current
         duration.
@@ -426,6 +426,8 @@ class PulseTemplate(Serializable):
         #         raise NotImplementedError()
         #     self._duration = new_duration
         #     return self
+        
+        pt_kwargs = pt_kwargs or {}
         
         if as_single_wf:
             return SingleWFTimeExtensionPulseTemplate(self, new_duration, **pt_kwargs)
