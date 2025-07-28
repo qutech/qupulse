@@ -2,7 +2,8 @@
 
 from dataclasses import dataclass
 from numbers import Real
-from typing import TypeVar, Generic, Mapping, Union
+from typing import TypeVar, Generic, Mapping, Union, List
+from types import NotImplementedType
 
 from qupulse.program.volatile import VolatileRepetitionCount
 from qupulse.utils.types import TimeType
@@ -44,19 +45,72 @@ class DynamicLinearValue(Generic[NumVal]):
             The numeric value.
         """
         value = self.base
-        for name, factor in self.factors:
+        for name, factor in self.factors.items():
             value += scope[name] * factor
         return value
+    
+    def __abs__(self):
+        # The deifnition of an absolute value is ambiguous, but there is a case
+        # to define it as sum_i abs(f_i) + abs(base) for certain conveniences.
+        # return abs(self.base)+sum([abs(o) for o in self.factors.values()])
+        raise NotImplementedError(f'abs({self.__class__.__name__}) is ambiguous')
+    
+    def __eq__(self, other):
+        #there is a case to test all values against the other.
+        if (c:=self._return_comparison_bools(other,'__eq__')) is NotImplemented:
+            return NotImplemented
+        return all(c)
 
+    def __gt__(self, other):
+        #there is a case to test all values against the other.
+        if (c:=self._return_comparison_bools(other,'__gt__')) is NotImplemented:
+            return NotImplemented
+        return all(c)
+    
+    def __ge__(self, other):
+        #there is a case to test all values against the other.
+        if (c:=self._return_comparison_bools(other,'__ge__')) is NotImplemented:
+            return NotImplemented
+        return all(c)
+    
+    def __lt__(self, other):
+        #there is a case to test all values against the other.
+        if (c:=self._return_comparison_bools(other,'__lt__')) is NotImplemented:
+            return NotImplemented
+        return all(c)
+    
+    def __le__(self, other):
+        #there is a case to test all values against the other.
+        if (c:=self._return_comparison_bools(other,'__le__')) is NotImplemented:
+            return NotImplemented
+        return all(c)
+    
+    def _return_comparison_bools(self, other, method: str) -> List[bool]|NotImplementedType:
+        #there is no good way to compare it without having a value,
+        #but there is a case to test all values against the other if same type.
+        if isinstance(other, (float, int, TimeType)):
+            return NotImplemented
+            #one could argue that this could make sense - or at least prevent
+            #some errors that otherwise occured in program generation
+            # return [getattr(self.base,method)(other)] + \
+            #     [getattr(o,method)(other) for o in self.factors.values()]
+    
+        if type(other) == type(self):
+            if self.factors.keys()!=other.factors.keys(): return NotImplemented
+            return [getattr(self.base,method)(other.base)] + \
+                [getattr(o1,method)(other.factors[k]) for k,o1 in self.factors.items()]
+    
+        return NotImplemented
+    
     def __add__(self, other):
         if isinstance(other, (float, int, TimeType)):
             return DynamicLinearValue(self.base + other, self.factors)
 
         if type(other) == type(self):
-            offsets = dict(self.factors)
+            factors = dict(self.factors)
             for name, value in other.factors.items():
-                offsets[name] = value + offsets.get(name, 0)
-            return DynamicLinearValue(self.base + other.base, offsets)
+                factors[name] = value + factors.get(name, 0)
+            return DynamicLinearValue(self.base + other.base, factors)
 
         # this defers evaluation when other is still a symbolic expression
         return NotImplemented
