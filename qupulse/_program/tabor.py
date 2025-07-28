@@ -15,7 +15,7 @@ import numbers
 import numpy as np
 
 from qupulse.utils.types import ChannelID, TimeType
-from qupulse.hardware.awgs.base import ProgramEntry
+from qupulse.hardware.awgs.base import ProgramEntry, _ProgramType
 from qupulse.hardware.util import get_sample_times, voltage_to_uint16, find_positions
 from qupulse.program.waveforms import Waveform
 from qupulse.program.loop import Loop
@@ -419,6 +419,7 @@ class TaborProgram(ProgramEntry):
                          offsets=offsets,
                          voltage_transformations=voltage_transformations,
                          sample_rate=sample_rate,
+                         program_type=_ProgramType.Loop, #there should probably be some check somewhere
                          waveforms=[]  # no sampling happens here
                          )
 

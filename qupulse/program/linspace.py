@@ -510,6 +510,33 @@ def to_increment_commands(linspace_nodes: Sequence[LinSpaceNode]) -> List[Comman
     return state.commands
 
 
+def transform_linspace_commands(command_list: List[Command],
+                                channel_transformations: Mapping[ChannelID, 'ChannelTransformation'],
+                                ) -> List[Command]:
+    # all commands = Union[Increment, Set, LoopLabel, LoopJmp, Wait, Play]
+    trafos_by_channel_idx = list(channel_transformations.values())
+
+    for command in command_list:
+        if isinstance(command, (LoopLabel, LoopJmp, Play, Wait)):
+            # play is handled by transforming the sampled waveform
+            continue
+        elif isinstance(command, Increment):
+            ch_trafo = trafos_by_channel_idx[command.channel]
+            if ch_trafo.voltage_transformation:
+                raise RuntimeError("Cannot apply a voltage transformation to a linspace increment command")
+            command.value /= ch_trafo.amplitude
+        elif isinstance(command, Set):
+            ch_trafo = trafos_by_channel_idx[command.channel]
+            if ch_trafo.voltage_transformation:
+                command.value = float(ch_trafo.voltage_transformation(command.value))
+            command.value -= ch_trafo.offset
+            command.value /= ch_trafo.amplitude
+        else:        
+            raise NotImplementedError(command)
+    
+    return command_list
+
+
 class LinSpaceVM:
     def __init__(self, channels: int,
                  sample_resolution: TimeType = TimeType.from_fraction(1, 2)):
