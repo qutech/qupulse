@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from numbers import Real
 from typing import TypeVar, Generic, Mapping, Union, List, Tuple, Optional
 from types import NotImplementedType
+import operator
 
 import numpy as np
 
@@ -14,6 +15,9 @@ from qupulse.utils.sympy import _lambdify_modules
 
 
 NumVal = TypeVar('NumVal', bound=Real)
+
+_COMPARATORS = {"__lt__": operator.lt, "__le__": operator.le, "__gt__": operator.gt,
+    "__ge__": operator.ge, "__eq__": operator.eq, "__ne__": operator.ne,}
 
 
 @dataclass
@@ -98,8 +102,9 @@ class DynamicLinearValue(Generic[NumVal]):
     
         if type(other) == type(self):
             if self.factors.keys()!=other.factors.keys(): return NotImplemented
-            return [getattr(self.base,method)(other.base)] + \
-                [getattr(o1,method)(other.factors[k]) for k,o1 in self.factors.items()]
+            func = _COMPARATORS.get(method)
+            return [func(self.base,other.base)] + \
+                [func(o1,other.factors[k]) for k,o1 in self.factors.items()]
     
         return NotImplemented
     
