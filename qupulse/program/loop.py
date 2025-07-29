@@ -866,7 +866,9 @@ class LoopBuilder(ProgramBuilder):
                 waveform = TransformingWaveform.from_transformation(waveform, global_transformation)
             self.play_arbitrary_waveform(waveform)
 
-    def to_program(self) -> Optional[Loop]:
+    def to_program(self, defined_channels: Set[ChannelID] = set()) -> Optional[Loop]:
+        #!!! the defined_channels argument is for convenience for HDAWGLinspacebuilder
+        # and not needed here.
         if len(self._stack) != 1:
             warnings.warn("Creating program with active build stack.")
         if self._root.waveform or len(self._root.children) != 0:

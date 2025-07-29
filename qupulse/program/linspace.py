@@ -49,7 +49,7 @@ class LinSpaceNode(ABC):
     """AST node for a program that supports linear spacing of set points as well as nested sequencing and repetitions"""
 
     @abstractmethod
-    def dependencies(self) -> Mapping[int, Set[Tuple[float, ...]]]:
+    def dependencies(self) -> Mapping[int, set[Tuple[float, ...]]]:
         """Returns a mapping from channel indices to the iteration indices dependencies that those channels have inside
         this node.
 
@@ -121,7 +121,7 @@ class LinSpaceArbitraryWaveform(LinSpaceNode):
     waveform: Waveform
     channels: Tuple[ChannelID, ...]
 
-    def dependencies(self) -> Mapping[int, Set[Tuple[float, ...]]]:
+    def dependencies(self) -> Mapping[int, set[Tuple[float, ...]]]:
         return {}
 
     def reversed(self, offset: int, lengths: list):
@@ -298,7 +298,7 @@ class LinSpaceBuilder(ProgramBuilder):
         offset = len(self._ranges)
         self._stack[-1].extend(node.reversed(offset, []) for node in reversed(inner))
 
-    def to_program(self, defined_channels: Set[ChannelID]) -> Optional['LinSpaceTopLevel']:
+    def to_program(self, defined_channels: set[ChannelID]) -> Optional['LinSpaceTopLevel']:
         if self._root():
             return LinSpaceTopLevel(body=tuple(self._root()),
                                     _defined_channels=defined_channels)
@@ -553,9 +553,16 @@ def _get_waveforms_dict(transformed_commands: Sequence[Command]):
 class LinSpaceTopLevel(LinSpaceNode):
     
     body: Tuple[LinSpaceNode, ...]
-    _defined_channels: Set[ChannelID]
+    _defined_channels: set[ChannelID]
     
-    def get_defined_channels(self) -> Set[ChannelID]:
+    def dependencies(self):
+        dependencies = {}
+        for node in self.body:
+            for idx, deps in node.dependencies().items():
+                dependencies.setdefault(idx, set()).update(deps)
+        return dependencies
+    
+    def get_defined_channels(self) -> set[ChannelID]:
         return self._defined_channels
     
     def get_waveforms_dict(self,
