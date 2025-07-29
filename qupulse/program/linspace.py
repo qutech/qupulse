@@ -13,7 +13,7 @@ import copy
 from dataclasses import dataclass
 from abc import ABC, abstractmethod
 from typing import Mapping, Optional, Sequence, ContextManager, Iterable, Tuple, \
-    Union, Dict, List, Set, ClassVar, Callable
+    Union, Dict, List, Set, ClassVar, Callable, Any
 from collections import OrderedDict
 
 from qupulse import ChannelID, MeasurementWindow
@@ -544,7 +544,7 @@ def transform_linspace_commands(command_list: List[Command],
     return command_list
 
 
-def _get_waveforms_dict(transformed_commands: Sequence[Command]):
+def _get_waveforms_dict(transformed_commands: Sequence[Command]) -> Mapping[Waveform,Any]:
     return OrderedDict((command.waveform, None)
         for command in transformed_commands if isinstance(command,Play))
 
@@ -567,7 +567,8 @@ class LinSpaceTopLevel(LinSpaceNode):
     
     def get_waveforms_dict(self,
                            channels: Sequence[ChannelID], #!!! this argument currently does not do anything.
-                           channel_transformations: Mapping[ChannelID,'ChannelTransformation'],):
+                           channel_transformations: Mapping[ChannelID,'ChannelTransformation'],
+                           ) -> Mapping[Waveform,Any]:
         commands = to_increment_commands(self)
         commands_transformed = transform_linspace_commands(commands,channel_transformations)
         return _get_waveforms_dict(commands_transformed)

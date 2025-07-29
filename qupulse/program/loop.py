@@ -11,7 +11,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from enum import Enum
 from typing import Set, Union, Iterable, Optional, Sequence, Tuple, List, \
-    Generator, Mapping, cast, Dict, ContextManager
+    Generator, Mapping, cast, Dict, ContextManager, Any
 
 import numpy as np
 
@@ -71,9 +71,10 @@ class Loop(Node):
     
     def get_waveforms_dict(self,
                            channels: Sequence[ChannelID], #!!! this argument currently does not do anything.
-                           channel_transformations: Mapping[ChannelID,'ChannelTransformation'],):
+                           channel_transformations: Mapping[ChannelID,'ChannelTransformation'],
+                           ) -> Mapping[Waveform,Any]:
         waveforms_dict = OrderedDict((node.waveform, None)
-                                for node in self.get_depth_first_iterator() if node.is_leaf()).keys()
+                                for node in self.get_depth_first_iterator() if node.is_leaf())
         return waveforms_dict
     
     def __eq__(self, other: 'Loop') -> bool:
