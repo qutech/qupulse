@@ -1280,3 +1280,62 @@ class ReversedWaveform(Waveform):
 
     def __repr__(self):
         return f"ReversedWaveform(inner={self._inner!r})"
+
+
+
+class WaveformCollection():
+    """ This class is intended to be a nested collection of equal-length waveforms
+    that may be used in a command-based architecture where a program structure
+    only defines one loop structure per waveform playback but
+    can cycle through multiple waveforms, i.e. in pseudocode
+    
+    int i=0;
+    while i<10:
+        play(waveforms[i]);
+        i+=1;
+        
+    or with higher nesting levels.
+    
+    This was mainly conceived for the HDAWG and its CommandTable.
+    
+    """
+    def __init__(self, waveform_collection: Tuple[Union[Waveform,"WaveformCollection"]]):
+        self._waveform_collection = tuple(waveform_collection)
+        
+    @property
+    def duration(self) -> TimeType:
+        lens = [wf.duration for wf in self.flatten()]
+        assert np.all(np.isclose([float(l) for l in lens], float(lens[0])))
+        return lens[0]
+		
+    @property
+    def waveform_collection(self):
+        return self._waveform_collection
+    
+    @property
+    def nesting_level(self):
+        #assume it is balanced for now.
+        if isinstance(self.waveform_collection[0],type(self)):
+            return self.waveform_collection[0].nesting_level+1
+        return 0
+    
+    def flatten(self) -> Tuple[Waveform]:
+        def flatten_tuple(nested_tuple):
+            for item in nested_tuple:
+                if isinstance(item, type(self)):
+                    yield from flatten_tuple(item.waveform_collection)
+                else:
+                    yield item
+        return tuple(flatten_tuple(self.waveform_collection))
+    
+    def reversed(self) -> 'WaveformCollection':
+        """Returns a reversed version of this waveformcollection."""
+        rev = tuple(w.reversed() for w in self._waveform_collection[::-1])
+        return WaveformCollection(rev)
+    
+    @property
+    def _pow_2_divisor(self) -> int:
+        #!!! the implementation of this feature has to be discussed, but it needs to be included somehow.
+        divs = set(wf._pow_2_divisor for wf in self.flatten())
+        assert len(divs)==1
+        return divs.pop()
