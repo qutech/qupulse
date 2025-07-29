@@ -20,7 +20,7 @@ import warnings
 
 from qupulse.hardware.util import get_sample_times, not_none_indices
 from qupulse.utils.types import ChannelID
-from qupulse.program.linspace import LinSpaceNode, Play, \
+from qupulse.program.linspace import LinSpaceNode, LinSpaceTopLevel, Play, \
     transform_linspace_commands, to_increment_commands
 from qupulse.program.loop import Loop
 from qupulse.program.waveforms import Waveform
@@ -178,7 +178,7 @@ class ProgramOverwriteException(Exception):
 
 
 #!!! typehint obsolete
-AllowedProgramTypes = Union[Loop,Sequence[LinSpaceNode],]
+AllowedProgramTypes = Union[Loop,LinspaceTopLevel,]
 
 
 class ChannelTransformation(NamedTuple):
