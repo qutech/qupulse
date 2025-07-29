@@ -180,12 +180,6 @@ class ProgramOverwriteException(Exception):
 #!!! typehint obsolete
 AllowedProgramTypes = Union[Loop,Sequence[LinSpaceNode],]
 
-class _ProgramType(Enum):
-    FSP = -1
-    Loop = 0
-    Linspace = 1
-    Linspace_HDAWG = 2
-
 
 class ChannelTransformation(NamedTuple):
     amplitude: float
@@ -203,7 +197,6 @@ class ProgramEntry:
                  offsets: Tuple[float, ...],
                  voltage_transformations: Tuple[Optional[Callable], ...],
                  sample_rate: TimeType,
-                 program_type: _ProgramType,
                  waveforms: Sequence[Waveform] = None,
                  ):
         """
@@ -229,52 +222,24 @@ class ProgramEntry:
 
         self._sample_rate = sample_rate
         
-        self._program_type = program_type
         self._program = program
         
-        #the whole thing with program_type could also be omitted if all relevant
-        #preparatory steps are outsourced to the respective program.
-        #this would however require the current Linspace to not just be a list
-        #of nodes.
-        if program_type is _ProgramType.Linspace:
-            self._transformed_commands = transform_linspace_commands(to_increment_commands(program),
-                                                                     self._channel_transformations())
-        elif program_type is _ProgramType.Linspace_HDAWG:
-            self._transformed_commands = program.to_transformed_commands(channels,
-                                                                         self._channel_transformations())
-            
         if waveforms is None:
-            if program_type is _ProgramType.Loop:
-                waveforms = OrderedDict((node.waveform, None)
-                                        for node in program.get_depth_first_iterator() if node.is_leaf()).keys()
-            elif program_type is _ProgramType.Linspace:
-                #not so clean
-                #TODO: also marker handling not optimal
-                waveforms = OrderedDict((command.waveform, None)
-                                    for command in self._transformed_commands if isinstance(command,Play)).keys()
-            elif program_type is _ProgramType.Linspace_HDAWG:
-                #TODO: the function must be implemented on the top level node
-                #in qupulse_hdawg.
-                waveforms_d = program.get_waveforms_dict(self._transformed_commands)
-                waveforms = waveforms_d.keys()
-            else:
-                raise NotImplementedError()
-                    
+            #!!! this formulation is also unfortunate as the channel transformations are
+            # not applied to the waveforms but only to 'Set'/'Increment'-like commands in LSB
+            waveforms_dict = program.get_waveforms_dict(channels,self._channel_transformations())
+            waveforms = waveforms_dict.keys()
         if waveforms:
-            self._waveforms = OrderedDict(zip(waveforms, self._sample_waveforms(waveforms)))
+            self._waveforms = OrderedDict(zip(waveforms,self._sample_waveforms(waveforms)))
         else:
             self._waveforms = OrderedDict()
     
     @property
-    def _loop(self,) -> Loop:
-        if self._program_type not in (_ProgramType.Loop, _ProgramType.FSP):
-            raise AttributeError("The _loop attribute can only be get on loop-like program entries.")
+    def _loop(self,) -> AllowedProgramTypes:
         return self._program
     
     @_loop.setter
-    def _loop(self, program: Loop):
-        if self._program_type not in (_ProgramType.Loop, _ProgramType.FSP):
-            raise AttributeError("The _loop attribute can only be set on loop-like program entries.")
+    def _loop(self, program: AllowedProgramTypes):
         self._program = program
     
     def _sample_empty_channel(self, time: numpy.ndarray) -> Optional[numpy.ndarray]:

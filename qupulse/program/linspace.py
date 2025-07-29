@@ -12,7 +12,9 @@ import copy
 
 from dataclasses import dataclass
 from abc import ABC, abstractmethod
-from typing import Mapping, Optional, Sequence, ContextManager, Iterable, Tuple, Union, Dict, List, Set
+from typing import Mapping, Optional, Sequence, ContextManager, Iterable, Tuple, \
+    Union, Dict, List, Set, ClassVar, Callable
+from collections import OrderedDict
 
 from qupulse import ChannelID, MeasurementWindow
 from qupulse.parameter_scope import Scope, MappedScope, FrozenDict
@@ -296,9 +298,14 @@ class LinSpaceBuilder(ProgramBuilder):
         offset = len(self._ranges)
         self._stack[-1].extend(node.reversed(offset, []) for node in reversed(inner))
 
-    def to_program(self) -> Optional[Sequence[LinSpaceNode]]:
+    def to_program(self, defined_channels: Set[ChannelID]) -> Optional['LinSpaceTopLevel']:
         if self._root():
-            return self._root()
+            return LinSpaceTopLevel(body=tuple(self._root()),
+                                    _defined_channels=defined_channels)
+        #TODO: the argument defined_channels currently does not do anything,
+        #it is included for convenience for the HDAWGLinspaceBuilder
+        #The extra class for the top level is to shift program specific functionality
+        #from awg/base to the respective program files.
 
 
 @dataclass
@@ -503,10 +510,10 @@ class _TranslationState:
             raise TypeError("The node type is not handled", type(node), node)
 
 
-def to_increment_commands(linspace_nodes: Sequence[LinSpaceNode]) -> List[Command]:
+def to_increment_commands(linspace_nodes: 'LinSpaceTopLevel') -> List[Command]:
     """translate the given linspace node tree to a minimal sequence of set and increment commands as well as loops."""
     state = _TranslationState()
-    state.add_node(linspace_nodes)
+    state.add_node(linspace_nodes.body)
     return state.commands
 
 
@@ -536,6 +543,28 @@ def transform_linspace_commands(command_list: List[Command],
     
     return command_list
 
+
+def _get_waveforms_dict(transformed_commands: Sequence[Command]):
+    return OrderedDict((command.waveform, None)
+        for command in transformed_commands if isinstance(command,Play))
+
+
+@dataclass
+class LinSpaceTopLevel(LinSpaceNode):
+    
+    body: Tuple[LinSpaceNode, ...]
+    _defined_channels: Set[ChannelID]
+    
+    def get_defined_channels(self) -> Set[ChannelID]:
+        return self._defined_channels
+    
+    def get_waveforms_dict(self,
+                           channels: Sequence[ChannelID], #!!! this argument currently does not do anything.
+                           channel_transformations: Mapping[ChannelID,'ChannelTransformation'],):
+        commands = to_increment_commands(self)
+        commands_transformed = transform_linspace_commands(commands,channel_transformations)
+        return _get_waveforms_dict(commands_transformed)
+        
 
 class LinSpaceVM:
     def __init__(self, channels: int,
