@@ -178,7 +178,7 @@ class ProgramOverwriteException(Exception):
 
 
 #!!! typehint obsolete
-AllowedProgramTypes = Union[Loop,LinspaceTopLevel,]
+AllowedProgramTypes = Union[Loop,LinSpaceTopLevel,]
 
 
 class ChannelTransformation(NamedTuple):
