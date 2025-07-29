@@ -37,7 +37,7 @@ class ConstantFunctionPulseTemplateWarning(UserWarning):
 
 __all__ = ["Waveform", "TableWaveform", "TableWaveformEntry", "FunctionWaveform", "SequenceWaveform",
            "MultiChannelWaveform", "RepetitionWaveform", "TransformingWaveform", "ArithmeticWaveform",
-           "ConstantFunctionPulseTemplateWarning", "ConstantWaveform"]
+           "ConstantFunctionPulseTemplateWarning", "ConstantWaveform", "WaveformCollection"]
 
 PULSE_TO_WAVEFORM_ERROR = None  # error margin in pulse template to waveform conversion
 
@@ -1282,7 +1282,6 @@ class ReversedWaveform(Waveform):
         return f"ReversedWaveform(inner={self._inner!r})"
 
 
-
 class WaveformCollection():
     """ This class is intended to be a nested collection of equal-length waveforms
     that may be used in a command-based architecture where a program structure
@@ -1300,26 +1299,34 @@ class WaveformCollection():
     
     """
     def __init__(self, waveform_collection: Tuple[Union[Waveform,"WaveformCollection"]]):
+        assert isinstance(waveform_collection,Sequence)
+        assert all(isinstance(wf,Waveform) for wf in waveform_collection) or\
+               all(isinstance(wf,type(self)) for wf in waveform_collection)
         self._waveform_collection = tuple(waveform_collection)
+        try:
+            d=self.duration
+        except AssertionError as e:
+            raise e
         
     @property
     def duration(self) -> TimeType:
-        lens = [wf.duration for wf in self.flatten()]
-        assert np.all(np.isclose([float(l) for l in lens], float(lens[0])))
+        lens = [wf.duration for wf in self.waveform_collection]
+        assert np.all(np.isclose([float(l) for l in lens], float(lens[0]))), 'non-equal durations'
         return lens[0]
 		
     @property
-    def waveform_collection(self):
+    def waveform_collection(self) -> Tuple[Union[Waveform,"WaveformCollection"]]:
         return self._waveform_collection
     
     @property
-    def nesting_level(self):
+    def nesting_level(self) -> int:
         #assume it is balanced for now.
         if isinstance(self.waveform_collection[0],type(self)):
             return self.waveform_collection[0].nesting_level+1
         return 0
     
     def flatten(self) -> Tuple[Waveform]:
+        #depth first
         def flatten_tuple(nested_tuple):
             for item in nested_tuple:
                 if isinstance(item, type(self)):
@@ -1329,7 +1336,9 @@ class WaveformCollection():
         return tuple(flatten_tuple(self.waveform_collection))
     
     def reversed(self) -> 'WaveformCollection':
-        """Returns a reversed version of this waveformcollection."""
+        """Returns a reversed version of this WaveformCollection.
+        order and waveform/sub-collection order are reversed.
+        """
         rev = tuple(w.reversed() for w in self._waveform_collection[::-1])
         return WaveformCollection(rev)
     
