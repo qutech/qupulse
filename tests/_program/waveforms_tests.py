@@ -1155,3 +1155,20 @@ class WaveformCollectionTests(unittest.TestCase):
         rev = self._nested_coll_1.reversed()
         self.assertEqual(rev.flatten(),rev_manual.flatten())
         self.assertEqual(type(rev.flatten()[0]), ReversedWaveform)
+        
+    def test_pow_2_divisor(self):
+        self.assertEqual(self._nested_coll_2._pow_2_divisor, 0)
+        
+        wf_div, wf_div_inc = [], []
+        for i in range(3):
+            wf = DummyWaveform(duration=2.,sample_output=np.array([i,2]),defined_channels={'A','B'})
+            wf_div.append(wf)
+            wf._pow_2_divisor = 5
+            wf2 = DummyWaveform(duration=2.,sample_output=np.array([i,2]),defined_channels={'A','B'})
+            wf2._pow_2_divisor = i
+            wf_div_inc.append(wf2)
+            
+        wfcoll, wfcoll2 = WaveformCollection(wf_div), WaveformCollection(wf_div_inc)
+        
+        self.assertEqual(wfcoll._pow_2_divisor, 5)
+        self.assertRaises(AssertionError,lambda:wfcoll2._pow_2_divisor)

@@ -6,6 +6,8 @@ import numpy as np
 
 from qupulse.utils.types import TimeType
 from qupulse.program.loop import Loop
+from qupulse.program.waveforms import FunctionWaveform
+from qupulse.expressions import Expression, ExpressionScalar
 from qupulse.hardware.awgs.base import ProgramEntry
 
 from tests.pulses.sequencing_dummies import DummyWaveform
@@ -87,6 +89,57 @@ class ProgramEntryTests(unittest.TestCase):
         expected_sampled = [
             ((self.sampled[0]['A'], empty_ch, 2.*(self.sampled[0]['C'] - 0.1)), (empty_m, self.sampled[0]['M'] != 0)),
             ((self.sampled[1]['A'], empty_ch, 2.*(self.sampled[1]['C'] - 0.1)), (empty_m, self.sampled[1]['M'] != 0))
+        ]
+
+        entry = ProgramEntry(program=self.loop,
+                             channels=self.channels,
+                             markers=self.marker,
+                             amplitudes=self.amplitudes,
+                             offsets=self.offset,
+                             voltage_transformations=self.voltage_transformations,
+                             sample_rate=self.sample_rate,
+                             waveforms=[])
+
+        with mock.patch.object(entry, '_sample_empty_channel', return_value=empty_ch):
+            with mock.patch.object(entry, '_sample_empty_marker', return_value=empty_m):
+                sampled = entry._sample_waveforms(self.waveforms)
+                np.testing.assert_equal(expected_sampled, sampled)
+
+
+class ProgramEntryDivisorTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.channels = ('A',)
+        self.marker = tuple()
+        self.amplitudes = (1.,)
+        self.offset = (0.,)
+        self.voltage_transformations = (
+            mock.Mock(wraps=lambda x: x),
+        )
+        self.sample_rate = TimeType.from_float(2.4)
+
+        t = np.arange(0,400/12,1/2.4)
+
+        self.sampled = [
+            dict(A=np.sin(t)),
+            dict(A=np.sin(t[::8])),
+        ]
+        
+        wf = FunctionWaveform(ExpressionScalar('sin(t)'), 400/12, 'A')
+        wf2 = FunctionWaveform(ExpressionScalar('sin(t)'), 400/12, 'A')
+        wf2._pow_2_divisor = 3
+        self.waveforms = [
+            wf,wf2
+        ]
+        self.loop = Loop(children=[Loop(waveform=wf) for wf in self.waveforms])
+
+    def test_sample_waveforms_with_divisor(self):
+        empty_ch = np.array([1,])
+        empty_m = np.array([])
+        # channels ==  (A,)
+
+        expected_sampled = [
+            ((self.sampled[0]['A'],), tuple()),
+            ((self.sampled[1]['A'],), tuple()),
         ]
 
         entry = ProgramEntry(program=self.loop,

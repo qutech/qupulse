@@ -319,7 +319,7 @@ class ProgramEntry:
             segment_length = int(segment_length)
             segment_end = segment_begin + segment_length
 
-            wf_time = time_array[:segment_length]
+            wf_time = time_array[:segment_length] * 2**waveform._pow_2_divisor
             wf_sample_memory = sample_memory[:segment_length]
 
             sampled_channels = []
