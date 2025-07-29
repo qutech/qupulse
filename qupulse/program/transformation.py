@@ -14,9 +14,10 @@ import numpy as np
 from qupulse import ChannelID
 from qupulse.utils.types import SingletonABCMeta, frozendict, DocStringABCMeta
 from qupulse.expressions import ExpressionScalar
+from qupulse.program.values import DynamicLinearValue
 
 
-_TrafoValue = Union[Real, ExpressionScalar]
+_TrafoValue = Union[Real, ExpressionScalar, DynamicLinearValue]
 
 
 __all__ = ['Transformation', 'IdentityTransformation', 'LinearTransformation', 'ScalingTransformation',
@@ -63,7 +64,11 @@ class Transformation(metaclass=DocStringABCMeta):
 
     def get_constant_output_channels(self, input_channels: AbstractSet[ChannelID]) -> AbstractSet[ChannelID]:
         return frozenset()
-
+    
+    @property
+    def contains_sweepval(self) -> bool:
+        raise NotImplementedError()
+    
 
 class IdentityTransformation(Transformation, metaclass=SingletonABCMeta):
     __slots__ = ()
@@ -275,7 +280,7 @@ class OffsetTransformation(Transformation):
 
     def __call__(self, time: Union[np.ndarray, float],
                  data: Mapping[ChannelID, Union[np.ndarray, float]]) -> Mapping[ChannelID, Union[np.ndarray, float]]:
-        offsets = _instantiate_expression_dict(time, self._offsets)
+        offsets = _instantiate_expression_dict(time, self._offsets, default_sweepval=0.)
         return {channel: channel_values + offsets[channel] if channel in offsets else channel_values
                 for channel, channel_values in data.items()}
 
@@ -308,7 +313,11 @@ class OffsetTransformation(Transformation):
 
     def get_constant_output_channels(self, input_channels: AbstractSet[ChannelID]) -> AbstractSet[ChannelID]:
         return _get_constant_output_channels(self._offsets, input_channels)
-
+    
+    @property
+    def contains_sweepval(self) -> bool:
+        return any(isinstance(o,DynamicLinearValue) for o in self._offsets.values())
+    
 
 class ScalingTransformation(Transformation):
     __slots__ = ('_factors',)
@@ -319,7 +328,7 @@ class ScalingTransformation(Transformation):
 
     def __call__(self, time: Union[np.ndarray, float],
                  data: Mapping[ChannelID, Union[np.ndarray, float]]) -> Mapping[ChannelID, Union[np.ndarray, float]]:
-        factors = _instantiate_expression_dict(time, self._factors)
+        factors = _instantiate_expression_dict(time, self._factors, default_sweepval=1.)
         return {channel: channel_values * factors[channel] if channel in factors else channel_values
                 for channel, channel_values in data.items()}
 
@@ -352,7 +361,11 @@ class ScalingTransformation(Transformation):
 
     def get_constant_output_channels(self, input_channels: AbstractSet[ChannelID]) -> AbstractSet[ChannelID]:
         return _get_constant_output_channels(self._factors, input_channels)
-
+    
+    @property
+    def contains_sweepval(self) -> bool:
+        return any(isinstance(o,DynamicLinearValue) for o in self._factors.values())
+    
 
 try:
     if TYPE_CHECKING:
@@ -437,7 +450,11 @@ class ParallelChannelTransformation(Transformation):
                 output_channels.add(ch)
 
         return output_channels
-
+    
+    @property
+    def contains_sweepval(self) -> bool:
+        return any(isinstance(o,DynamicLinearValue) for o in self._channels.values())
+    
 
 def chain_transformations(*transformations: Transformation) -> Transformation:
     parsed_transformations = []
@@ -456,12 +473,20 @@ def chain_transformations(*transformations: Transformation) -> Transformation:
         return ChainedTransformation(*parsed_transformations)
 
 
-def _instantiate_expression_dict(time, expressions: Mapping[str, _TrafoValue]) -> Mapping[str, Union[Real, np.ndarray]]:
+def _instantiate_expression_dict(time,
+                                 expressions: Mapping[str, _TrafoValue],
+                                 default_sweepval: Real,
+                                 ) -> Mapping[str, Union[Real, np.ndarray]]:
     scope = {'t': time}
     modified_expressions = {}
     for name, value in expressions.items():
         if hasattr(value, 'evaluate_in_scope'):
             modified_expressions[name] = value.evaluate_in_scope(scope)
+        if isinstance(value, DynamicLinearValue):
+            # it is assumed that swept parameters will be handled by the ProgramBuilder accordingly
+            # such that here only an "identity" trafo is to be applied and the
+            # trafos are set in the program internally.
+            modified_expressions[name] = default_sweepval
     if modified_expressions:
         return {**expressions, **modified_expressions}
     else:
