@@ -436,7 +436,7 @@ class ArithmeticPulseTemplateTest(unittest.TestCase):
         program_builder = mock.Mock()
 
         with self.assertWarns(DeprecationWarning):
-            expected_transformation = mock.Mock(spec=IdentityTransformation())
+            expected_transformation = mock.create_autospec(IdentityTransformation,instance=True)
 
         with self.assertWarns(DeprecationWarning):
             inner_trafo = mock.Mock(spec=IdentityTransformation())
@@ -598,7 +598,7 @@ class ArithmeticPulseTemplateTest(unittest.TestCase):
         with self.assertWarns(DeprecationWarning):
             # mock will inspect alsod eprecated attributes
             # TODO: remove assert as soon as attribute is removed
-            trafo = mock.Mock(spec=IdentityTransformation())
+            trafo = mock.create_autospec(IdentityTransformation,instance=True)
 
         arith = ArithmeticPulseTemplate(pt, '-', 6)
 
