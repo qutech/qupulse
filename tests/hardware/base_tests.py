@@ -51,7 +51,7 @@ class ProgramEntryTests(unittest.TestCase):
                                  voltage_transformations=self.voltage_transformations,
                                  sample_rate=self.sample_rate,
                                  waveforms=[],
-                                 program_type=_ProgramType.Loop)
+                                )
             self.assertIs(self.loop, entry._loop)
             self.assertEqual(0, len(entry._waveforms))
             sample_waveforms.assert_not_called()
@@ -65,7 +65,7 @@ class ProgramEntryTests(unittest.TestCase):
                                  voltage_transformations=self.voltage_transformations,
                                  sample_rate=self.sample_rate,
                                  waveforms=None,
-                                 program_type=_ProgramType.Loop)
+                                 )
             self.assertEqual(expected_waveforms, entry._waveforms)
             sample_waveforms.assert_called_once_with(expected_default)
 
@@ -78,7 +78,7 @@ class ProgramEntryTests(unittest.TestCase):
                                  voltage_transformations=self.voltage_transformations,
                                  sample_rate=self.sample_rate,
                                  waveforms=self.waveforms[:1],
-                                 program_type=_ProgramType.Loop)
+                                 )
             self.assertEqual(OrderedDict([(self.waveforms[0], sampled[0])]), entry._waveforms)
             sample_waveforms.assert_called_once_with(self.waveforms[:1])
 
@@ -100,7 +100,7 @@ class ProgramEntryTests(unittest.TestCase):
                              voltage_transformations=self.voltage_transformations,
                              sample_rate=self.sample_rate,
                              waveforms=[],
-                             program_type=_ProgramType.Loop)
+                             )
 
         with mock.patch.object(entry, '_sample_empty_channel', return_value=empty_ch):
             with mock.patch.object(entry, '_sample_empty_marker', return_value=empty_m):
