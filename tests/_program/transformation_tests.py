@@ -8,6 +8,7 @@ from qupulse.expressions import ExpressionScalar
 from qupulse.program.transformation import LinearTransformation, Transformation, IdentityTransformation,\
     ChainedTransformation, ParallelChannelTransformation, chain_transformations, OffsetTransformation,\
     ScalingTransformation
+from qupulse.program.values import DynamicLinearValue
 
 
 class TransformationStub(Transformation):
@@ -179,7 +180,11 @@ class IdentityTransformationTests(unittest.TestCase):
     def test_compare_key(self):
         with self.assertWarns(DeprecationWarning):
             self.assertIsNone(IdentityTransformation().compare_key)
-
+    
+    def test_sweepval(self):
+        with self.assertRaises(NotImplementedError):
+            IdentityTransformation().contains_sweepval
+        
     def test_singleton(self):
         self.assertIs(IdentityTransformation(), IdentityTransformation())
 
@@ -489,6 +494,17 @@ class TestOffsetTransformation(unittest.TestCase):
         }, transformed)
 
 
+    def test_sweepval(self):
+        channels = {'X': 2, 'Y': DynamicLinearValue(0.1, {'a':0.02})}
+        trafo = OffsetTransformation(channels)
+        self.assertEqual(trafo.contains_sweepval, True)
+        
+        channels = {'X': 2, 'Y': 2}
+        trafo = OffsetTransformation(channels)
+        self.assertEqual(trafo.contains_sweepval, False)
+        
+        
+
 class TestScalingTransformation(unittest.TestCase):
     def setUp(self) -> None:
         self.constant_scales = {'A': 1.5, 'B': 1.2}
@@ -561,3 +577,12 @@ class TestScalingTransformation(unittest.TestCase):
             'Z': np.tan(t) * np.exp(t),
             'K': values['K']
         }, transformed)
+        
+    def test_sweepval(self):
+        channels = {'X': 2, 'Y': DynamicLinearValue(0.1, {'a':0.02})}
+        trafo = ScalingTransformation(channels)
+        self.assertEqual(trafo.contains_sweepval, True)
+        
+        channels = {'X': 2, 'Y': 2}
+        trafo = ScalingTransformation(channels)
+        self.assertEqual(trafo.contains_sweepval, False)
