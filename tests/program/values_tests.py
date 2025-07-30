@@ -8,7 +8,7 @@ from qupulse.pulses import *
 from qupulse.program.linspace import *
 from qupulse.program.transformation import *
 from qupulse.pulses.function_pulse_template import FunctionPulseTemplate
-from qupulse.program.values import DynamicLinearValue, ResolutionDependentValue
+from qupulse.program.values import DynamicLinearValue, ResolutionDependentValue, DynamicLinearValueStepped
 from qupulse.utils.types import TimeType
 
 
@@ -121,3 +121,10 @@ class ResolutionDependentValueTests(TestCase):
         
         self.assertEqual(self.d==ResolutionDependentValue((np.pi*1e-5,np.e*1e-5),(10,20),0.1),True)
         
+        
+class DynamicLinearValueSteppedTests(TestCase):
+    def test_properties(self):
+        d = DynamicLinearValueStepped(0.,{'a':1},1,range(3),False)
+        self.assertEqual(d.rng, range(3))
+        self.assertEqual(d.step_nesting_level, 1)
+        self.assertEqual(d.reverse, False)

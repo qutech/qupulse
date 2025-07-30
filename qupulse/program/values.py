@@ -267,11 +267,20 @@ class ResolutionDependentValue(Generic[NumVal]):
         return hash((self.bases,self.offset,self.multiplicities,self.__is_time_or_int))
 
 
+#This is a simple dervide class to allow better isinstance checks in the HDAWG driver
+@dataclass
+class DynamicLinearValueStepped(DynamicLinearValue):
+    step_nesting_level: int
+    rng: range
+    reverse: int|bool
+
+
 # TODO: hackedy, hackedy
 sym_expr.ALLOWED_NUMERIC_SCALAR_TYPES = sym_expr.ALLOWED_NUMERIC_SCALAR_TYPES + (DynamicLinearValue,)
 
 # this keeps the simple expression in lambdified results
-_lambdify_modules.append({'DynamicLinearValue': DynamicLinearValue})
+_lambdify_modules.append({'DynamicLinearValue': DynamicLinearValue,
+                          'DynamicLinearValueStepped': DynamicLinearValueStepped})
 
 RepetitionCount = Union[int, VolatileRepetitionCount, DynamicLinearValue[int]]
 HardwareTime = Union[TimeType, DynamicLinearValue[TimeType]]
