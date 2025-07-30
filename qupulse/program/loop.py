@@ -773,7 +773,7 @@ class LoopBuilder(ProgramBuilder):
 
         self._stack: List[StackFrame] = [StackFrame(self._root, None)]
 
-    def inner_scope(self, scope: Scope, pt_obj: 'ForLoopPT') -> Scope:
+    def inner_scope(self, scope: Scope, pt_obj: Optional['ForLoopPT']=None) -> Scope:
         local_vars = self._stack[-1].iterating
         if local_vars is None:
             return scope

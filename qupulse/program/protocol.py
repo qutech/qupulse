@@ -43,7 +43,7 @@ class ProgramBuilder(Protocol):
 
     @abstractmethod
     def inner_scope(self, scope: Scope,
-                    pt_obj: 'ForLoopPT', #hack this in for now.
+                    pt_obj: Optional['ForLoopPT'] = None, #hack this in for now.
                     ) -> Scope:
         """This function is part of the iteration protocol and necessary to inject program builder specific parameter
         implementations into the build process. :py:meth:`.ProgramBuilder.with_iteration` and

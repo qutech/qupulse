@@ -194,7 +194,7 @@ class LinSpaceBuilder(ProgramBuilder):
     def _get_rng(self, idx_name: str) -> range:
         return self._get_ranges()[idx_name]
 
-    def inner_scope(self, scope: Scope, pt_obj: 'ForLoopPT') -> Scope:
+    def inner_scope(self, scope: Scope, pt_obj: Optional['ForLoopPT']=None) -> Scope:
         """This function is necessary to inject program builder specific parameter implementations into the build
         process."""
         if self._ranges:
