@@ -227,10 +227,10 @@ class ProgramEntry:
         if waveforms is None:
             #!!! this formulation is also unfortunate as the channel transformations are
             # not applied to the waveforms but only to 'Set'/'Increment'-like commands in LSB
-            waveforms_dict = program.get_waveforms_dict(channels,self._channel_transformations())
+            waveforms_dict = program.get_waveforms_dict(channels, self._channel_transformations())
             waveforms = waveforms_dict.keys()
         if waveforms:
-            self._waveforms = OrderedDict(zip(waveforms,self._sample_waveforms(waveforms)))
+            self._waveforms = OrderedDict(zip(waveforms, self._sample_waveforms(waveforms)))
         else:
             self._waveforms = OrderedDict()
     
