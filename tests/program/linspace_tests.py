@@ -23,7 +23,7 @@ class SingleRampTest(TestCase):
         hold = ConstantPT(10 ** 6, {'a': '-1. + idx * 0.01'})
         self.pulse_template = hold.with_iteration('idx', 200)
 
-        self.program = LinSpaceIter(
+        self.program = LinSpaceTopLevel((LinSpaceIter(
             length=200,
             body=(LinSpaceHold(
                 bases=(-1.,),
@@ -31,7 +31,8 @@ class SingleRampTest(TestCase):
                 duration_base=TimeType(10**6),
                 duration_factors=None
             ),)
-        )
+        ),),
+        {'a',})
 
         key = DepKey.from_voltages((0.01,), DEFAULT_INCREMENT_RESOLUTION)
 
@@ -51,10 +52,10 @@ class SingleRampTest(TestCase):
     def test_program(self):
         program_builder = LinSpaceBuilder(('a',))
         program = self.pulse_template.create_program(program_builder=program_builder)
-        self.assertEqual([self.program], program)
+        self.assertEqual(self.program, program)
 
     def test_commands(self):
-        commands = to_increment_commands([self.program])
+        commands = to_increment_commands(self.program)
         self.assertEqual(self.commands, commands)
 
     def test_output(self):
@@ -111,14 +112,15 @@ class SequencedRepetitionTest(TestCase):
             duration_factors=None
         )
 
-        self.program = LinSpaceIter(
+        self.program = LinSpaceTopLevel((LinSpaceIter(
              length=rep_factor,
              body=(
                  dependent_hold_1,
                  LinSpaceRepeat(body=(dependent_hold_2,), count=rep_factor),
                  LinSpaceIter(body=(wait_hold,), length=rep_factor),
              )
-        )
+        ),),
+        {'a','b'})
 
         self.commands = [
             Set(channel=0, value=-1.0, key=DepKey(factors=())),
@@ -187,10 +189,10 @@ class SequencedRepetitionTest(TestCase):
     def test_program_1(self):
         program_builder = LinSpaceBuilder(('a','b'))
         program_1 = self.pulse_template.create_program(program_builder=program_builder)
-        self.assertEqual([self.program], program_1)
+        self.assertEqual(self.program, program_1)
 
     def test_commands_1(self):
-        commands = to_increment_commands([self.program])
+        commands = to_increment_commands(self.program)
         self.assertEqual(self.commands, commands)
 
     def test_output_1(self):
@@ -207,7 +209,7 @@ class PrePostDepTest(TestCase):
         # self.pulse_template = (hold_random@(hold_random@hold).with_repetition(10)@hold_random@hold)\
         self.pulse_template = (hold_random @ hold.with_repetition(10)).with_iteration('idx', 200)
 
-        self.program = LinSpaceIter(
+        self.program = LinSpaceTopLevel((LinSpaceIter(
             length=200,
             body=(
                 LinSpaceHold(bases=(-.4,), factors=(None,), duration_base=TimeType(10**5), duration_factors=None),
@@ -216,7 +218,7 @@ class PrePostDepTest(TestCase):
                 ), count=10),
                 # LinSpaceHold(bases=(-.4),factors=None,duration_base=TimeType(10**6),duration_factors=None),
                 # LinSpaceHold(bases=(-1.,),factors=((0.01,),),duration_base=TimeType(10**6),duration_factors=None)
-            ),)
+            ),),),{'a',})
 
         self.commands = [
             Set(channel=0, value=-0.4, key=DepKey(factors=())),
@@ -249,10 +251,10 @@ class PrePostDepTest(TestCase):
     def test_program(self):
         program_builder = LinSpaceBuilder(('a',))
         program = self.pulse_template.create_program(program_builder=program_builder)
-        self.assertEqual([self.program], program)
+        self.assertEqual(self.program, program)
 
     def test_commands(self):
-        commands = to_increment_commands([self.program])
+        commands = to_increment_commands(self.program)
         self.assertEqual(self.commands, commands)
 
     def test_output(self):
@@ -268,7 +270,7 @@ class PlainCSDTest(TestCase):
         scan_a = hold.with_iteration('idx_a', 200)
         self.pulse_template = scan_a.with_iteration('idx_b', 100)
 
-        self.program = LinSpaceIter(length=100, body=(LinSpaceIter(
+        self.program = LinSpaceTopLevel((LinSpaceIter(length=100, body=(LinSpaceIter(
             length=200,
             body=(LinSpaceHold(
                 bases=(-1., -0.5),
@@ -277,7 +279,7 @@ class PlainCSDTest(TestCase):
                 duration_base=TimeType(10**6),
                 duration_factors=None
             ),)
-        ),))
+        ),)),),{'a','b'})
 
         key_0 = DepKey.from_voltages((0, 0.01,), DEFAULT_INCREMENT_RESOLUTION)
         key_1 = DepKey.from_voltages((0.02,), DEFAULT_INCREMENT_RESOLUTION)
@@ -319,10 +321,10 @@ class PlainCSDTest(TestCase):
     def test_program(self):
         program_builder = LinSpaceBuilder(('a', 'b'))
         program = self.pulse_template.create_program(program_builder=program_builder)
-        self.assertEqual([self.program], program)
+        self.assertEqual(self.program, program)
 
     def test_increment_commands(self):
-        commands = to_increment_commands([self.program])
+        commands = to_increment_commands(self.program)
         self.assertEqual(self.commands, commands)
 
     def test_output(self):
@@ -340,7 +342,7 @@ class TiltedCSDTest(TestCase):
         self.pulse_template = scan_a.with_iteration('idx_b', 100)
         self.repeated_pt = self.pulse_template.with_repetition(repetition_count)
 
-        self.program = LinSpaceIter(length=100, body=(LinSpaceIter(
+        self.program = LinSpaceTopLevel((LinSpaceIter(length=100, body=(LinSpaceIter(
             length=200,
             body=(LinSpaceHold(
                 bases=(-1., -0.5),
@@ -349,8 +351,8 @@ class TiltedCSDTest(TestCase):
                 duration_base=TimeType(10**6),
                 duration_factors=None
             ),)
-        ),))
-        self.repeated_program = LinSpaceRepeat(body=(self.program,), count=repetition_count)
+        ),)),),{'a','b'})
+        self.repeated_program = LinSpaceTopLevel((LinSpaceRepeat(body=self.program.body, count=repetition_count),),{'a','b'})
 
         key_0 = DepKey.from_voltages((1e-3, 0.01,), DEFAULT_INCREMENT_RESOLUTION)
         key_1 = DepKey.from_voltages((0.02, -3e-3), DEFAULT_INCREMENT_RESOLUTION)
@@ -401,19 +403,19 @@ class TiltedCSDTest(TestCase):
     def test_program(self):
         program_builder = LinSpaceBuilder(('a', 'b'))
         program = self.pulse_template.create_program(program_builder=program_builder)
-        self.assertEqual([self.program], program)
+        self.assertEqual(self.program, program)
 
     def test_repeated_program(self):
         program_builder = LinSpaceBuilder(('a', 'b'))
         program = self.repeated_pt.create_program(program_builder=program_builder)
-        self.assertEqual([self.repeated_program], program)
+        self.assertEqual(self.repeated_program, program)
 
     def test_increment_commands(self):
-        commands = to_increment_commands([self.program])
+        commands = to_increment_commands(self.program)
         self.assertEqual(self.commands, commands)
 
     def test_repeated_increment_commands(self):
-        commands = to_increment_commands([self.repeated_program])
+        commands = to_increment_commands(self.repeated_program)
         self.assertEqual(self.repeated_commands, commands)
 
     def test_output(self):
@@ -438,7 +440,7 @@ class SingletLoadProcessing(TestCase):
         singlet_scan = (load_random @ wait @ meas).with_iteration('idx_a', 200).with_iteration('idx_b', 100)
         self.pulse_template = singlet_scan
 
-        self.program = LinSpaceIter(length=100, body=(LinSpaceIter(
+        self.program = LinSpaceTopLevel((LinSpaceIter(length=100, body=(LinSpaceIter(
             length=200,
             body=(
                 LinSpaceHold(bases=(-0.4, -0.3), factors=(None, None), duration_base=TimeType(10 ** 5),
@@ -451,7 +453,7 @@ class SingletLoadProcessing(TestCase):
                 LinSpaceHold(bases=(0.05, 0.06), factors=(None, None), duration_base=TimeType(10 ** 5),
                              duration_factors=None),
             )
-        ),))
+        ),)),),{'a','b'})
 
         key_0 = DepKey.from_voltages((0, 0.01,), DEFAULT_INCREMENT_RESOLUTION)
         key_1 = DepKey.from_voltages((0.02,), DEFAULT_INCREMENT_RESOLUTION)
@@ -528,10 +530,10 @@ class SingletLoadProcessing(TestCase):
     def test_singlet_scan_program(self):
         program_builder = LinSpaceBuilder(('a', 'b'))
         program = self.pulse_template.create_program(program_builder=program_builder)
-        self.assertEqual([self.program], program)
+        self.assertEqual(self.program, program)
 
     def test_singlet_scan_commands(self):
-        commands = to_increment_commands([self.program])
+        commands = to_increment_commands(self.program)
         self.assertEqual(self.commands, commands)
 
     def test_singlet_scan_output(self):
@@ -547,7 +549,7 @@ class TransformedRampTest(TestCase):
         self.pulse_template = hold.with_iteration('idx', 200)
         self.transformation = ScalingTransformation({'a': 2.0})
 
-        self.program = LinSpaceIter(
+        self.program = LinSpaceTopLevel((LinSpaceIter(
             length=200,
             body=(LinSpaceHold(
                 bases=(-2.,),
@@ -555,13 +557,13 @@ class TransformedRampTest(TestCase):
                 duration_base=TimeType(10 ** 6),
                 duration_factors=None
             ),)
-        )
+        ),),{'a',})
 
     def test_global_trafo_program(self):
         program_builder = LinSpaceBuilder(('a',))
         program = self.pulse_template.create_program(program_builder=program_builder,
                                                      global_transformation=self.transformation)
-        self.assertEqual([self.program], program)
+        self.assertEqual(self.program, program)
 
     def test_local_trafo_program(self):
         program_builder = LinSpaceBuilder(('a',))
@@ -570,7 +572,7 @@ class TransformedRampTest(TestCase):
             program = self.pulse_template.create_program(program_builder=program_builder,
                                                          global_transformation=self.transformation,
                                                          to_single_waveform={self.pulse_template})
-            self.assertEqual([self.program], program)
+            self.assertEqual(self.program, program)
 
 
 class HarmonicPulseTest(TestCase):
@@ -582,7 +584,7 @@ class HarmonicPulseTest(TestCase):
 
         self.sine_waveform = sine.build_waveform(parameters={}, channel_mapping={'a': 'a'})
 
-        self.program = LinSpaceIter(
+        self.program = LinSpaceTopLevel((LinSpaceIter(
             length=100,
             body=(LinSpaceHold(
                 bases=(-1.,),
@@ -595,7 +597,7 @@ class HarmonicPulseTest(TestCase):
                 channels=('a',)
             )
             )
-        )
+        ),),{'a',})
 
         key = DepKey.from_voltages((0.01,), DEFAULT_INCREMENT_RESOLUTION)
         self.commands = [
@@ -627,11 +629,10 @@ class HarmonicPulseTest(TestCase):
     def test_program(self):
         program_builder = LinSpaceBuilder(('a',))
         program = self.pulse_template.create_program(program_builder=program_builder)
-
-        self.assertEqual([self.program], program)
+        self.assertEqual(self.program, program)
 
     def test_commands(self):
-        commands = to_increment_commands([self.program])
+        commands = to_increment_commands(self.program)
         self.assertEqual(self.commands, commands)
 
     def test_output(self):

@@ -20,8 +20,8 @@ import warnings
 
 from qupulse.hardware.util import get_sample_times, not_none_indices
 from qupulse.utils.types import ChannelID
-from qupulse.program.linspace import LinSpaceNode, LinSpaceArbitraryWaveform, to_increment_commands, Command, \
-    Increment, Set as LSPSet, LoopLabel, LoopJmp, Wait, Play
+from qupulse.program.linspace import LinSpaceNode, LinSpaceTopLevel, Play, \
+    transform_linspace_commands, to_increment_commands
 from qupulse.program.loop import Loop
 from qupulse.program.waveforms import Waveform
 from qupulse.utils.types import TimeType
@@ -177,12 +177,8 @@ class ProgramOverwriteException(Exception):
                " Use force to overwrite.".format(self.name)
 
 
-AllowedProgramTypes = Union[Loop,Sequence[LinSpaceNode],]
-
-class _ProgramType(Enum):
-    FSP = -1
-    Loop = 0
-    Linspace = 1
+#!!! typehint obsolete
+AllowedProgramTypes = Union[Loop,LinSpaceTopLevel,]
 
 
 class ChannelTransformation(NamedTuple):
@@ -202,7 +198,7 @@ class ProgramEntry:
                  voltage_transformations: Tuple[Optional[Callable], ...],
                  sample_rate: TimeType,
                  waveforms: Sequence[Waveform] = None,
-                 program_type: _ProgramType = _ProgramType.Loop):
+                 ):
         """
 
         Args:
@@ -226,39 +222,24 @@ class ProgramEntry:
 
         self._sample_rate = sample_rate
         
-        self._program_type = program_type
         self._program = program
         
-        if program_type == _ProgramType.Linspace:
-            self._transformed_commands = self._transform_linspace_commands(to_increment_commands(program))
-        
         if waveforms is None:
-            if program_type is _ProgramType.Loop:
-                    waveforms = OrderedDict((node.waveform, None)
-                                        for node in program.get_depth_first_iterator() if node.is_leaf()).keys()
-            elif program_type is _ProgramType.Linspace:
-                    #not so clean
-                    #TODO: also marker handling not optimal
-                    waveforms = OrderedDict((command.waveform, None)
-                                        for command in self._transformed_commands if isinstance(command,Play)).keys()
-            else:
-                raise NotImplementedError()
-                    
+            #!!! this formulation is also unfortunate as the channel transformations are
+            # not applied to the waveforms but only to 'Set'/'Increment'-like commands in LSB
+            waveforms_dict = program.get_waveforms_dict(channels, self._channel_transformations())
+            waveforms = waveforms_dict.keys()
         if waveforms:
             self._waveforms = OrderedDict(zip(waveforms, self._sample_waveforms(waveforms)))
         else:
             self._waveforms = OrderedDict()
     
     @property
-    def _loop(self,) -> Loop:
-        if self._program_type not in (_ProgramType.Loop, _ProgramType.FSP):
-            raise AttributeError("The _loop attribute can only be get on loop-like program entries.")
+    def _loop(self,) -> AllowedProgramTypes:
         return self._program
     
     @_loop.setter
-    def _loop(self, program: Loop):
-        if self._program_type not in (_ProgramType.Loop, _ProgramType.FSP):
-            raise AttributeError("The _loop attribute can only be set on loop-like program entries.")
+    def _loop(self, program: AllowedProgramTypes):
         self._program = program
     
     def _sample_empty_channel(self, time: numpy.ndarray) -> Optional[numpy.ndarray]:
@@ -275,30 +256,6 @@ class ProgramEntry:
                                                         self._voltage_transformations,
                                                         self._amplitudes,
                                                         self._offsets)}
-    
-    def _transform_linspace_commands(self, command_list: List[Command]) -> List[Command]:
-        # all commands = Union[Increment, Set, LoopLabel, LoopJmp, Wait, Play]
-        trafos_by_channel_idx = list(self._channel_transformations().values())
-
-        for command in command_list:
-            if isinstance(command, (LoopLabel, LoopJmp, Play, Wait)):
-                # play is handled by transforming the sampled waveform
-                continue
-            elif isinstance(command, Increment):
-                ch_trafo = trafos_by_channel_idx[command.channel]
-                if ch_trafo.voltage_transformation:
-                    raise RuntimeError("Cannot apply a voltage transformation to a linspace increment command")
-                command.value /= ch_trafo.amplitude
-            elif isinstance(command, LSPSet):
-                ch_trafo = trafos_by_channel_idx[command.channel]
-                if ch_trafo.voltage_transformation:
-                    command.value = float(ch_trafo.voltage_transformation(command.value))
-                command.value -= ch_trafo.offset
-                command.value /= ch_trafo.amplitude
-            else:        
-                raise NotImplementedError(command)
-        
-        return command_list
     
     def _sample_waveforms(self, waveforms: Sequence[Waveform]) -> List[Tuple[Tuple[numpy.ndarray, ...],
                                                                              Tuple[numpy.ndarray, ...]]]:
