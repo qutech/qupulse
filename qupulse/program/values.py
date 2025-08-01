@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 from numbers import Real
 from typing import TypeVar, Generic, Mapping, Union, List, Tuple, Optional
-from types import NotImplementedType
+from types import NotImplementedType, MappingProxyType
 import operator
 
 import numpy as np
@@ -17,7 +17,7 @@ from qupulse.utils.sympy import _lambdify_modules
 NumVal = TypeVar('NumVal', bound=Real)
 
 
-@dataclass
+@dataclass(frozen=True)
 class DynamicLinearValue(Generic[NumVal]):
     """This is a potential runtime-evaluable expression of the form
 
@@ -38,7 +38,9 @@ class DynamicLinearValue(Generic[NumVal]):
 
     def __post_init__(self):
         assert isinstance(self.factors, Mapping)
-
+        immutable = MappingProxyType(dict(self.factors))
+        object.__setattr__(self, 'factors', immutable)
+        
     def value(self, scope: Mapping[str, NumVal]) -> NumVal:
         """Numeric value of the expression with the given scope.
         Args:
@@ -226,7 +228,7 @@ class ResolutionDependentValue(Generic[NumVal]):
 
 
 #This is a simple dervide class to allow better isinstance checks in the HDAWG driver
-@dataclass
+@dataclass(frozen=True)
 class DynamicLinearValueStepped(DynamicLinearValue):
     step_nesting_level: int
     rng: range
