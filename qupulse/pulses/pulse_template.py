@@ -67,7 +67,6 @@ class PulseTemplate(Serializable):
         self._metadata = metadata
 
         self.__cached_hash_value = None
-        self.__pow_2_divisor = 0
         
     @property
     def metadata(self) -> TemplateMetadata:
@@ -165,10 +164,7 @@ class PulseTemplate(Serializable):
         The hardware implementation will be responsible for correctly handling this,
         so do not use unless support is ascertained.
         """
-    
-    @_pow_2_divisor.setter
-    def _pow_2_divisor(self, val: int):
-        self.__pow_2_divisor = val
+        return getattr(self.metadata,'pow_2_divisor',0)
     
     def create_program(self, *,
                        parameters: Optional[Mapping[str, Union[Expression, str, Number]]]=None,
