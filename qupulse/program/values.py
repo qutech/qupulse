@@ -1,6 +1,6 @@
 """Runtime variable value implementations."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from numbers import Real
 from typing import TypeVar, Generic, Mapping, Union, List, Tuple, Optional
 from types import NotImplementedType, MappingProxyType
@@ -162,13 +162,13 @@ class ResolutionDependentValue(Generic[NumVal]):
     bases: Tuple[NumVal, ...]
     multiplicities: Tuple[int, ...]
     offset: NumVal
+    __is_time_or_int: bool = field(init=False, repr=False)
     
-    def __post_init__(self,
-                 bases: Tuple[NumVal],
-                 multiplicities: Tuple[int],
-                 offset: NumVal):
+    def __post_init__(self):
 
-        self.__is_time_or_int = all(isinstance(b,(TimeType,int_type)) for b in bases) and isinstance(offset,(TimeType,int_type))
+        flag = all(isinstance(b,(TimeType,int_type)) for b in self.bases)\
+            and isinstance(self.offset,(TimeType,int_type))
+        object.__setattr__(self, '_ResolutionDependentValue__is_time_or_int', flag)
 
     #this is not to circumvent float errors in python, but rounding errors from awg-increment commands.
     #python float are thereby accurate enough
