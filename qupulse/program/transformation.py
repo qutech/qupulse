@@ -65,8 +65,7 @@ class Transformation(metaclass=DocStringABCMeta):
     def get_constant_output_channels(self, input_channels: AbstractSet[ChannelID]) -> AbstractSet[ChannelID]:
         return frozenset()
     
-    @property
-    def contains_sweepval(self) -> bool:
+    def contains_dynamic_value(self) -> bool:
         raise NotImplementedError()
     
 
@@ -314,8 +313,7 @@ class OffsetTransformation(Transformation):
     def get_constant_output_channels(self, input_channels: AbstractSet[ChannelID]) -> AbstractSet[ChannelID]:
         return _get_constant_output_channels(self._offsets, input_channels)
     
-    @property
-    def contains_sweepval(self) -> bool:
+    def contains_dynamic_value(self) -> bool:
         return any(isinstance(o,DynamicLinearValue) for o in self._offsets.values())
     
 
@@ -362,8 +360,7 @@ class ScalingTransformation(Transformation):
     def get_constant_output_channels(self, input_channels: AbstractSet[ChannelID]) -> AbstractSet[ChannelID]:
         return _get_constant_output_channels(self._factors, input_channels)
     
-    @property
-    def contains_sweepval(self) -> bool:
+    def contains_dynamic_value(self) -> bool:
         return any(isinstance(o,DynamicLinearValue) for o in self._factors.values())
     
 
@@ -451,8 +448,7 @@ class ParallelChannelTransformation(Transformation):
 
         return output_channels
     
-    @property
-    def contains_sweepval(self) -> bool:
+    def contains_dynamic_value(self) -> bool:
         return any(isinstance(o,DynamicLinearValue) for o in self._channels.values())
     
 

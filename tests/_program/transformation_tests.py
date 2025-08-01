@@ -183,7 +183,7 @@ class IdentityTransformationTests(unittest.TestCase):
     
     def test_sweepval(self):
         with self.assertRaises(NotImplementedError):
-            IdentityTransformation().contains_sweepval
+            IdentityTransformation().contains_dynamic_value()
         
     def test_singleton(self):
         self.assertIs(IdentityTransformation(), IdentityTransformation())
@@ -497,11 +497,11 @@ class TestOffsetTransformation(unittest.TestCase):
     def test_sweepval(self):
         channels = {'X': 2, 'Y': DynamicLinearValue(0.1, {'a':0.02})}
         trafo = OffsetTransformation(channels)
-        self.assertEqual(trafo.contains_sweepval, True)
+        self.assertEqual(trafo.contains_dynamic_value(), True)
         
         channels = {'X': 2, 'Y': 2}
         trafo = OffsetTransformation(channels)
-        self.assertEqual(trafo.contains_sweepval, False)
+        self.assertEqual(trafo.contains_dynamic_value(), False)
         
         
 
@@ -581,8 +581,8 @@ class TestScalingTransformation(unittest.TestCase):
     def test_sweepval(self):
         channels = {'X': 2, 'Y': DynamicLinearValue(0.1, {'a':0.02})}
         trafo = ScalingTransformation(channels)
-        self.assertEqual(trafo.contains_sweepval, True)
+        self.assertEqual(trafo.contains_dynamic_value(), True)
         
         channels = {'X': 2, 'Y': 2}
         trafo = ScalingTransformation(channels)
-        self.assertEqual(trafo.contains_sweepval, False)
+        self.assertEqual(trafo.contains_dynamic_value(), False)
