@@ -141,6 +141,7 @@ class DynamicLinearValue(Generic[NumVal]):
 # is there any way to cast the numpy cumprod to int?
 int_type = Union[np.int64,np.int32,int]
 
+@dataclass(frozen=True)
 class ResolutionDependentValue(Generic[NumVal]):
     """This is a potential runtime-evaluable expression of the form
     
@@ -157,14 +158,16 @@ class ResolutionDependentValue(Generic[NumVal]):
     Rounding the value preemptively and supplying corrected values to jump-back
     commands prevents this.
     """
-    def __init__(self,
+    
+    bases: Tuple[NumVal, ...]
+    multiplicities: Tuple[int, ...]
+    offset: NumVal
+    
+    def __post_init__(self,
                  bases: Tuple[NumVal],
                  multiplicities: Tuple[int],
                  offset: NumVal):
 
-        self.bases = tuple(bases)
-        self.multiplicities = tuple(multiplicities)
-        self.offset = offset
         self.__is_time_or_int = all(isinstance(b,(TimeType,int_type)) for b in bases) and isinstance(offset,(TimeType,int_type))
 
     #this is not to circumvent float errors in python, but rounding errors from awg-increment commands.
