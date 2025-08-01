@@ -16,9 +16,6 @@ from qupulse.utils.sympy import _lambdify_modules
 
 NumVal = TypeVar('NumVal', bound=Real)
 
-_COMPARATORS = {"__lt__": operator.lt, "__le__": operator.le, "__gt__": operator.gt,
-    "__ge__": operator.ge, "__eq__": operator.eq, "__ne__": operator.ne,}
-
 
 @dataclass
 class DynamicLinearValue(Generic[NumVal]):
@@ -61,53 +58,13 @@ class DynamicLinearValue(Generic[NumVal]):
         raise NotImplementedError(f'abs({self.__class__.__name__}) is ambiguous')
     
     def __eq__(self, other):
-        #there is a case to test all values against the other.
-        if (c:=self._return_comparison_bools(other,'__eq__')) is NotImplemented:
+        if isinstance(other, type(self)):
+            return self.base == other.base and self.factors == other.factors
+
+        if (base_eq := self.base.__eq__(other)) is NotImplemented:
             return NotImplemented
-        return all(c)
-    
-    #!!! do not open up hell's gates.
-    # def __gt__(self, other):
-    #     #there is a case to test all values against the other.
-    #     if (c:=self._return_comparison_bools(other,'__gt__')) is NotImplemented:
-    #         return NotImplemented
-    #     return all(c)
-    
-    # def __ge__(self, other):
-    #     #there is a case to test all values against the other.
-    #     if (c:=self._return_comparison_bools(other,'__ge__')) is NotImplemented:
-    #         return NotImplemented
-    #     return all(c)
-    
-    # def __lt__(self, other):
-    #     #there is a case to test all values against the other.
-    #     if (c:=self._return_comparison_bools(other,'__lt__')) is NotImplemented:
-    #         return NotImplemented
-    #     return all(c)
-    
-    # def __le__(self, other):
-    #     #there is a case to test all values against the other.
-    #     if (c:=self._return_comparison_bools(other,'__le__')) is NotImplemented:
-    #         return NotImplemented
-    #     return all(c)
-    
-    def _return_comparison_bools(self, other, method: str) -> List[bool]|NotImplementedType:
-        #there is no good way to compare it without having a value,
-        #but there is a case to test all values against the other if same type.
-        if isinstance(other, (float, int, TimeType)):
-            return NotImplemented
-            #one could argue that this could make sense - or at least prevent
-            #some errors that otherwise occured in program generation
-            # return [getattr(self.base,method)(other)] + \
-            #     [getattr(o,method)(other) for o in self.factors.values()]
-    
-        if type(other) == type(self):
-            if self.factors.keys()!=other.factors.keys(): return NotImplemented
-            func = _COMPARATORS.get(method)
-            return [func(self.base,other.base)] + \
-                [func(o1,other.factors[k]) for k,o1 in self.factors.items()]
-    
-        return NotImplemented
+
+        return base_eq and not self.factors
     
     def __add__(self, other):
         if isinstance(other, (float, int, TimeType)):
