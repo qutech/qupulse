@@ -394,13 +394,16 @@ class AlazarCard(DAC):
             raise NotImplementedError('Currently only can do cross buffer mask')
         self._mask_prototypes[mask_id] = (hw_channel, mask_type)
 
-    def measure_program(self, channels: Iterable[str]) -> Dict[str, np.ndarray]:
+    def measure_program(self, channels: Iterable[str]|None = None) -> Dict[str, np.ndarray]:
         """
         Get all measurements at once and write them in a dictionary.
         """
 
         scanline_data = self.__card.extractNextScanline()
-
+        
+        if channels is None: #just get all channels
+            channels = scanline_data.operationResults.keys()
+        
         scanline_definition = scanline_data.definition
         operation_definitions = {operation.identifier: operation
                                  for operation in scanline_definition.operations}
