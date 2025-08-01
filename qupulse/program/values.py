@@ -65,30 +65,31 @@ class DynamicLinearValue(Generic[NumVal]):
         if (c:=self._return_comparison_bools(other,'__eq__')) is NotImplemented:
             return NotImplemented
         return all(c)
-
-    def __gt__(self, other):
-        #there is a case to test all values against the other.
-        if (c:=self._return_comparison_bools(other,'__gt__')) is NotImplemented:
-            return NotImplemented
-        return all(c)
     
-    def __ge__(self, other):
-        #there is a case to test all values against the other.
-        if (c:=self._return_comparison_bools(other,'__ge__')) is NotImplemented:
-            return NotImplemented
-        return all(c)
+    #!!! do not open up hell's gates.
+    # def __gt__(self, other):
+    #     #there is a case to test all values against the other.
+    #     if (c:=self._return_comparison_bools(other,'__gt__')) is NotImplemented:
+    #         return NotImplemented
+    #     return all(c)
     
-    def __lt__(self, other):
-        #there is a case to test all values against the other.
-        if (c:=self._return_comparison_bools(other,'__lt__')) is NotImplemented:
-            return NotImplemented
-        return all(c)
+    # def __ge__(self, other):
+    #     #there is a case to test all values against the other.
+    #     if (c:=self._return_comparison_bools(other,'__ge__')) is NotImplemented:
+    #         return NotImplemented
+    #     return all(c)
     
-    def __le__(self, other):
-        #there is a case to test all values against the other.
-        if (c:=self._return_comparison_bools(other,'__le__')) is NotImplemented:
-            return NotImplemented
-        return all(c)
+    # def __lt__(self, other):
+    #     #there is a case to test all values against the other.
+    #     if (c:=self._return_comparison_bools(other,'__lt__')) is NotImplemented:
+    #         return NotImplemented
+    #     return all(c)
+    
+    # def __le__(self, other):
+    #     #there is a case to test all values against the other.
+    #     if (c:=self._return_comparison_bools(other,'__le__')) is NotImplemented:
+    #         return NotImplemented
+    #     return all(c)
     
     def _return_comparison_bools(self, other, method: str) -> List[bool]|NotImplementedType:
         #there is no good way to compare it without having a value,
