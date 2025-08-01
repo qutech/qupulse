@@ -9,7 +9,7 @@ import operator
 import numpy as np
 
 from qupulse.program.volatile import VolatileRepetitionCount
-from qupulse.utils.types import TimeType
+from qupulse.utils.types import TimeType, frozendict
 from qupulse.expressions import sympy as sym_expr
 from qupulse.utils.sympy import _lambdify_modules
 
@@ -243,7 +243,8 @@ sym_expr.ALLOWED_NUMERIC_SCALAR_TYPES = sym_expr.ALLOWED_NUMERIC_SCALAR_TYPES + 
 
 # this keeps the simple expression in lambdified results
 _lambdify_modules.append({'DynamicLinearValue': DynamicLinearValue,
-                          'DynamicLinearValueStepped': DynamicLinearValueStepped})
+                          'DynamicLinearValueStepped': DynamicLinearValueStepped,
+                          'mappingproxy': MappingProxyType})
 
 RepetitionCount = Union[int, VolatileRepetitionCount, DynamicLinearValue[int]]
 HardwareTime = Union[TimeType, DynamicLinearValue[TimeType]]
