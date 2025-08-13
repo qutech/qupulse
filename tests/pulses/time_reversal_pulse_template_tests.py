@@ -75,13 +75,13 @@ class TimeReversalPulseTemplateTests(unittest.TestCase):
 
     def test_initial_final_values(self):
         
-        pt = FunctionPT('-1+t/t_gate*3','t_gate','dummy_name')
+        pt = FunctionPT('-1+t/t_gate*3','t_gate','a')
         r_pt = pt.with_time_reversal()
         
         self.assertEqual(r_pt.initial_values, pt.final_values)
         self.assertEqual(r_pt.final_values, pt.initial_values)
-        self.assertAlmostEqual(r_pt.initial_values, 3, places=8)
-        self.assertAlmostEqual(r_pt.final_values, -1, places=8)
+        self.assertAlmostEqual(float(r_pt.initial_values['a']), 2, places=8)
+        self.assertAlmostEqual(float(r_pt.final_values['a']), -1, places=8)
 
 
 class TimeReversalPulseTemplateSerializationTests(unittest.TestCase, SerializableTests):
