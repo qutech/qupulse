@@ -17,7 +17,10 @@ from qupulse.utils.sympy import _lambdify_modules
 NumVal = TypeVar('NumVal', bound=Real)
 
 
-@dataclass(frozen=True)
+@dataclass(
+    frozen=True,
+    repr=False, # dont leak frozendict implementation detail in repr
+)
 class DynamicLinearValue(Generic[NumVal]):
     """This is a potential runtime-evaluable expression of the form
 
@@ -132,6 +135,9 @@ class DynamicLinearValue(Generic[NumVal]):
             self
         """
         return self
+
+    def __repr__(self):
+        return f"{type(self).__name__}(base={self.base!r}, factors={dict(self.factors)!r})"
 
 
 # is there any way to cast the numpy cumprod to int?
