@@ -152,5 +152,5 @@ def to_next_multiple(sample_rate: ExpressionLike, quantum: int,
         return lambda duration: -(-(duration*sample_rate)//quantum) * (quantum/sample_rate)
     else:
         #still return 0 if duration==0
-        return lambda duration: ExpressionScalar(f'{quantum}/({sample_rate})*Max({min_quanta},-(-{duration}*{sample_rate}//{quantum}))*Max(0, sign({duration}))')
+        return lambda duration: ExpressionScalar(f'{quantum}/({sample_rate})*Max({min_quanta},-(-({duration})*{sample_rate}//{quantum}))*Max(0, sign({duration}))')
    
