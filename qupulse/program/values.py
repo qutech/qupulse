@@ -213,13 +213,6 @@ class ResolutionDependentValue(Generic[NumVal]):
     def __str__(self):
         return f"RDP of {sum(b*m for b,m in zip(self.bases,self.multiplicities)) + self.offset}"
 
-    def __eq__(self,o):
-        if not isinstance(o,ResolutionDependentValue):
-            return False
-        return self.__dict__ == o.__dict__
-
-    def __hash__(self):
-        return hash((self.bases,self.offset,self.multiplicities,self.__is_time_or_int))
 
 
 #This is a simple dervide class to allow better isinstance checks in the HDAWG driver
