@@ -2,9 +2,8 @@
 
 from dataclasses import dataclass, field
 from numbers import Real
-from typing import TypeVar, Generic, Mapping, Union, List, Tuple, Optional
-from types import NotImplementedType, MappingProxyType
-import operator
+from typing import TypeVar, Generic, Mapping, Union, Tuple, Optional
+from types import MappingProxyType
 
 import numpy as np
 
@@ -37,8 +36,7 @@ class DynamicLinearValue(Generic[NumVal]):
     factors: Mapping[str, NumVal]
 
     def __post_init__(self):
-        assert isinstance(self.factors, Mapping)
-        immutable = MappingProxyType(dict(self.factors))
+        immutable = frozendict(self.factors)
         object.__setattr__(self, 'factors', immutable)
         
     def value(self, scope: Mapping[str, NumVal]) -> NumVal:
@@ -106,9 +104,6 @@ class DynamicLinearValue(Generic[NumVal]):
     def __truediv__(self, other):
         inv = 1 / other
         return self.__mul__(inv)
-    
-    def __hash__(self):
-        return hash((self.base,frozenset(sorted(self.factors.items()))))
     
     @property
     def free_symbols(self):
