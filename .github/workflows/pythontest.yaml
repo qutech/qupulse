@@ -71,6 +71,8 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         COVERALLS_FLAG_NAME: ${{ env.MATRIX_NAME }}
         COVERALLS_PARALLEL: true
+      # this step can fail
+      continue-on-error: true
     
     - name: Upload Test Results
       if: always()
