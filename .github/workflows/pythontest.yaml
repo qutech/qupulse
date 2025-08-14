@@ -94,6 +94,8 @@ jobs:
         coveralls --service=github --finish
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # this step can fail
+      continue-on-error: true
 
   event_file:
     name: "Event File"
