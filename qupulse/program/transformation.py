@@ -279,7 +279,7 @@ class OffsetTransformation(Transformation):
 
     def __call__(self, time: Union[np.ndarray, float],
                  data: Mapping[ChannelID, Union[np.ndarray, float]]) -> Mapping[ChannelID, Union[np.ndarray, float]]:
-        offsets = _instantiate_expression_dict(time, self._offsets, default_sweepval=0.)
+        offsets = _instantiate_expression_dict(time, self._offsets, default_dynamic_linear_value=0.0)
         return {channel: channel_values + offsets[channel] if channel in offsets else channel_values
                 for channel, channel_values in data.items()}
 
@@ -326,7 +326,7 @@ class ScalingTransformation(Transformation):
 
     def __call__(self, time: Union[np.ndarray, float],
                  data: Mapping[ChannelID, Union[np.ndarray, float]]) -> Mapping[ChannelID, Union[np.ndarray, float]]:
-        factors = _instantiate_expression_dict(time, self._factors, default_sweepval=1.)
+        factors = _instantiate_expression_dict(time, self._factors, default_dynamic_linear_value=1.0)
         return {channel: channel_values * factors[channel] if channel in factors else channel_values
                 for channel, channel_values in data.items()}
 
@@ -471,7 +471,7 @@ def chain_transformations(*transformations: Transformation) -> Transformation:
 
 def _instantiate_expression_dict(time,
                                  expressions: Mapping[str, _TrafoValue],
-                                 default_sweepval: Real,
+                                 default_dynamic_linear_value: Real,
                                  ) -> Mapping[str, Union[Real, np.ndarray]]:
     scope = {'t': time}
     modified_expressions = {}
@@ -482,7 +482,7 @@ def _instantiate_expression_dict(time,
             # it is assumed that swept parameters will be handled by the ProgramBuilder accordingly
             # such that here only an "identity" trafo is to be applied and the
             # trafos are set in the program internally.
-            modified_expressions[name] = default_sweepval
+            modified_expressions[name] = default_dynamic_linear_value
     if modified_expressions:
         return {**expressions, **modified_expressions}
     else:
