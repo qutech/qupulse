@@ -193,7 +193,8 @@ class ResolutionDependentValue(Generic[NumVal]):
             return sum(b * m for b, m in zip(self.bases, self.multiplicities)) + self.offset
 
         offset = _to_resolution(self.offset, resolution)
-        base_sum = sum(_to_resolution(base, resolution) for base, multiplicity in zip(self.bases, self.multiplicities))
+        base_sum = sum(_to_resolution(base, resolution) * multiplicity
+                       for base, multiplicity in zip(self.bases, self.multiplicities))
         return base_sum + offset
 
     def __call__(self, resolution: Optional[float]) -> Union[NumVal,TimeType]:
