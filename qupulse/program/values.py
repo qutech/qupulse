@@ -1,6 +1,7 @@
 """Runtime variable value implementations."""
 
 from dataclasses import dataclass, field
+from functools import cached_property
 from numbers import Real
 from typing import TypeVar, Generic, Mapping, Union, Tuple, Optional
 from types import MappingProxyType
@@ -136,6 +137,16 @@ class DynamicLinearValue(Generic[NumVal]):
 # is there any way to cast the numpy cumprod to int?
 int_type = Union[np.int64,np.int32,int]
 
+
+def _to_resolution(x, resolution):
+    """Function used by :py:class:`.ResolutionDependentValue` for rounding to resolution multiples."""
+    # to avoid conflicts between positive and negative vals from casting half to even, we only round positive numbers
+    if x < 0:
+        return -round(-x / resolution) * resolution
+    else:
+        return round(x / resolution) * resolution
+
+
 @dataclass(frozen=True)
 class ResolutionDependentValue(Generic[NumVal]):
     """This is a potential runtime-evaluable expression of the form
@@ -157,26 +168,31 @@ class ResolutionDependentValue(Generic[NumVal]):
     bases: Tuple[NumVal, ...]
     multiplicities: Tuple[int, ...]
     offset: NumVal
-    __is_time_or_int: bool = field(init=False, repr=False)
-    
-    def __post_init__(self):
 
-        flag = all(isinstance(b,(TimeType,int_type)) for b in self.bases)\
-            and isinstance(self.offset,(TimeType,int_type))
-        object.__setattr__(self, '_ResolutionDependentValue__is_time_or_int', flag)
+    @cached_property
+    def _is_time_or_int(self):
+        return all(isinstance(b,(TimeType,int_type)) for b in self.bases) and isinstance(self.offset,(TimeType,int_type))
 
-    #this is not to circumvent float errors in python, but rounding errors from awg-increment commands.
-    #python float are thereby accurate enough
-    def __call__(self, resolution: Optional[float]) -> Union[NumVal,TimeType]:
-        #with resolution = None handle TimeType/int case?
+    def with_resolution(self, resolution: Optional[NumVal]) -> NumVal:
+        """Get the numeric value rounding to the given resolution.
+
+        Args:
+            resolution: Resolution the bases and offset are rounded to. If none all values must be integers.
+
+        Returns:
+            The rounded numeric value.
+        """
         if resolution is None:
-            assert self.__is_time_or_int
-            return sum(b*m for b,m in zip(self.bases,self.multiplicities)) + self.offset
-        #resolution as float value of granularity of base val.
-        #to avoid conflicts between positive and negative vals from casting
-        #half to even, use abs val
-        return sum(np.sign(b) * round(abs(b) / resolution) * m * resolution for b,m in zip(self.bases,self.multiplicities))\
-             + np.sign(self.offset) * round(abs(self.offset) / resolution) * resolution
+            assert self._is_time_or_int
+            return sum(b * m for b, m in zip(self.bases, self.multiplicities)) + self.offset
+
+        offset = _to_resolution(self.offset, resolution)
+        base_sum = sum(_to_resolution(base, resolution) for base, multiplicity in zip(self.bases, self.multiplicities))
+        return base_sum + offset
+
+    def __call__(self, resolution: Optional[float]) -> Union[NumVal,TimeType]:
+        """Backward compatible alias of :py:meth:`~ResolutionDependentValue.with_resolution`."""
+        return self.with_resolution(resolution)
 
     def __bool__(self):
         #if any value is not zero - this helps for some checks
@@ -185,7 +201,7 @@ class ResolutionDependentValue(Generic[NumVal]):
     def __add__(self, other):
         # this should happen in the context of an offset being added to it, not the bases being modified.
         if isinstance(other, (float, int, TimeType)):
-            return ResolutionDependentValue(self.bases,self.multiplicities,self.offset+other)
+            return ResolutionDependentValue(self.bases, self.multiplicities, self.offset+other)
         return NotImplemented
 
     def __radd__(self, other):
@@ -208,7 +224,7 @@ class ResolutionDependentValue(Generic[NumVal]):
         return self.__mul__(1/other)
 
     def __float__(self):
-        return float(self(resolution=None))
+        return float(self.with_resolution(resolution=None))
 
     def __str__(self):
         return f"RDP of {sum(b*m for b,m in zip(self.bases,self.multiplicities)) + self.offset}"
