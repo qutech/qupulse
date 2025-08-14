@@ -9,7 +9,7 @@ from qupulse.pulses.interpolation import HoldInterpolationStrategy, LinearInterp
     JumpInterpolationStrategy
 from qupulse.program.waveforms import MultiChannelWaveform, RepetitionWaveform, SequenceWaveform,\
     TableWaveformEntry, TableWaveform, TransformingWaveform, SubsetWaveform, ArithmeticWaveform, ConstantWaveform,\
-    Waveform, FunctorWaveform, FunctionWaveform, ReversedWaveform, WaveformCollection
+    Waveform, FunctorWaveform, FunctionWaveform, ReversedWaveform
 from qupulse.program.transformation import LinearTransformation
 from qupulse.expressions import ExpressionScalar, Expression
 
@@ -1119,56 +1119,3 @@ class ReversedWaveformTest(unittest.TestCase):
         np.testing.assert_equal(dummy_wf.sample_calls, [
             ('A', list(1.5 - time_array[::-1]), None),
             ('A', list(1.5 - time_array[::-1]), mem[::-1])])
-
-
-class WaveformCollectionTests(unittest.TestCase):
-    def setUp(self):
-        self._dummy_waveforms = \
-            tuple(DummyWaveform(duration=2.,sample_output=np.array([i,2]),defined_channels={'A','B'}) for i in range(3))
-        self._dummy_waveforms2 = \
-            tuple(DummyWaveform(duration=2.,sample_output=np.array([i,3]),defined_channels={'C','D'}) for i in range(3))
-        self._flat_coll = WaveformCollection(self._dummy_waveforms)
-        self._flat_coll2 = WaveformCollection(self._dummy_waveforms2)
-        self._nested_coll_1 = WaveformCollection((self._flat_coll,self._flat_coll2))
-        self._nested_coll_2 = WaveformCollection(tuple(self._nested_coll_1 for i in range(4)))
-
-    def test_unequal(self):
-        self.assertRaises(AssertionError,lambda: WaveformCollection((self._flat_coll,self._dummy_waveforms[0])))
-
-    def test_duration(self):
-        self.assertAlmostEqual(self._flat_coll.duration, 2., places=12)
-        self.assertAlmostEqual(self._nested_coll_2.duration, 2., places=12)
-        
-    def test_nesting(self):
-        self.assertEqual(self._nested_coll_1.waveform_collection,(self._flat_coll,self._flat_coll2))
-        self.assertEqual(self._nested_coll_2.nesting_level,2)
-        self.assertEqual(self._flat_coll.nesting_level,0)
-        
-    def test_flatten(self):
-        self.assertEqual(self._nested_coll_1.flatten(),(*self._dummy_waveforms,*self._dummy_waveforms2))
-        self.assertEqual(len(self._nested_coll_2.flatten()),24)
-        
-    def test_reversed(self):
-        rev_manual = WaveformCollection(
-            (WaveformCollection(tuple(wf.reversed() for wf in self._dummy_waveforms2[::-1])),
-             WaveformCollection(tuple(wf.reversed() for wf in self._dummy_waveforms[::-1]))))
-        rev = self._nested_coll_1.reversed()
-        self.assertEqual(rev.flatten(),rev_manual.flatten())
-        self.assertEqual(type(rev.flatten()[0]), ReversedWaveform)
-        
-    def test_pow_2_divisor(self):
-        self.assertEqual(self._nested_coll_2._pow_2_divisor, 0)
-        
-        wf_div, wf_div_inc = [], []
-        for i in range(3):
-            wf = DummyWaveform(duration=2.,sample_output=np.array([i,2]),defined_channels={'A','B'})
-            wf_div.append(wf)
-            wf._pow_2_divisor = 5
-            wf2 = DummyWaveform(duration=2.,sample_output=np.array([i,2]),defined_channels={'A','B'})
-            wf2._pow_2_divisor = i
-            wf_div_inc.append(wf2)
-            
-        wfcoll, wfcoll2 = WaveformCollection(wf_div), WaveformCollection(wf_div_inc)
-        
-        self.assertEqual(wfcoll._pow_2_divisor, 5)
-        self.assertRaises(AssertionError,lambda:wfcoll2._pow_2_divisor)
