@@ -6,6 +6,7 @@ import numpy as np
 
 from qupulse.pulses import *
 from qupulse.program.measurement import *
+from qupulse.program import DynamicLinearValue
 
 
 class SingleRampTest(TestCase):
@@ -16,7 +17,7 @@ class SingleRampTest(TestCase):
         self.commands = [
             LoopLabel(1, 'idx', 200),
             Measure('A', 10, 100),
-            Measure('B', SimpleExpression(base=1, offsets={'idx': 2}), 200),
+            Measure('B', DynamicLinearValue(base=1, factors={'idx': 2}), 200),
             Wait(TimeType(10 ** 6)),
             LoopJmp(1)
         ]

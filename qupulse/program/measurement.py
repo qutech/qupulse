@@ -104,7 +104,7 @@ class MeasurementBuilder(ProgramBuilder):
         process."""
         if self._ranges:
             name, rng = self._ranges[-1]
-            return scope.overwrite({name: DynamicLinearValue(base=rng.start, offsets={name: rng.step})})
+            return scope.overwrite({name: DynamicLinearValue(base=rng.start, factors={name: rng.step})})
         else:
             return scope
 
@@ -169,7 +169,7 @@ class MeasurementBuilder(ProgramBuilder):
         self._frames[-1].keep = True
         self._frames[-1].commands.extend(_reversed_commands(frame.commands))
 
-    def to_program(self) -> Optional[Program]:
+    def to_program(self, channels = None) -> Optional[Program]:
         """Further addition of new elements might fail after finalizing the program."""
         if self._frames[0].keep:
             return MeasurementInstructions(self._frames[0].commands)
@@ -214,7 +214,7 @@ class MeasurementVM:
     def _eval_hardware_time(self, t: HardwareTime):
         if isinstance(t, DynamicLinearValue):
             value = t.base
-            for (factor_name, factor_val) in t.offsets.items():
+            for (factor_name, factor_val) in t.factors.items():
                 count = self._counts[self._memory[factor_name]]
                 value += factor_val * count
             return value
