@@ -250,9 +250,10 @@ class DynamicLinearValueStepped(DynamicLinearValue):
 sym_expr.ALLOWED_NUMERIC_SCALAR_TYPES = sym_expr.ALLOWED_NUMERIC_SCALAR_TYPES + (DynamicLinearValue,)
 
 # this keeps the simple expression in lambdified results
-_lambdify_modules.append({'DynamicLinearValue': DynamicLinearValue,
-                          'DynamicLinearValueStepped': DynamicLinearValueStepped,
-                          'mappingproxy': MappingProxyType})
+_lambdify_modules.append({
+    'DynamicLinearValue': DynamicLinearValue,
+    'DynamicLinearValueStepped': DynamicLinearValueStepped,
+})
 
 RepetitionCount = Union[int, VolatileRepetitionCount, DynamicLinearValue[int]]
 HardwareTime = Union[TimeType, DynamicLinearValue[TimeType]]
