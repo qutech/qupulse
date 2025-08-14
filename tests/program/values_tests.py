@@ -102,6 +102,13 @@ class ResolutionDependentValueTests(TestCase):
         #if no resolution must be tt or int
         self.assertEqual(self.dtt(None),TimeType(412, 5))
         self.assertEqual(self.dint(None),51)
+
+    def test_repr_round_trip(self):
+        eval_str = repr(self.dint)
+        evaluated = eval(eval_str)
+        self.assertEqual(self.dint, evaluated)
+        evaluated_repr = repr(evaluated)
+        self.assertEqual(eval_str, evaluated_repr)
         
     def test_dunder(self):
         self.assertEqual(bool(self.d), True)
