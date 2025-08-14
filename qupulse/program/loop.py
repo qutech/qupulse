@@ -6,11 +6,12 @@
 
 import reprlib
 import warnings
-from collections import defaultdict
+from collections import defaultdict, OrderedDict
 from contextlib import contextmanager
 from dataclasses import dataclass
 from enum import Enum
-from typing import *
+from typing import Set, Union, Iterable, Optional, Sequence, Tuple, List, \
+    Generator, Mapping, cast, Dict, ContextManager, Any
 
 import numpy as np
 
@@ -26,7 +27,8 @@ from qupulse.pulses.range import RangeScope
 from qupulse.utils import is_integer
 from qupulse.utils.numeric import smallest_factor_ge
 from qupulse.utils.tree import Node
-from qupulse.utils.types import TimeType, MeasurementWindow
+from qupulse.utils.types import TimeType, MeasurementWindow, ChannelID
+
 
 __all__ = ['Loop', 'make_compatible', 'MakeCompatibleWarning', 'to_waveform', 'LoopBuilder']
 
@@ -66,7 +68,15 @@ class Loop(Node):
         self._cached_body_duration = None
         assert isinstance(repetition_count, VolatileRepetitionCount) or is_integer(repetition_count)
         assert isinstance(waveform, (type(None), Waveform))
-
+    
+    def get_waveforms_dict(self,
+                           channels: Sequence[ChannelID], #!!! this argument currently does not do anything.
+                           channel_transformations: Mapping[ChannelID,'ChannelTransformation'],
+                           ) -> Mapping[Waveform,Any]:
+        waveforms_dict = OrderedDict((node.waveform, None)
+                                for node in self.get_depth_first_iterator() if node.is_leaf())
+        return waveforms_dict
+    
     def __eq__(self, other: 'Loop') -> bool:
         if type(self) == type(other):
             return (self._repetition_definition == other._repetition_definition and
@@ -125,6 +135,9 @@ class Loop(Node):
             self._measurements = list(measurements)
         else:
             self._measurements.extend(measurements)
+
+    def get_defined_channels(self) -> Set[ChannelID]:
+        return next(self.get_depth_first_iterator()).waveform.defined_channels    
 
     @property
     def waveform(self) -> Waveform:
@@ -854,7 +867,9 @@ class LoopBuilder(ProgramBuilder):
                 waveform = TransformingWaveform.from_transformation(waveform, global_transformation)
             self.play_arbitrary_waveform(waveform)
 
-    def to_program(self) -> Optional[Loop]:
+    def to_program(self, defined_channels: Set[ChannelID] = set()) -> Optional[Loop]:
+        #!!! the defined_channels argument is for convenience for HDAWGLinspacebuilder
+        # and not needed here.
         if len(self._stack) != 1:
             warnings.warn("Creating program with active build stack.")
         if self._root.waveform or len(self._root.children) != 0:

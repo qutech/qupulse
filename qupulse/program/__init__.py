@@ -24,7 +24,8 @@ used/required/possible with (purified) silicon samples.
 """
 
 from qupulse.program.protocol import Program, ProgramBuilder
-from qupulse.program.values import DynamicLinearValue, HardwareTime, HardwareVoltage
+from qupulse.program.values import DynamicLinearValue, HardwareTime, \
+    HardwareVoltage, RepetitionCount
 from qupulse.program.waveforms import Waveform
 from qupulse.program.transformation import Transformation
 from qupulse.program.volatile import VolatileRepetitionCount

@@ -245,7 +245,7 @@ class PulseTemplate(Serializable):
                              to_single_waveform=to_single_waveform,
                              program_builder=program_builder)
 
-        return program_builder.to_program()
+        return program_builder.to_program(set(complete_channel_mapping.values()))
 
     @abstractmethod
     def _internal_create_program(self, *,
