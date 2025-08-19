@@ -145,7 +145,7 @@ def get_waveform_length(waveform: Waveform,
                                    deviation=deviation,
                                    rounded_segment_length=rounded_segment_length))
     if rounded_segment_length <= 0:
-        raise ValueError("Error while sampling waveform. Waveform has a length <= zero at the given sample "
+        raise ValueError(f"Error while sampling waveform. Waveform has a length {rounded_segment_length} <= zero at the given sample "
                          "rate of %rGHz" % sample_rate_in_GHz)
     segment_length = np.uint64(rounded_segment_length)
 
