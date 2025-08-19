@@ -1322,12 +1322,14 @@ class _TranslationState:
     #     self.commands.append(jmp)
     
     
-    def _add_repetition_node(self, node: LinSpaceRepeat):
+    def _add_repetition_node(self, node: LinSpaceRepeat,
+                             safe_rep_possible: bool = False,
+                             ):
         pre_dep_state = self.get_dependency_state(node.dependencies())
         label, jmp = self.new_loop(node.count)
         initial_position = len(self.commands)
         self.commands.append(label)
-        self.add_node(node.body)
+        self.add_node(node.body,safe_rep_possible)
         post_dep_state = self.get_dependency_state(node.dependencies())
         # the last index in the iterations may not be initialized in pre_dep_state if the outer loop only sets an index
         # after this loop is in the sequence of the current level,
@@ -1339,7 +1341,7 @@ class _TranslationState:
         # loop is present that the repetition does not know about, this is still necessary.
         # why not always in the first place?
         # if self.compare_ignoring_post_trailing_zeros(pre_dep_state,post_dep_state):
-        if True:
+        if not safe_rep_possible:
             # hackedy
             self.commands.pop(initial_position)
             self.commands.append(label)
@@ -1471,19 +1473,21 @@ class _TranslationState:
                                   keys_by_domain_by_ch={c: self.active_dep.get(c,{}) for c in node.channels}))
         
             
-    def add_node(self, node: Union[LinSpaceNode, Sequence[LinSpaceNode]]):
+    def add_node(self, node: Union[LinSpaceNode, Sequence[LinSpaceNode]],
+                 safe_rep_possible: bool = False,
+                 ):
         """Translate a (sequence of) linspace node(s) to commands and add it to the internal command list."""
 
         if isinstance(node, Sequence):
             for lin_node in node:
-                self.add_node(lin_node)
+                self.add_node(lin_node,safe_rep_possible if len(node)==1 else False)
                 
         elif isinstance(node, LinSpaceSequence):
             for node in node.body:
                 self.add_node(node)
         
         elif isinstance(node, LinSpaceRepeat):
-            self._add_repetition_node(node)
+            self._add_repetition_node(node,safe_rep_possible)
 
         elif isinstance(node, LinSpaceIter):
             self._add_iteration_node(node)
@@ -1507,6 +1511,6 @@ def to_increment_commands(linspace_nodes: LinSpaceTopLevel,
     """translate the given linspace node tree to a minimal sequence of set and increment commands as well as loops."""
     # if resolution: raise NotImplementedError('wrongly assumed resolution. need to fix')
     state = _TranslationState()
-    state.add_node(linspace_nodes.body)
+    state.add_node(linspace_nodes.body,safe_rep_possible=True)
     return state.commands
 
