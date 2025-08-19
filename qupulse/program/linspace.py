@@ -196,7 +196,7 @@ class LinSpaceBuilder(ProgramBuilder):
     def _get_rng(self, idx_name: str) -> range:
         return self._get_ranges()[idx_name]
 
-    def inner_scope(self, scope: Scope) -> Scope:
+    def inner_scope(self, scope: Scope, pt_obj: Optional['ForLoopPT']=None) -> Scope:
         """This function is necessary to inject program builder specific parameter implementations into the build
         process."""
         if self._ranges:
@@ -279,6 +279,7 @@ class LinSpaceBuilder(ProgramBuilder):
         raise NotImplementedError('Not implemented yet (postponed)')
 
     def with_iteration(self, index_name: str, rng: range,
+                       pt_obj: 'ForLoopPT',
                        measurements: Optional[Sequence[MeasurementWindow]] = None) -> Iterable['ProgramBuilder']:
         if len(rng) == 0:
             return

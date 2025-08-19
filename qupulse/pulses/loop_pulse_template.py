@@ -185,8 +185,9 @@ class ForLoopPulseTemplate(LoopPulseTemplate, MeasurementDefiner, ParameterConst
         measurements = self.get_measurement_windows(scope, measurement_mapping)
 
         for iteration_program_builder in program_builder.with_iteration(loop_index_name, loop_range,
+                                                                        self,
                                                                         measurements=measurements):
-            self.body._create_program(scope=iteration_program_builder.inner_scope(scope),
+            self.body._create_program(scope=iteration_program_builder.inner_scope(scope,self),
                                       measurement_mapping=measurement_mapping,
                                       channel_mapping=channel_mapping,
                                       global_transformation=global_transformation,

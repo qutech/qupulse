@@ -42,7 +42,9 @@ class ProgramBuilder(Protocol):
     """
 
     @abstractmethod
-    def inner_scope(self, scope: Scope) -> Scope:
+    def inner_scope(self, scope: Scope,
+                    pt_obj: Optional['ForLoopPT'] = None, #hack this in for now.
+                    ) -> Scope:
         """This function is part of the iteration protocol and necessary to inject program builder specific parameter
         implementations into the build process. :py:meth:`.ProgramBuilder.with_iteration` and
         `.ProgramBuilder.with_iteration` callers *must* call this function inside the iteration.
@@ -128,6 +130,7 @@ class ProgramBuilder(Protocol):
 
     @abstractmethod
     def with_iteration(self, index_name: str, rng: range,
+                       pt_obj: 'ForLoopPT',
                        measurements: Optional[Sequence[MeasurementWindow]] = None) -> Iterable['ProgramBuilder']:
         """Create an iterable that represent the body of the iteration. This can be an iterable with an element for each
         step in the iteration or a single object that represents the complete iteration.
@@ -153,3 +156,7 @@ class ProgramBuilder(Protocol):
         Returns:
             A program implementation. None if nothing was added to this program builder.
         """
+        
+    def evaluate_nested_stepping(self, scope: Scope, parameter_names: set[str]) -> bool:
+        """A hacky way to include extra sequencing opportunities for some Builders"""
+        return False
