@@ -108,7 +108,6 @@ class ToNextMultipleTests(unittest.TestCase):
     def test_to_next_multiple(self):
         from qupulse.utils.types import TimeType
         from qupulse.expressions import ExpressionScalar
-        precision_digits = 12
         
         duration = TimeType.from_float(47.1415926535)
         evaluated = to_next_multiple(sample_rate=TimeType.from_float(2.4),quantum=16)(duration)
@@ -123,30 +122,30 @@ class ToNextMultipleTests(unittest.TestCase):
         duration = 6185240.0000001
         evaluated = to_next_multiple(sample_rate=1.0,quantum=16,min_quanta=13)(duration).evaluate_numeric()
         expected = 6185248
-        self.assertAlmostEqual(evaluated, expected, precision_digits)
+        self.assertEqual(evaluated, expected)
         
         duration = 63.99
         evaluated = to_next_multiple(sample_rate=1.0,quantum=16,min_quanta=4)(duration).evaluate_numeric()
         expected = 64
-        self.assertAlmostEqual(evaluated, expected, precision_digits)
+        self.assertEqual(evaluated, expected)
         
         duration = 64.01
         evaluated = to_next_multiple(sample_rate=1.0,quantum=16,min_quanta=4)(duration).evaluate_numeric()
         expected = 80
-        self.assertAlmostEqual(evaluated, expected, precision_digits)
+        self.assertEqual(evaluated, expected)
         
         duration = 0.
         evaluated = to_next_multiple(sample_rate=1.0,quantum=16,min_quanta=13)(duration).evaluate_numeric()
         expected = 0.
-        self.assertAlmostEqual(evaluated, expected, precision_digits)
+        self.assertEqual(evaluated, expected)
         
         duration = ExpressionScalar('abc')
         evaluated = to_next_multiple(sample_rate=1.0,quantum=16,min_quanta=13)(duration).evaluate_in_scope(dict(abc=0.))
         expected = 0.
-        self.assertAlmostEqual(evaluated, expected, precision_digits)
+        self.assertEqual(evaluated, expected)
         
         duration = ExpressionScalar('q')
         evaluated = to_next_multiple(sample_rate=ExpressionScalar('w'),quantum=16,min_quanta=1)(duration).evaluate_in_scope(
                         dict(q=3.14159,w=1.0))
         expected = 16.
-        self.assertAlmostEqual(evaluated, expected, precision_digits)
+        self.assertEqual(evaluated, expected)
