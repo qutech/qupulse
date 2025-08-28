@@ -150,5 +150,3 @@ class ToNextMultipleTests(unittest.TestCase):
                         dict(q=3.14159,w=1.0))
         expected = 16.
         self.assertAlmostEqual(evaluated, expected, precision_digits)
-        
-        

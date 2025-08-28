@@ -167,9 +167,9 @@ def to_next_multiple(sample_rate: ExpressionLike, quantum: int,
             ce = sp.ceiling(u)          # number of quanta after rounding up
 
             # Enforce: 0 if d <= 0; else at least mqI quanta.
-            # max(mqI, ceil(u))  <=>  mqI if u <= mqI-1, else ceil(u)
+            # max(mqI, ceil(u))  <=>  mqI if u <= mqI, else ceil(u)
             # do not evaluate right now because parameters could still be variable,
-            #then it's just overhead.
+            # then it's just overhead.
             return sp.Piecewise(
                 (0,  sp.Le(d, 0)),
                 (k*mqI, sp.Le(u, mqI)),
