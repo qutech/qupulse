@@ -152,22 +152,20 @@ def to_next_multiple(sample_rate: ExpressionLike, quantum: int,
         #double negative for ceil division.
         return lambda duration: -(-(duration*sample_rate)//quantum) * (quantum/sample_rate)
     else:
-        qI  = sp.Integer(quantum)
-        k   = qI / sample_rate  # factor to go from #quanta -> duration
-        mqI = sp.Integer(min_quanta)
-                
-        def _build_sym(d):
-            u  = d*sample_rate/qI                # "duration in quanta" (real)
-            ce = sp.ceiling(u)          # number of quanta after rounding up
+        # work with sympy
+        sample_rate = sample_rate.sympified_expression
+        duration_per_quantum = sp.Integer(quantum) / sample_rate
+        minimal_duration = duration_per_quantum * min_quanta
 
-            # Enforce: 0 if d <= 0; else at least mqI quanta.
-            # max(mqI, ceil(u))  <=>  mqI if u <= mqI, else ceil(u)
-            # do not evaluate right now because parameters could still be variable,
-            # then it's just overhead.
-            return sp.Piecewise(
-                (0,  sp.Le(d, 0)),
-                (k*mqI, sp.Le(u, mqI)),
-                (k*ce, True)
-            , evaluate=False)
-        
-        return lambda duration: ExpressionScalar(_build_sym(duration))
+        def build_next_multiple(duration: ExpressionLike) -> ExpressionScalar:
+            duration = sp.sympify(duration)
+            rounded_up_duration = sp.ceiling(duration / duration_per_quantum) * duration_per_quantum
+
+            next_multiple_sp = sp.Piecewise(
+                (0, sp.Le(duration, 0)),
+                (minimal_duration, sp.Le(duration, minimal_duration)),
+                (rounded_up_duration, True)
+            )
+            return ExpressionScalar(next_multiple_sp)
+
+        return build_next_multiple
