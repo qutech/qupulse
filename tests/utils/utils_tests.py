@@ -149,3 +149,18 @@ class ToNextMultipleTests(unittest.TestCase):
                         dict(q=3.14159,w=1.0))
         expected = 16.
         self.assertEqual(evaluated, expected)
+
+
+def test_to_next_multiple_padding_duration_evaluation(benchmark):
+    # reminder how to manually run pytest tests:
+    # use pytest -k test_to_next_multiple_padding_duration_evaluation
+    # or for faster collection phase
+    # pytest -k test_to_next_multiple_padding_duration_evaluation tests/utils/utils_tests.py
+
+    from qupulse.pulses import FunctionPT
+    pt = FunctionPT('start+t/t_gate*(end-start)', 't_gate', 'a')
+
+    def padding():
+        pt.pad_to(to_next_multiple(2.4, 16, 4)).duration.evaluate_in_scope({'t_gate': 10.})
+
+    benchmark(padding)
