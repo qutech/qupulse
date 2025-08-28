@@ -163,7 +163,7 @@ def to_next_multiple(sample_rate: ExpressionLike, quantum: int,
         mqI = sp.Integer(min_quanta)
                 
         def _build_sym(d):
-            u  = d*sample_rate/qI                # "duration in quanta" (real)
+            u  = d*sample_rate/qI       # "duration in quanta" (real)
             ce = sp.ceiling(u)          # number of quanta after rounding up
 
             # Enforce: 0 if d <= 0; else at least mqI quanta.
