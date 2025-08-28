@@ -13,6 +13,7 @@ from frozendict import frozendict
 from qupulse.expressions import ExpressionScalar, ExpressionLike
 
 import numpy
+import sympy as sp
 
 try:
     from math import isclose
@@ -151,6 +152,22 @@ def to_next_multiple(sample_rate: ExpressionLike, quantum: int,
         #double negative for ceil division.
         return lambda duration: -(-(duration*sample_rate)//quantum) * (quantum/sample_rate)
     else:
-        #still return 0 if duration==0
-        return lambda duration: ExpressionScalar(f'{quantum}/({sample_rate})*Max({min_quanta},-(-({duration})*{sample_rate}//{quantum}))*Max(0, sign({duration}))')
-   
+        qI  = sp.Integer(quantum)
+        k   = qI / sample_rate  # factor to go from #quanta -> duration
+        mqI = sp.Integer(min_quanta)
+                
+        def _build_sym(d):
+            u  = d*sample_rate/qI                # "duration in quanta" (real)
+            ce = sp.ceiling(u)          # number of quanta after rounding up
+
+            # Enforce: 0 if d <= 0; else at least mqI quanta.
+            # max(mqI, ceil(u))  <=>  mqI if u <= mqI, else ceil(u)
+            # do not evaluate right now because parameters could still be variable,
+            # then it's just overhead.
+            return sp.Piecewise(
+                (0,  sp.Le(d, 0)),
+                (k*mqI, sp.Le(u, mqI)),
+                (k*ce, True)
+            , evaluate=False)
+        
+        return lambda duration: ExpressionScalar(_build_sym(duration))

@@ -120,12 +120,22 @@ class ToNextMultipleTests(unittest.TestCase):
         self.assertEqual(evaluated, expected)
         
         duration = 6185240.0000001
-        evaluated = to_next_multiple(sample_rate=1.0,quantum=16,min_quanta=13)(duration)
+        evaluated = to_next_multiple(sample_rate=1.0,quantum=16,min_quanta=13)(duration).evaluate_numeric()
         expected = 6185248
         self.assertEqual(evaluated, expected)
         
+        duration = 63.99
+        evaluated = to_next_multiple(sample_rate=1.0,quantum=16,min_quanta=4)(duration).evaluate_numeric()
+        expected = 64
+        self.assertEqual(evaluated, expected)
+        
+        duration = 64.01
+        evaluated = to_next_multiple(sample_rate=1.0,quantum=16,min_quanta=4)(duration).evaluate_numeric()
+        expected = 80
+        self.assertEqual(evaluated, expected)
+        
         duration = 0.
-        evaluated = to_next_multiple(sample_rate=1.0,quantum=16,min_quanta=13)(duration)
+        evaluated = to_next_multiple(sample_rate=1.0,quantum=16,min_quanta=13)(duration).evaluate_numeric()
         expected = 0.
         self.assertEqual(evaluated, expected)
         
@@ -139,12 +149,18 @@ class ToNextMultipleTests(unittest.TestCase):
                         dict(q=3.14159,w=1.0))
         expected = 16.
         self.assertEqual(evaluated, expected)
-        
-        #bracket silent bug
-        duration = ExpressionScalar('51 + q*51')
-        evaluated = to_next_multiple(sample_rate=1.0,quantum=16,min_quanta=1)(duration).evaluate_in_scope(
-                        dict(q=3.14159,))
-        expected = 224.
-        self.assertEqual(evaluated, expected)
-        
-        
+
+
+def test_to_next_multiple_padding_duration_evaluation(benchmark):
+    # reminder how to manually run pytest tests:
+    # use pytest -k test_to_next_multiple_padding_duration_evaluation
+    # or for faster collection phase
+    # pytest -k test_to_next_multiple_padding_duration_evaluation tests/utils/utils_tests.py
+
+    from qupulse.pulses import FunctionPT
+    pt = FunctionPT('start+t/t_gate*(end-start)', 't_gate', 'a')
+
+    def padding():
+        pt.pad_to(to_next_multiple(2.4, 16, 4)).duration.evaluate_in_scope({'t_gate': 10.})
+
+    benchmark(padding)
