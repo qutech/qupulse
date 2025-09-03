@@ -131,7 +131,7 @@ def forced_hash(obj) -> int:
 
 
 def to_next_multiple(sample_rate: ExpressionLike, quantum: int,
-                     min_quanta: Optional[int] = None) -> Callable[[ExpressionLike],ExpressionScalar]:
+                     min_quanta: Optional[int] = None) -> Callable[[ExpressionScalar], ExpressionLike]:
     """Construct a helper function to expand a duration to one corresponding to
     valid sample multiples according to the arguments given.
     Useful e.g. for PulseTemplate.pad_to's 'to_new_duration'-argument.
@@ -141,12 +141,13 @@ def to_next_multiple(sample_rate: ExpressionLike, quantum: int,
         quantum: number of samples to whose next integer multiple the duration shall be rounded up to.
         min_quanta: number of multiples of quantum not to fall short of.
     Returns:
-        A function that takes a duration (ExpressionLike) as input, and returns
+        A function that takes a duration as input, and returns
         a duration rounded up to the next valid samples count in given sample rate.
         The function returns 0 if duration==0, <0 is not checked if min_quanta is None.
 
     """
     sample_rate = ExpressionScalar(sample_rate)
+
     #is it more efficient to omit the Max call if not necessary?
     if min_quanta is None:
         #double negative for ceil division.
@@ -157,14 +158,16 @@ def to_next_multiple(sample_rate: ExpressionLike, quantum: int,
         duration_per_quantum = sp.Integer(quantum) / sample_rate
         minimal_duration = duration_per_quantum * min_quanta
 
-        def build_next_multiple(duration: ExpressionLike) -> ExpressionScalar:
+        def build_next_multiple(duration: ExpressionScalar) -> ExpressionLike:
             duration = sp.sympify(duration)
-            rounded_up_duration = sp.ceiling(duration / duration_per_quantum) * duration_per_quantum
+            n_quanta = sp.ceiling(duration / duration_per_quantum)
+            rounded_up_duration = n_quanta * duration_per_quantum
 
             next_multiple_sp = sp.Piecewise(
-                (0, sp.Le(duration, 0)),
-                (minimal_duration, sp.Le(duration, minimal_duration)),
-                (rounded_up_duration, True)
+                (0, sp.Le(n_quanta, 0)),
+                (minimal_duration, sp.Le(n_quanta, min_quanta)),
+                (rounded_up_duration, True),
+                evaluate=False,
             )
             return ExpressionScalar(next_multiple_sp)
 
