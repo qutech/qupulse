@@ -583,6 +583,8 @@ class AtomicPulseTemplate(PulseTemplate, MeasurementDefiner):
             constant_values = waveform.constant_value_dict()
             if constant_values is None:
                 program_builder.play_arbitrary_waveform(waveform)
+            elif waveform.is_explicit_zero():
+                program_builder.explicit_zero(waveform.duration, waveform.defined_channels)
             else:
                 program_builder.hold_voltage(waveform.duration, constant_values)
 

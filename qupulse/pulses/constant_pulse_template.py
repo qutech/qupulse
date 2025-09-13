@@ -10,7 +10,7 @@ import logging
 import numbers
 from typing import Any, Dict, List, Optional, Union, Mapping, AbstractSet
 
-from qupulse.program.waveforms import ConstantWaveform
+from qupulse.program.waveforms import ConstantWaveform, ZeroWaveform
 from qupulse.utils.types import TimeType, ChannelID
 from qupulse.utils import cached_property
 from qupulse.expressions import ExpressionScalar, ExpressionLike
@@ -137,3 +137,49 @@ class ConstantPulseTemplate(AtomicPulseTemplate):  # type: ignore
     @property
     def final_values(self) -> Dict[ChannelID, ExpressionScalar]:
         return {ch: ExpressionScalar(val) for ch, val in self._amplitude_dict.items()}
+
+
+
+class ZeroPulseTemplate(ConstantPulseTemplate):  # type: ignore
+    def __init__(self, duration: ExpressionLike,
+                 channel_set: set[ChannelID], #Dict[ChannelID, ExpressionLike],
+                 identifier: Optional[str] = None,
+                 name: Optional[str] = None,
+                 measurements: Optional[List[MeasurementDeclaration]] = None,
+                 registry: PulseRegistryType=None) -> None:
+        """An atomic pulse template qupulse representing a zero pulse,
+        used for explicitly signaling special awg command structures for zero playback.
+        
+        Args:
+            duration: Duration of the template
+            name: Name for the template. Not used by qupulse
+        """
+        super().__init__(duration=duration,
+                         amplitude_dict={c:0 for c in channel_set},
+                         identifier=identifier,
+                         name=name,
+                         measurements=measurements,
+                         registry=registry)
+        
+    def build_waveform(self,
+                       parameters: Dict[str, numbers.Real],
+                       channel_mapping: Dict[ChannelID, Optional[ChannelID]]) -> Optional[Union[ConstantWaveform,
+                                                                                                MultiChannelWaveform]]:
+        logging.debug(f'build_waveform of ConstantPulse: channel_mapping {channel_mapping}, '
+                      f'defined_channels {self.defined_channels}')
+
+        # we very freely use duck-typing here to speed up cases where duration and amplitude values are already numeric
+        duration = self._duration
+        if hasattr(duration, 'evaluate_in_scope'):
+            duration = duration.evaluate_in_scope(parameters)
+
+        if duration > 0:
+            constant_values = set()
+            for channel, value in self._amplitude_dict.items():
+                mapped_channel = channel_mapping[channel]
+                if mapped_channel is not None:
+                    constant_values.add(mapped_channel)
+
+            if constant_values:
+                return ZeroWaveform.from_mapping(duration, constant_values)
+        return None

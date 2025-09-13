@@ -310,7 +310,38 @@ class LinSpaceHold(LinSpaceNodeChannelSpecific):
         if self._cached_body_duration is None:
             self._cached_body_duration = self.duration_base
         return self._cached_body_duration
-        
+
+
+@dataclass
+class LinSpaceZero(LinSpaceNodeChannelSpecific):
+    """Zero for a given time. The time may depend on the iteration index."""
+
+    duration_base: TimeType
+    duration_factors: Optional[Tuple[TimeType, ...]]
+    
+    def __post_init__(self):
+        self.bases = {c:0 for c in self.channels}
+        self.factors = {c:None for c in self.channels}
+    
+    def dependencies(self) -> Mapping[DepDomain, Mapping[ChannelID, set]]:
+        return {dom: {ch: {factors}}
+                for dom, ch_to_factors in self._dep_by_domain().items()
+                for ch, factors in ch_to_factors.items()
+                if factors}
+    
+    def _dep_by_domain(self) -> Mapping[DepDomain, Mapping[GeneralizedChannel, set]]:
+        return {DepDomain.VOLTAGE: self.factors,
+                DepDomain.TIME_LIN: {DepDomain.TIME_LIN:self.duration_factors},
+                }
+    
+    @property
+    def body_duration(self) -> TimeType:
+        if self.duration_factors:
+            raise NotImplementedError
+        if self._cached_body_duration is None:
+            self._cached_body_duration = self.duration_base
+        return self._cached_body_duration
+    
 
 @dataclass
 class LinSpaceArbitraryWaveform(LinSpaceNodeChannelSpecific):
@@ -694,7 +725,51 @@ class LinSpaceBuilder(ProgramBuilder):
                     for name, begin, length in meas
                 ]
             self._stack[-1][-1]._measurement_memory.add_measurements(meas)
+    
+    
+    def explicit_zero(self, duration: HardwareTime, channels: set[ChannelID]):
         
+        #don't know if necessary but too tired to think
+        ranges = self._get_ranges()
+        reversals = self._get_range_reversals()
+        duration_base = duration
+        duration_factors = None
+        if isinstance(duration, SimpleExpression):
+            # duration_factors = duration.offsets
+            # duration_base = duration.base
+            duration_offsets = duration.offsets
+            duration_base = duration.base
+            duration_factors = []
+            for rng_name, rng in ranges.items():
+                start = TimeType(0)
+                step = TimeType(0)
+                offset = duration_offsets.get(rng_name, None)
+                if offset:
+                    if reversals[rng_name]:
+                        start += (rng.stop-1) * offset
+                        step += -rng.step * offset
+                    else:
+                        start += rng.start * offset
+                        step += rng.step * offset
+                duration_base += start
+                duration_factors.append(step)
+        
+        self._stack[-1].append(LinSpaceZero(channels=tuple(channels),
+                                            duration_base=duration_base,
+                                            duration_factors=tuple(duration_factors) if duration_factors else None,))
+    
+        if self._meas_queue:
+            meas = self._meas_queue.pop()
+            if self._reversed_counter%2:
+                if duration_factors:
+                    raise NotImplementedError
+                duration = duration_base
+                meas = [
+                    (name, duration - (begin + length), length)
+                    for name, begin, length in meas
+                ]
+            self._stack[-1][-1]._measurement_memory.add_measurements(meas)
+    
 
     def play_arbitrary_waveform(self, waveform: Union[Waveform,WaveformCollection],
                                 stepped_var_list: Optional[List[Tuple[str,SimpleExpressionStepped]]] = None):
@@ -1151,6 +1226,14 @@ class Wait:
         return hash((type(self),self.duration,frozenset(self.key_by_domain.items())))
 
 @dataclass
+class Zero:
+    duration: Optional[TimeType]
+    key_by_domain: Dict[DepDomain,DepKey] = dataclasses.field(default_factory=lambda: {})
+
+    def __hash__(self):
+        return hash((type(self),self.duration,frozenset(self.key_by_domain.items())))
+
+@dataclass
 class LoopJmp:
     idx: int
 
@@ -1443,7 +1526,15 @@ class _TranslationState:
             self.commands.append(Wait(None, {DepDomain.TIME_LIN: self.active_dep[DepDomain.TIME_LIN][DepDomain.TIME_LIN]}))
         else:
             self.commands.append(Wait(node.duration_base))
-            
+    
+    def _add_zero_node(self, node: LinSpaceZero):
+        if node.duration_factors:
+            # self._set_indexed_lin_time(node.duration_base,node.duration_factors)
+            raise NotImplementedError("TODO")
+            # self.commands.append(Zero(None, {DepDomain.TIME_LIN: self.active_dep[DepDomain.TIME_LIN][DepDomain.TIME_LIN]}))
+        else:
+            self.commands.append(Zero(node.duration_base))
+    
     def _add_indexed_play_node(self, node: LinSpaceArbitraryWaveformIndexed):
         
         #assume this as criterion:
@@ -1494,6 +1585,9 @@ class _TranslationState:
 
         elif isinstance(node, LinSpaceHold):
             self._add_hold_node(node)
+        
+        elif isinstance(node, LinSpaceZero):
+            self._add_zero_node(node)
         
         elif isinstance(node, LinSpaceArbitraryWaveformIndexed):
             self._add_indexed_play_node(node)

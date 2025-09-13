@@ -38,7 +38,11 @@ class ProgramBuilder(Protocol):
         """Supports dynamic i.e. for loop generated offsets and duration"""
 
     # further specialized commandos like play_harmoic might be added here
-
+    
+    #e.g. this explicit_zero
+    def explicit_zero(self, duration: HardwareTime, channels: set[ChannelID]):
+        """explicit zero playback command, e.g. HDAWG buffering step"""
+    
     def play_arbitrary_waveform(self, waveform: Waveform):
         """"""
 

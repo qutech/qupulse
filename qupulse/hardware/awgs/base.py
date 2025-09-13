@@ -17,7 +17,7 @@ from enum import Enum
 from qupulse.hardware.util import get_sample_times, not_none_indices
 from qupulse.utils.types import ChannelID
 from qupulse.program.linspace import LinSpaceNode, LinSpaceArbitraryWaveform, to_increment_commands, Command, \
-    Increment, Set as LSPSet, LoopLabel, LoopJmp, Wait, Play, DEFAULT_INCREMENT_RESOLUTION, DepDomain
+    Increment, Set as LSPSet, LoopLabel, LoopJmp, Wait, Play, DEFAULT_INCREMENT_RESOLUTION, DepDomain, Zero
 from qupulse.program.loop import Loop
 from qupulse.program.waveforms import Waveform, WaveformCollection
 from qupulse.comparable import Comparable
@@ -289,7 +289,7 @@ class ProgramEntry:
         # increment_domains_to_transform = {DepDomain.VOLTAGE, DepDomain.WF_SCALE, DepDomain.WF_OFFSET}
         
         for command in command_list:
-            if isinstance(command, (LoopLabel, LoopJmp, Play, Wait)):
+            if isinstance(command, (LoopLabel, LoopJmp, Play, Wait, Zero)):
                 # play is handled by transforming the sampled waveform
                 continue
             elif isinstance(command, Increment):

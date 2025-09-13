@@ -14,7 +14,7 @@ from qupulse.program.transformation import Transformation
 from qupulse.program.volatile import VolatileRepetitionCount, VolatileProperty
 from qupulse.program.waveforms import SequenceWaveform, RepetitionWaveform
 from qupulse.program.waveforms import TransformingWaveform
-from qupulse.program.waveforms import Waveform, ConstantWaveform
+from qupulse.program.waveforms import Waveform, ConstantWaveform, ZeroWaveform
 from qupulse.pulses.range import RangeScope
 from qupulse.utils import is_integer
 from qupulse.utils.numeric import smallest_factor_ge
@@ -836,7 +836,10 @@ class LoopBuilder(ProgramBuilder):
 
     def hold_voltage(self, duration: HardwareTime, voltages: Mapping[str, HardwareVoltage]):
         self.play_arbitrary_waveform(ConstantWaveform.from_mapping(duration, voltages))
-
+    
+    def explicit_zero(self, duration: HardwareTime, channels: set[ChannelID]):
+        self.play_arbitrary_waveform(ZeroWaveform.from_mapping(duration, channels))
+    
     def play_arbitrary_waveform(self, waveform: Waveform):
         self._top.append_child(waveform=waveform)
 

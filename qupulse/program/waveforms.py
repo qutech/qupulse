@@ -185,7 +185,11 @@ class Waveform(Comparable, metaclass=ABCMeta):
             True if all channels have constant values.
         """
         return self.constant_value_dict() is not None
-
+    
+    def is_explicit_zero(self) -> bool:
+        #overwrite in subclass
+        return False
+    
     def constant_value_dict(self) -> Optional[Mapping[ChannelID, float]]:
         result = {ch: self.constant_value(ch) for ch in self.defined_channels}
         if None in result.values():
@@ -481,6 +485,26 @@ class ConstantWaveform(Waveform):
         return self
 
 
+class ZeroWaveform(ConstantWaveform):
+    def __init__(self, duration: Real, channel: ChannelID):
+        """ Create a qupulse waveform corresponding to a ConstantPulseTemplate """
+        super().__init__(duration=duration,amplitude=0,channel=channel)
+        
+    @classmethod
+    def from_mapping(cls, duration: Real, channels: set[ChannelID]) -> Union['ZeroWaveform',
+                                                                             'MultiChannelWaveform']:
+        """Construct a ConstantWaveform or a MultiChannelWaveform of ConstantWaveforms with given duration and values"""
+        duration = _to_hardware_time(duration)
+        if len(channels) == 1:
+            return cls(duration, channel=channels.pop())
+        else:
+            return MultiChannelWaveform([cls(duration, channel=channel)
+                                         for channel in channels])
+    
+    def is_explicit_zero(self) -> bool:
+        return True
+
+
 class FunctionWaveform(Waveform):
     """Waveform obtained from instantiating a FunctionPulseTemplate."""
 
@@ -613,6 +637,9 @@ class SequenceWaveform(Waveform):
             return cls(sub_waveforms=flattened)
         else:
             duration = sum(wf.duration for wf in flattened)
+            #hacky
+            if all(isinstance(wf,ZeroWaveform) for wf in flattened):
+                return ZeroWaveform(duration, )
             return ConstantWaveform.from_mapping(duration, constant_values)
 
     def is_constant(self) -> bool:
@@ -784,7 +811,10 @@ class MultiChannelWaveform(Waveform):
 
     def is_constant(self) -> bool:
         return all(wf.is_constant() for wf in self._sub_waveforms)
-
+    
+    def is_explicit_zero(self) -> bool:
+        return all(wf.is_explicit_zero() for wf in self._sub_waveforms)
+    
     def constant_value(self, channel: ChannelID) -> Optional[float]:
         return self[channel].constant_value(channel)
 
@@ -903,7 +933,10 @@ class RepetitionWaveform(Waveform):
 
     def is_constant(self) -> bool:
         return self._body.is_constant()
-
+    
+    def is_explicit_zero(self) -> bool:
+        return self._body.is_explicit_zero()
+    
     def constant_value(self, channel: ChannelID) -> Optional[float]:
         return self._body.constant_value(channel)
 
@@ -929,6 +962,10 @@ class TransformingWaveform(Waveform):
 
     @classmethod
     def from_transformation(cls, inner_waveform: Waveform, transformation: Transformation) -> Waveform:
+        
+        if isinstance(inner_waveform, ZeroWaveform):
+            return ZeroWaveform.from_mapping(inner_waveform.duration, inner_waveform.defined_channels)
+        
         constant_values = inner_waveform.constant_value_dict()
 
         if constant_values is None or not transformation.is_constant_invariant():
@@ -940,7 +977,10 @@ class TransformingWaveform(Waveform):
     def is_constant(self) -> bool:
         # only true if `from_transformation` was used
         return False
-
+    
+    def is_explicit_zero(self) -> bool:
+        return False
+    
     def constant_value_dict(self) -> Optional[Mapping[ChannelID, float]]:
         # only true if `from_transformation` was used
         return None
@@ -1119,7 +1159,11 @@ class ArithmeticWaveform(Waveform):
     def is_constant(self) -> bool:
         # only correct if from_operator is used
         return False
-
+    
+    def is_explicit_zero(self) -> bool:
+        #todo: case for ZeroWaveform
+        return False
+    
     def constant_value_dict(self) -> Optional[Mapping[ChannelID, float]]:
         # only correct if from_operator is used
         return None
@@ -1212,6 +1256,10 @@ class FunctorWaveform(Waveform):
         # only correct if `from_functor` was used
         return False
 
+    def is_explicit_zero(self) -> bool:
+        #todo: case for ZeroWaveform
+        return False
+    
     def constant_value_dict(self) -> Optional[Mapping[ChannelID, float]]:
         # only correct if `from_functor` was used
         return None
