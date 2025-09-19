@@ -30,6 +30,8 @@ __all__ = ["AWG", "Program", "ProgramOverwriteException",
 
 Program = Loop
 
+SAMPLE_TIME_TOLERANCE = 1e-10
+
 
 class AWGAmplitudeOffsetHandling:
     IGNORE_OFFSET = 'ignore_offset'   # Offset is ignored.
@@ -323,7 +325,7 @@ class ProgramEntry:
                                                                              Tuple[numpy.ndarray, ...]]]:
         sampled_waveforms = []
 
-        time_array, segment_lengths = get_sample_times(waveforms, self._sample_rate)
+        time_array, segment_lengths = get_sample_times(waveforms, self._sample_rate, SAMPLE_TIME_TOLERANCE)
         sample_memory = numpy.zeros_like(time_array, dtype=float)
 
         n_samples = numpy.sum(segment_lengths)
