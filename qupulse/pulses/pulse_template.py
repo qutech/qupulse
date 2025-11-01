@@ -64,7 +64,8 @@ class PulseTemplate(Serializable):
         super().__init__(identifier=identifier)
         self.__cached_hash_value = None
         self._pow_2_divisor: int = 0
-
+        # self.__cached_serialization_data = None
+        
     @property
     @abstractmethod
     def parameter_names(self) -> Set[str]:
@@ -467,17 +468,28 @@ class PulseTemplate(Serializable):
     def __str__(self):
         return format(self)
     
-    @cached_property
-    def _repr(self) -> str:
+    # @cached_property
+    # def _cached_repr(self) -> str:
+    #     type_name = type(self).__name__
+    #     kwargs = ','.join('%s=%r' % (key, value)
+    #                       for key, value in self.__cached_serialization_data.items()
+    #                       if key.isidentifier() and value is not None)
+    #     return '{type_name}({kwargs})'.format(type_name=type_name, kwargs=kwargs)
+    
+    # def __repr__(self):
+    #     ser = self.get_serialization_data()
+    #     if self.__cached_serialization_data != ser:
+    #         self.__cached_serialization_data = ser
+    #         self.__dict__.pop("_cached_repr", None)
+    #     return self._cached_repr
+    
+    def __repr__(self) -> str:
         type_name = type(self).__name__
         kwargs = ','.join('%s=%r' % (key, value)
                           for key, value in self.get_serialization_data().items()
                           if key.isidentifier() and value is not None)
         return '{type_name}({kwargs})'.format(type_name=type_name, kwargs=kwargs)
     
-    def __repr__(self):
-        return self._repr
-
     def __add__(self, other: ExpressionLike):
         from qupulse.pulses.arithmetic_pulse_template import try_operation
         return try_operation(self, '+', other)
