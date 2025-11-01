@@ -10,6 +10,7 @@ Classes:
 from typing import Dict, List, Optional, Any, AbstractSet, Union, Set, Sequence, Mapping, Callable
 import numbers
 import warnings
+from functools import cached_property
 
 from qupulse.serialization import Serializer, PulseRegistryType
 from qupulse.parameter_scope import Scope
@@ -318,7 +319,7 @@ class ParallelChannelPulseTemplate(PulseTemplate):
     def duration(self) -> ExpressionScalar:
         return self.template.duration
 
-    @property
+    @cached_property
     def integral(self) -> Dict[ChannelID, ExpressionScalar]:
         integral = self._template.integral
 
@@ -327,13 +328,13 @@ class ParallelChannelPulseTemplate(PulseTemplate):
             integral[channel] = value * duration
         return integral
 
-    @property
+    @cached_property
     def initial_values(self) -> Dict[ChannelID, ExpressionScalar]:
         values = self._template.initial_values
         values.update(self._overwritten_channels)
         return values
 
-    @property
+    @cached_property
     def final_values(self) -> Dict[ChannelID, ExpressionScalar]:
         values = self._template.final_values
         values.update(self._overwritten_channels)

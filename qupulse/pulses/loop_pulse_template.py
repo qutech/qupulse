@@ -7,6 +7,7 @@ from abc import ABC
 from typing import Dict, Set, Optional, Any, Union, Tuple, Iterator, Sequence, cast, Mapping, Callable
 import warnings
 from numbers import Number
+from functools import cached_property
 
 import sympy
 
@@ -198,7 +199,7 @@ class ForLoopPulseTemplate(LoopPulseTemplate, MeasurementDefiner, ParameterConst
             kwargs['body'] = cast(PulseTemplate, serializer.deserialize(kwargs['body']))
         return super().deserialize(None, **kwargs)
 
-    @property
+    @cached_property
     def integral(self) -> Dict[ChannelID, ExpressionScalar]:
 
         step_size = self._loop_range.step.sympified_expression
@@ -224,7 +225,7 @@ class ForLoopPulseTemplate(LoopPulseTemplate, MeasurementDefiner, ParameterConst
 
         return body_integrals
 
-    @property
+    @cached_property
     def initial_values(self) -> Dict[ChannelID, ExpressionScalar]:
         values = self.body.initial_values
         initial_idx = self._loop_range.start
@@ -232,7 +233,7 @@ class ForLoopPulseTemplate(LoopPulseTemplate, MeasurementDefiner, ParameterConst
             values[ch] = ExpressionScalar(value.underlying_expression.subs(self._loop_index, initial_idx))
         return values
 
-    @property
+    @cached_property
     def final_values(self) -> Dict[ChannelID, ExpressionScalar]:
         values = self.body.final_values
         start, step, stop = self._loop_range.start.sympified_expression, self._loop_range.step.sympified_expression, self._loop_range.stop.sympified_expression

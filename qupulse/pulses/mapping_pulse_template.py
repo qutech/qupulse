@@ -2,6 +2,7 @@ from typing import Optional, Set, Dict, Union, List, Any, Tuple, Mapping, Callab
 import itertools
 import numbers
 import collections
+from functools import cached_property
 
 from qupulse.utils.types import ChannelID, FrozenDict, FrozenMapping
 from qupulse.expressions import Expression, ExpressionScalar, ExpressionLike
@@ -338,18 +339,18 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
             if self.__channel_mapping.get(ch, ch) is not None
         }
 
-    @property
+    @cached_property
     def integral(self) -> Dict[ChannelID, ExpressionScalar]:
         return self._apply_mapping_to_inner_channel_dict(self.__template.integral)
 
     def _as_expression(self) -> Dict[ChannelID, ExpressionScalar]:
         return self._apply_mapping_to_inner_channel_dict(self.__template._as_expression())
 
-    @property
+    @cached_property
     def initial_values(self) -> Dict[ChannelID, ExpressionScalar]:
         return self._apply_mapping_to_inner_channel_dict(self.__template.initial_values)
 
-    @property
+    @cached_property
     def final_values(self) -> Dict[ChannelID, ExpressionScalar]:
         return self._apply_mapping_to_inner_channel_dict(self.__template.final_values)
     

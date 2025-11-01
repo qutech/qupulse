@@ -8,6 +8,7 @@ Classes:
 
 from typing import Any, Dict, List, Set, Optional, Union
 import numbers
+from functools import cached_property
 
 import sympy
 
@@ -141,7 +142,7 @@ class FunctionPulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
             del kwargs['measurement_declarations']
         return super().deserialize(None, **kwargs)
 
-    @property
+    @cached_property
     def integral(self) -> Dict[ChannelID, ExpressionScalar]:
         return {self.__channel: ExpressionScalar(
             sympy.integrate(self.__expression.sympified_expression, ('t', 0, self.duration.sympified_expression))
@@ -151,12 +152,12 @@ class FunctionPulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
         expr = ExpressionScalar.make(self.__expression.underlying_expression.subs({'t': self._AS_EXPRESSION_TIME}))
         return {self.__channel: expr}
 
-    @property
+    @cached_property
     def initial_values(self) -> Dict[ChannelID, ExpressionScalar]:
         expr = ExpressionScalar.make(self.__expression.underlying_expression.subs('t', 0))
         return {self.__channel: expr}
 
-    @property
+    @cached_property
     def final_values(self) -> Dict[ChannelID, ExpressionScalar]:
         expr = ExpressionScalar.make(self.__expression.underlying_expression.subs('t', self.__duration_expression.underlying_expression))
         return {self.__channel: expr}

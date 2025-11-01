@@ -177,7 +177,7 @@ class SequencePulseTemplate(PulseTemplate, ParameterConstrainer, MeasurementDefi
     def defined_channels(self) -> Set[ChannelID]:
         return self.__subtemplates[0].defined_channels
 
-    @property
+    @cached_property
     def integral(self) -> Dict[ChannelID, ExpressionScalar]:
         expressions = {channel: 0 for channel in self.defined_channels}
 

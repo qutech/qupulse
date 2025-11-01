@@ -12,6 +12,7 @@ from typing import Dict, Tuple, Set, Optional, Union, List, Callable, Any, Gener
 import itertools
 import collections
 from numbers import Real, Number
+from functools import cached_property
 
 import numpy
 import sympy
@@ -465,13 +466,17 @@ class PulseTemplate(Serializable):
 
     def __str__(self):
         return format(self)
-
-    def __repr__(self):
+    
+    @cached_property
+    def _repr(self) -> str:
         type_name = type(self).__name__
         kwargs = ','.join('%s=%r' % (key, value)
                           for key, value in self.get_serialization_data().items()
                           if key.isidentifier() and value is not None)
         return '{type_name}({kwargs})'.format(type_name=type_name, kwargs=kwargs)
+    
+    def __repr__(self):
+        return self._repr
 
     def __add__(self, other: ExpressionLike):
         from qupulse.pulses.arithmetic_pulse_template import try_operation
@@ -611,21 +616,21 @@ class AtomicPulseTemplate(PulseTemplate, MeasurementDefiner):
         raise NotImplementedError(f"_as_expression is not implemented for {type(self)} "
                                   f"which means it cannot be truncated and integrated over.")
 
-    @property
+    @cached_property
     def integral(self) -> Dict[ChannelID, ExpressionScalar]:
         # this default implementation uses _as_expression
         return {ch: ExpressionScalar(sympy.integrate(expr.sympified_expression,
                                                      (self._AS_EXPRESSION_TIME, 0, self.duration.sympified_expression)))
                 for ch, expr in self._as_expression().items()}
 
-    @property
+    @cached_property
     def initial_values(self) -> Dict[ChannelID, ExpressionScalar]:
         values = self._as_expression()
         for ch, value in values.items():
             values[ch] = value.evaluate_symbolic({self._AS_EXPRESSION_TIME: 0})
         return values
 
-    @property
+    @cached_property
     def final_values(self) -> Dict[ChannelID, ExpressionScalar]:
         values = self._as_expression()
         for ch, value in values.items():

@@ -1,5 +1,6 @@
 from numbers import Real
 from typing import Dict, Optional, Set, Union, List, Iterable, Any
+from functools import cached_property
 
 from qupulse import ChannelID
 from qupulse.parameter_scope import Scope
@@ -52,7 +53,7 @@ class SingleWFTimeExtensionPulseTemplate(AtomicPulseTemplate):
     def defined_channels(self) -> Set[ChannelID]:
         return self.__main_pt.defined_channels
     
-    @property
+    @cached_property
     def integral(self) -> Dict[ChannelID, ExpressionScalar]:
         
         unextended = self.__main_pt.integral

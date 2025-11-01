@@ -11,6 +11,7 @@ from typing import Union, Dict, List, Set, Optional, Any, Tuple, Sequence, Named
 import numbers
 import itertools
 import warnings
+from functools import cached_property
 
 import numpy as np
 import sympy
@@ -412,7 +413,7 @@ class TablePulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
 
         return TablePulseTemplate(parsed, **kwargs)
 
-    @property
+    @cached_property
     def integral(self) -> Dict[ChannelID, ExpressionScalar]:
         expressions = dict()
         for channel, channel_entries in self._entries.items():

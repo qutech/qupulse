@@ -4,6 +4,7 @@ represents the n-times repetition of another PulseTemplate."""
 from typing import Dict, List, AbstractSet, Optional, Union, Any, Mapping, cast, Callable
 from numbers import Real
 from warnings import warn
+from functools import cached_property
 
 import numpy as np
 
@@ -168,7 +169,7 @@ class RepetitionPulseTemplate(LoopPulseTemplate, ParameterConstrainer, Measureme
 
         return super().deserialize(**kwargs)
 
-    @property
+    @cached_property
     def integral(self) -> Dict[ChannelID, ExpressionScalar]:
         body_integral = self.body.integral
         return {channel: self.repetition_count * value for channel, value in body_integral.items()}

@@ -2,6 +2,7 @@ from typing import Optional, List, Union, Set, Dict, Sequence, Any, Tuple
 from numbers import Real
 import itertools
 import numbers
+from functools import cached_property
 
 import sympy
 import numpy as np
@@ -131,7 +132,7 @@ class PointPulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
     def parameter_names(self) -> Set[str]:
         return self.point_parameters | self.measurement_parameters | self.constrained_parameters
 
-    @property
+    @cached_property
     def integral(self) -> Dict[ChannelID, ExpressionScalar]:
         expressions = {}
         shape = (len(self.defined_channels),)
@@ -168,7 +169,7 @@ class PointPulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
             expressions[channel] = pw
         return expressions
 
-    @property
+    @cached_property
     def initial_values(self) -> Dict[ChannelID, ExpressionScalar]:
         shape = (len(self._channels),)
         return {
@@ -176,7 +177,7 @@ class PointPulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
             for ch_idx, ch in enumerate(self._channels)
         }
 
-    @property
+    @cached_property
     def final_values(self) -> Dict[ChannelID, ExpressionScalar]:
         shape = (len(self._channels),)
         return {

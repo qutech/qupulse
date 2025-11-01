@@ -116,7 +116,7 @@ class ArithmeticAtomicPulseTemplate(AtomicPulseTemplate):
                                                 operator_both=operator_both,
                                                 rhs_only=rhs_only)
 
-    @property
+    @cached_property
     def integral(self) -> Dict[ChannelID, ExpressionScalar]:
         # this is a guard for possible future changes
         assert self._arithmetic_operator in ('+', '-'), \
@@ -126,11 +126,11 @@ class ArithmeticAtomicPulseTemplate(AtomicPulseTemplate):
     def _as_expression(self) -> Dict[ChannelID, ExpressionScalar]:
         return self._apply_operation(self.lhs._as_expression(), self.rhs._as_expression())
 
-    @property
+    @cached_property
     def initial_values(self) -> Dict[ChannelID, ExpressionScalar]:
         return self._apply_operation(self.lhs.initial_values, self.rhs.initial_values)
 
-    @property
+    @cached_property
     def final_values(self) -> Dict[ChannelID, ExpressionScalar]:
         return self._apply_operation(self.lhs.final_values, self.rhs.final_values)
 
@@ -448,7 +448,7 @@ class ArithmeticPulseTemplate(PulseTemplate):
         else:
             return dict(self._scalar)
 
-    @property
+    @cached_property
     def integral(self) -> Dict[ChannelID, ExpressionScalar]:
         if _is_time_dependent(self._scalar):
             # use the superclass implementation that relies on _as_expression
@@ -493,14 +493,14 @@ class ArithmeticPulseTemplate(PulseTemplate):
 
         return _apply_operation_to_channel_dict(lhs, rhs, operator_both=operator_both, rhs_only=rhs_only)
 
-    @property
+    @cached_property
     def initial_values(self) -> Dict[ChannelID, ExpressionScalar]:
         return self._apply_operation_to_channel_dict(
             self._pulse_template.initial_values,
             self._scalar_as_dict()
         )
 
-    @property
+    @cached_property
     def final_values(self) -> Dict[ChannelID, ExpressionScalar]:
         return self._apply_operation_to_channel_dict(
             self._pulse_template.final_values,

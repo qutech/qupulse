@@ -41,7 +41,6 @@ class AtomicTimeReversalPulseTemplate(AtomicPulseTemplate):
     
     @property
     def integral(self) -> Dict[ChannelID, ExpressionScalar]:
-        
         return self._inner.integral
 
     @property

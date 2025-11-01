@@ -134,6 +134,6 @@ class ConstantPulseTemplate(AtomicPulseTemplate):  # type: ignore
     def initial_values(self) -> Dict[ChannelID, ExpressionScalar]:
         return {ch: ExpressionScalar(val) for ch, val in self._amplitude_dict.items()}
 
-    @property
+    @cached_property
     def final_values(self) -> Dict[ChannelID, ExpressionScalar]:
         return {ch: ExpressionScalar(val) for ch, val in self._amplitude_dict.items()}
