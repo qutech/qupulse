@@ -98,6 +98,8 @@ class ZHInstVoltageToUint16Test(unittest.TestCase):
     def test_range_exception(self):
         with self.assertRaisesRegex(ValueError, "invalid"):
             zhinst_voltage_to_uint16(2.*np.ones(192), None, (None, None, None, None))
+        with self.assertRaisesRegex(ValueError, "invalid"):
+            zhinst_voltage_to_uint16(None, 2.*np.ones(192), (None, None, None, None))
         # this should work
         zhinst_voltage_to_uint16(None, None, (2. * np.ones(192), None, None, None))
 
