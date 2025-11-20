@@ -248,7 +248,7 @@ def _zhinst_voltage_to_uint16_numpy(size: int, ch1: Optional[np.ndarray], ch2: O
     if ch2 is None:
         ch2 = np.zeros(size)
     else:
-        check_invalid_values(ch1)
+        check_invalid_values(ch2)
     marker_data = np.zeros(size, dtype=np.uint16)
     for idx, marker in enumerate(markers):
         if marker is not None:
