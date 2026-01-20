@@ -28,6 +28,8 @@ _ExpressionType = TypeVar('_ExpressionType', bound='Expression')
 
 ALLOWED_NUMERIC_SCALAR_TYPES = (float, numpy.number, int, complex, bool, numpy.bool_, TimeType)
 
+SYMPY_NTOLERANCE = None
+
 
 def _parse_evaluate_numeric(result) -> Union[Number, numpy.ndarray]:
     """Tries to parse the result as a scalar if possible. Falls back to an array otherwise.
@@ -372,7 +374,12 @@ class ExpressionScalar(Expression):
         """Enable comparisons with Numbers"""
         # sympy's __eq__ checks for structural equality to be consistent regarding __hash__ so we do that too
         # see https://github.com/sympy/sympy/issues/18054#issuecomment-566198899
-        return self._sympified_expression == self._sympify(other)
+        # 2026-01: for float inaccuracies in here, == can return False unexpectedly.
+        # introduce Optional tolerance
+        if SYMPY_NTOLERANCE is None:
+            return self._sympified_expression == self._sympify(other)
+        return not bool(sympy.nsimplify(self._sympified_expression-self._sympify(other),
+                                        tolerance=SYMPY_NTOLERANCE,full=False,rational=True))
 
     def __hash__(self) -> int:
         return hash(self._sympified_expression)
