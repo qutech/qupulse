@@ -35,8 +35,8 @@ class SingleWFTimeExtensionPulseTemplate(AtomicPulseTemplate):
          AtomicPulseTemplate.__init__(self, identifier=identifier, measurements=measurements)
 
          self.__main_pt = main_pt
-         self.__pad_pt = ConstantPT(new_duration-main_pt.duration, self.final_values)
          self._duration = ExpressionScalar.make(new_duration)
+         self.__pad_pt = ConstantPT(self._duration-main_pt.duration, self.final_values)
 
          self._register(registry=registry)    
     
@@ -75,7 +75,7 @@ class SingleWFTimeExtensionPulseTemplate(AtomicPulseTemplate):
         data = super().get_serialization_data(serializer)
         data['main_pt'] = self.__main_pt
         data['new_duration'] = self.duration
-        data['measurements']: self.measurement_declarations
+        data['measurements'] = self.measurement_declarations
         
         return data
 
