@@ -426,7 +426,7 @@ class ExpressionScalar(Expression):
     @property
     def original_expression(self) -> Union[str, Number]:
         if self._original_expression is None:
-            return str(self._sympified_expression)
+            return get_most_simple_representation(self._sympified_expression)
         else:
             return self._original_expression
 
