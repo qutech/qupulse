@@ -59,10 +59,11 @@ class Waveform(metaclass=ABCMeta):
 
     __sampled_cache = WeakValueDictionary()
 
-    __slots__ = ('_duration',)
+    __slots__ = ('_duration','_pow_2_divisor')
 
-    def __init__(self, duration: TimeType):
+    def __init__(self, duration: TimeType, _pow_2_divisor: int = 0):
         self._duration = duration
+        self._pow_2_divisor = _pow_2_divisor
 
     @property
     def duration(self) -> TimeType:

@@ -67,7 +67,7 @@ class PulseTemplate(Serializable):
         self._metadata = metadata
 
         self.__cached_hash_value = None
-
+        
     @property
     def metadata(self) -> TemplateMetadata:
         """The metadata is intended for information which does not concern the pulse itself but rather its usage.
@@ -157,7 +157,15 @@ class PulseTemplate(Serializable):
     def final_values(self) -> Dict[ChannelID, ExpressionScalar]:
         """Values of defined channels at t == self.duration"""
         raise NotImplementedError(f"The pulse template of type {type(self)} does not implement `final_values`")
-
+    
+    @property
+    def _pow_2_divisor(self) -> int:
+        """A hacky implementation of telling waveforms to be sampled at reduced rate.
+        The hardware implementation will be responsible for correctly handling this,
+        so do not use unless support is ascertained.
+        """
+        return getattr(self.metadata,'pow_2_divisor',0)
+    
     def create_program(self, *,
                        parameters: Optional[Mapping[str, Union[Expression, str, Number]]]=None,
                        measurement_mapping: Optional[Mapping[str, Optional[str]]]=None,
@@ -708,10 +716,12 @@ class AtomicPulseTemplate(PulseTemplate, MeasurementDefiner):
             measurements = self.get_measurement_windows(parameters=scope,
                                                         measurement_mapping=measurement_mapping)
             program_builder.measure(measurements)
-
+            
             if global_transformation:
                 waveform = TransformingWaveform.from_transformation(waveform, global_transformation)
-
+            
+            waveform._pow_2_divisor = self._pow_2_divisor
+            
             constant_values = waveform.constant_value_dict()
             if constant_values is None:
                 program_builder.play_arbitrary_waveform(waveform)

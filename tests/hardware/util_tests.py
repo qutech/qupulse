@@ -78,7 +78,25 @@ class SampleTimeCalculationTest(unittest.TestCase):
         np.testing.assert_equal(times, expected_times)
         np.testing.assert_equal(n_samples, np.asarray(4))
 
-
+    def test_pow_2_divisor(self):
+        sample_rate = TimeType.from_fraction(12, 5)
+        wf = DummyWaveform(duration=TimeType.from_fraction(400, 12))
+        
+        wf._pow_2_divisor = 3
+        times, n_samples = get_sample_times(wf, sample_rate_in_GHz=sample_rate)
+        
+        # the expected times are still at original sample rate, just with less
+        # max values, as the logic of having one time-array
+        # for all waveforms (which assumes a fixed sample rate)
+        # would not allow intercepting those here.
+        expected_times = np.arange(10) / float(sample_rate)
+        np.testing.assert_almost_equal(times, expected_times, decimal=10)
+        
+        #the segment length however comes back reduced, 10 instead of 80
+        expected_len = np.asarray(10)
+        np.testing.assert_equal(n_samples, expected_len)
+        
+        
 class NotNoneIndexTest(unittest.TestCase):
     def test_not_none_indices(self):
         self.assertEqual(([None, 0, 1, None, None, 2], 3),

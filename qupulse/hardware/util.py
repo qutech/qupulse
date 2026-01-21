@@ -132,7 +132,7 @@ def get_waveform_length(waveform: Waveform,
     Returns:
         Number of samples for the waveform
     """
-    segment_length = waveform.duration * sample_rate_in_GHz
+    segment_length = waveform.duration * sample_rate_in_GHz / 2**waveform._pow_2_divisor
 
     # __round__ is implemented for Fraction and gmpy2.mpq
     rounded_segment_length = round(segment_length)
