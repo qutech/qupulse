@@ -302,15 +302,30 @@ def sympify(expr: Union[str, Number, sympy.Expr, numpy.str_], **kwargs) -> sympy
             raise
 
 
+class _LosslessFloatPrinter(sympy.StrPrinter):
+    def _print_Float(self, f):
+        # Keep normal formatting unless it would break the round-trip
+        # for this we check using sympy.Float instead of sympy.sympify for performance reasons
+        normal_repr = super()._print_Float(f)
+        if sympy.Float(normal_repr) == f:
+            return normal_repr
+        else:
+            return sympy.srepr(f)
+
+
 def get_most_simple_representation(expression: sympy.Expr) -> Union[str, int, float]:
-    if expression.free_symbols:
-        return str(expression)
-    elif expression.is_Integer:
-        return int(expression)
-    elif expression.is_Float:
-        return float(expression)
-    else:
-        return str(expression)
+    str_repr = _LosslessFloatPrinter().doprint(expression)
+
+    # try if we have valid python literals
+    try:
+        return int(str_repr)
+    except ValueError:
+        pass
+    try:
+        return float(str_repr)
+    except ValueError:
+        pass
+    return str_repr
 
 
 def get_free_symbols(expression: sympy.Expr) -> Sequence[sympy.Symbol]:

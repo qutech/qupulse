@@ -451,6 +451,12 @@ class ExpressionScalarTests(unittest.TestCase):
         loaded = pickle.loads(dumped)
         self.assertEqual(expr, loaded)
 
+    def test_roundtrip(self):
+        original = ExpressionScalar("a * 16") / ExpressionScalar(12 / 5) * ExpressionScalar(4)
+        serialized = original.get_serialization_data()
+        deserialized = ExpressionScalar(serialized)
+        self.assertEqual(original, deserialized)
+
 
 class ExpressionExceptionTests(unittest.TestCase):
     def test_expression_variable_missing(self):
