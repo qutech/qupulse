@@ -29,7 +29,7 @@ _ExpressionType = TypeVar('_ExpressionType', bound='Expression')
 ALLOWED_NUMERIC_SCALAR_TYPES = (float, numpy.number, int, complex, bool, numpy.bool_, TimeType)
 
 SYMPY_NTOLERANCE = None
-_SYMPY_NTOLERANCE_NDIGITS = abs(int(np.log10(SYMPY_NTOLERANCE))) if SYMPY_NTOLERANCE is not None else None
+_SYMPY_NTOLERANCE_NDIGITS = abs(int(numpy.log10(SYMPY_NTOLERANCE))) if SYMPY_NTOLERANCE is not None else None
 
 
 def _parse_evaluate_numeric(result) -> Union[Number, numpy.ndarray]:
