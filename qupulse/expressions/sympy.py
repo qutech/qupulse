@@ -438,7 +438,8 @@ class ExpressionScalar(Expression):
     def get_serialization_data(self) -> Union[str, float, int]:
         serialized = get_most_simple_representation(self._sympified_expression)
         if isinstance(serialized, str):
-            return self.original_expression
+            # return self.original_expression
+            return serialized
         else:
             return serialized if SYMPY_NTOLERANCE is None else round(serialized,_SYMPY_NTOLERANCE_NDIGITS)
 
