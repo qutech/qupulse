@@ -29,7 +29,6 @@ _ExpressionType = TypeVar('_ExpressionType', bound='Expression')
 ALLOWED_NUMERIC_SCALAR_TYPES = (float, numpy.number, int, complex, bool, numpy.bool_, TimeType)
 
 SYMPY_NTOLERANCE = None
-_SYMPY_NTOLERANCE_NDIGITS = abs(int(numpy.log10(SYMPY_NTOLERANCE))) if SYMPY_NTOLERANCE is not None else None
 
 
 def _parse_evaluate_numeric(result) -> Union[Number, numpy.ndarray]:
@@ -441,7 +440,7 @@ class ExpressionScalar(Expression):
             # return self.original_expression
             return serialized
         else:
-            return serialized if SYMPY_NTOLERANCE is None else round(serialized,_SYMPY_NTOLERANCE_NDIGITS)
+            return serialized if SYMPY_NTOLERANCE is None else round(serialized,abs(int(numpy.log10(SYMPY_NTOLERANCE))))
 
     def __getstate__(self):
         return self.get_serialization_data()
