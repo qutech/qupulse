@@ -28,7 +28,8 @@ _ExpressionType = TypeVar('_ExpressionType', bound='Expression')
 
 ALLOWED_NUMERIC_SCALAR_TYPES = (float, numpy.number, int, complex, bool, numpy.bool_, TimeType)
 
-SYMPY_NTOLERANCE = None
+SYMPY_COMPARISON_TOLERANCE = None
+SYMPY_SERIALIZATION_TOLERANCE = None
 
 
 def _parse_evaluate_numeric(result) -> Union[Number, numpy.ndarray]:
@@ -376,10 +377,10 @@ class ExpressionScalar(Expression):
         # see https://github.com/sympy/sympy/issues/18054#issuecomment-566198899
         # 2026-01: for float inaccuracies in here, == can return False unexpectedly.
         # introduce Optional tolerance
-        if SYMPY_NTOLERANCE is None:
+        if SYMPY_COMPARISON_TOLERANCE is None:
             return self._sympified_expression == self._sympify(other)
         return not bool(sympy.nsimplify(self._sympified_expression-self._sympify(other),
-                                        tolerance=SYMPY_NTOLERANCE,full=False,rational=True))
+                                        tolerance=SYMPY_COMPARISON_TOLERANCE,full=False,rational=True))
 
     def __hash__(self) -> int:
         return hash(self._sympified_expression)
@@ -435,12 +436,12 @@ class ExpressionScalar(Expression):
         return self._sympified_expression
 
     def get_serialization_data(self) -> Union[str, float, int]:
-        serialized = get_most_simple_representation(self._sympified_expression,SYMPY_NTOLERANCE)
+        serialized = get_most_simple_representation(self._sympified_expression,SYMPY_SERIALIZATION_TOLERANCE)
         if isinstance(serialized, str):
             # return self.original_expression
             return serialized
         else:
-            return serialized if SYMPY_NTOLERANCE is None else round(serialized,abs(int(numpy.log10(SYMPY_NTOLERANCE))))
+            return serialized if SYMPY_SERIALIZATION_TOLERANCE is None else round(serialized,abs(int(numpy.log10(SYMPY_SERIALIZATION_TOLERANCE))))
 
     def __getstate__(self):
         return self.get_serialization_data()
