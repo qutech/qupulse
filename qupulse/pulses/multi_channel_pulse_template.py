@@ -15,6 +15,7 @@ from typing import Dict, List, Optional, Any, AbstractSet, Union, Set, Sequence,
 import numbers
 import warnings
 
+from qupulse.program import ProgramBuilder
 from qupulse.serialization import Serializer, PulseRegistryType
 from qupulse.parameter_scope import Scope
 
@@ -269,21 +270,13 @@ class ParallelChannelPulseTemplate(PulseTemplate):
                 for name, value in self.overwritten_channels.items()
                 if channel_mapping[name] is not None}
 
-    def _internal_create_program(self, *,
-                                 scope: Scope,
-                                 global_transformation: Optional[Transformation],
-                                 channel_mapping: Dict[ChannelID, Optional[ChannelID]],
-                                 **kwargs):
-        overwritten_channels = self._get_overwritten_channels_values(parameters=scope, channel_mapping=channel_mapping)
+    def _internal_build_program(self, program_builder: ProgramBuilder):
+        context = program_builder.build_context
+        overwritten_channels = self._get_overwritten_channels_values(parameters=context.scope,
+                                                                     channel_mapping=context.channel_mapping)
         transformation = ParallelChannelTransformation(overwritten_channels)
-
-        if global_transformation is not None:
-            transformation = chain_transformations(global_transformation, transformation)
-
-        self._template._create_program(scope=scope,
-                                       channel_mapping=channel_mapping,
-                                       global_transformation=transformation,
-                                       **kwargs)
+        with program_builder.with_transformation(transformation) as trafo_program_builder:
+            self._template._build_program(program_builder=trafo_program_builder)
 
     def build_waveform(self, parameters: Dict[str, numbers.Real],
                        channel_mapping: Dict[ChannelID, Optional[ChannelID]]) -> Optional[Waveform]:

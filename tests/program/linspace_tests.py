@@ -23,7 +23,7 @@ class SingleRampTest(TestCase):
         hold = ConstantPT(10 ** 6, {'a': '-1. + idx * 0.01'})
         self.pulse_template = hold.with_iteration('idx', 200)
 
-        self.program = LinSpaceTopLevel((LinSpaceIter(
+        self.program = LinSpaceProgram((LinSpaceIter(
             length=200,
             body=(LinSpaceHold(
                 bases=(-1.,),
@@ -31,8 +31,7 @@ class SingleRampTest(TestCase):
                 duration_base=TimeType(10**6),
                 duration_factors=None
             ),)
-        ),),
-        {'a',})
+        ),), ("a",))
 
         key = DepKey.from_voltages((0.01,), DEFAULT_INCREMENT_RESOLUTION)
 
@@ -112,7 +111,7 @@ class SequencedRepetitionTest(TestCase):
             duration_factors=None
         )
 
-        self.program = LinSpaceTopLevel((LinSpaceIter(
+        self.program = LinSpaceProgram((LinSpaceIter(
              length=rep_factor,
              body=(
                  dependent_hold_1,
@@ -120,7 +119,7 @@ class SequencedRepetitionTest(TestCase):
                  LinSpaceIter(body=(wait_hold,), length=rep_factor),
              )
         ),),
-        {'a','b'})
+            ('a','b'))
 
         self.commands = [
             Set(channel=0, value=-1.0, key=DepKey(factors=())),
@@ -209,7 +208,7 @@ class PrePostDepTest(TestCase):
         # self.pulse_template = (hold_random@(hold_random@hold).with_repetition(10)@hold_random@hold)\
         self.pulse_template = (hold_random @ hold.with_repetition(10)).with_iteration('idx', 200)
 
-        self.program = LinSpaceTopLevel((LinSpaceIter(
+        self.program = LinSpaceProgram((LinSpaceIter(
             length=200,
             body=(
                 LinSpaceHold(bases=(-.4,), factors=(None,), duration_base=TimeType(10**5), duration_factors=None),
@@ -218,7 +217,9 @@ class PrePostDepTest(TestCase):
                 ), count=10),
                 # LinSpaceHold(bases=(-.4),factors=None,duration_base=TimeType(10**6),duration_factors=None),
                 # LinSpaceHold(bases=(-1.,),factors=((0.01,),),duration_base=TimeType(10**6),duration_factors=None)
-            ),),),{'a',})
+            ),),),
+            ('a',)
+        )
 
         self.commands = [
             Set(channel=0, value=-0.4, key=DepKey(factors=())),
@@ -270,7 +271,7 @@ class PlainCSDTest(TestCase):
         scan_a = hold.with_iteration('idx_a', 200)
         self.pulse_template = scan_a.with_iteration('idx_b', 100)
 
-        self.program = LinSpaceTopLevel((LinSpaceIter(length=100, body=(LinSpaceIter(
+        self.program = LinSpaceProgram((LinSpaceIter(length=100, body=(LinSpaceIter(
             length=200,
             body=(LinSpaceHold(
                 bases=(-1., -0.5),
@@ -279,7 +280,7 @@ class PlainCSDTest(TestCase):
                 duration_base=TimeType(10**6),
                 duration_factors=None
             ),)
-        ),)),),{'a','b'})
+        ),)),), ('a', 'b'))
 
         key_0 = DepKey.from_voltages((0, 0.01,), DEFAULT_INCREMENT_RESOLUTION)
         key_1 = DepKey.from_voltages((0.02,), DEFAULT_INCREMENT_RESOLUTION)
@@ -342,7 +343,7 @@ class TiltedCSDTest(TestCase):
         self.pulse_template = scan_a.with_iteration('idx_b', 100)
         self.repeated_pt = self.pulse_template.with_repetition(repetition_count)
 
-        self.program = LinSpaceTopLevel((LinSpaceIter(length=100, body=(LinSpaceIter(
+        self.program = LinSpaceProgram((LinSpaceIter(length=100, body=(LinSpaceIter(
             length=200,
             body=(LinSpaceHold(
                 bases=(-1., -0.5),
@@ -351,8 +352,8 @@ class TiltedCSDTest(TestCase):
                 duration_base=TimeType(10**6),
                 duration_factors=None
             ),)
-        ),)),),{'a','b'})
-        self.repeated_program = LinSpaceTopLevel((LinSpaceRepeat(body=self.program.body, count=repetition_count),),{'a','b'})
+        ),)),), ('a', 'b'))
+        self.repeated_program = LinSpaceProgram((LinSpaceRepeat(body=self.program.root, count=repetition_count),), ('a', 'b'))
 
         key_0 = DepKey.from_voltages((1e-3, 0.01,), DEFAULT_INCREMENT_RESOLUTION)
         key_1 = DepKey.from_voltages((0.02, -3e-3), DEFAULT_INCREMENT_RESOLUTION)
@@ -440,7 +441,7 @@ class SingletLoadProcessing(TestCase):
         singlet_scan = (load_random @ wait @ meas).with_iteration('idx_a', 200).with_iteration('idx_b', 100)
         self.pulse_template = singlet_scan
 
-        self.program = LinSpaceTopLevel((LinSpaceIter(length=100, body=(LinSpaceIter(
+        self.program = LinSpaceProgram((LinSpaceIter(length=100, body=(LinSpaceIter(
             length=200,
             body=(
                 LinSpaceHold(bases=(-0.4, -0.3), factors=(None, None), duration_base=TimeType(10 ** 5),
@@ -453,7 +454,7 @@ class SingletLoadProcessing(TestCase):
                 LinSpaceHold(bases=(0.05, 0.06), factors=(None, None), duration_base=TimeType(10 ** 5),
                              duration_factors=None),
             )
-        ),)),),{'a','b'})
+        ),)),), ('a', 'b'))
 
         key_0 = DepKey.from_voltages((0, 0.01,), DEFAULT_INCREMENT_RESOLUTION)
         key_1 = DepKey.from_voltages((0.02,), DEFAULT_INCREMENT_RESOLUTION)
@@ -549,7 +550,7 @@ class TransformedRampTest(TestCase):
         self.pulse_template = hold.with_iteration('idx', 200)
         self.transformation = ScalingTransformation({'a': 2.0})
 
-        self.program = LinSpaceTopLevel((LinSpaceIter(
+        self.program = LinSpaceProgram((LinSpaceIter(
             length=200,
             body=(LinSpaceHold(
                 bases=(-2.,),
@@ -557,7 +558,7 @@ class TransformedRampTest(TestCase):
                 duration_base=TimeType(10 ** 6),
                 duration_factors=None
             ),)
-        ),),{'a',})
+        ),), ('a',))
 
     def test_global_trafo_program(self):
         program_builder = LinSpaceBuilder(('a',))
@@ -584,7 +585,7 @@ class HarmonicPulseTest(TestCase):
 
         self.sine_waveform = sine.build_waveform(parameters={}, channel_mapping={'a': 'a'})
 
-        self.program = LinSpaceTopLevel((LinSpaceIter(
+        self.program = LinSpaceProgram((LinSpaceIter(
             length=100,
             body=(LinSpaceHold(
                 bases=(-1.,),
@@ -597,7 +598,7 @@ class HarmonicPulseTest(TestCase):
                 channels=('a',)
             )
             )
-        ),),{'a',})
+        ),),('a',))
 
         key = DepKey.from_voltages((0.01,), DEFAULT_INCREMENT_RESOLUTION)
         self.commands = [

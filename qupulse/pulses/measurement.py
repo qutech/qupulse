@@ -35,7 +35,7 @@ class MeasurementDefiner:
 
     def get_measurement_windows(self,
                                 parameters: Union[Mapping[str, Real], Scope],
-                                measurement_mapping: Dict[str, Optional[str]]) -> List[MeasurementWindow]:
+                                measurement_mapping: Mapping[str, Optional[str]]) -> List[MeasurementWindow]:
         """Calculate measurement windows with the given parameter set and rename them with the measurement mapping. This
         method only returns the measurement windows that are defined on `self`. It does _not_ collect the measurement
         windows defined on eventual child objects that `self` has/is composed of.

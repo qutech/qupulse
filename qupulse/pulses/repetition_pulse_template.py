@@ -132,6 +132,26 @@ class RepetitionPulseTemplate(LoopPulseTemplate, ParameterConstrainer, Measureme
     def duration(self) -> ExpressionScalar:
         return self.repetition_count * self.body.duration
 
+    def _internal_build_program(self, program_builder: ProgramBuilder):
+        build_context = program_builder.build_context
+        scope = build_context.scope
+
+        repetition_count = self.get_repetition_count_value(scope)
+        if not (repetition_count > 0):
+            return
+
+        if scope.get_volatile_parameters().keys() & self.repetition_count.variables:
+            repetition_definition = VolatileRepetitionCount(self.repetition_count, scope)
+            assert int(repetition_definition) == repetition_count
+        else:
+            repetition_definition = repetition_count
+
+        measurements = self.get_measurement_windows(scope, build_context.measurement_mapping)
+        for repetition_program_builder in program_builder.with_repetition(repetition_definition, measurements=measurements):
+            self.body._build_program(repetition_program_builder)
+
+
+
     def _internal_create_program(self, *,
                                  scope: Scope,
                                  measurement_mapping: Dict[str, Optional[str]],
@@ -154,7 +174,7 @@ class RepetitionPulseTemplate(LoopPulseTemplate, ParameterConstrainer, Measureme
 
             for repetition_program_builder in program_builder.with_repetition(repetition_definition,
                                                                               measurements=measurements):
-                self.body._create_program(scope=repetition_program_builder.inner_scope(scope),
+                self.body._create_program(scope=repetition_program_builder.build_context.scope,
                                           measurement_mapping=measurement_mapping,
                                           channel_mapping=channel_mapping,
                                           global_transformation=global_transformation,

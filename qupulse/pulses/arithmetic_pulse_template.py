@@ -10,6 +10,7 @@ import operator
 import sympy
 
 from qupulse.expressions import ExpressionScalar, ExpressionLike
+from qupulse.program import ProgramBuilder
 from qupulse.serialization import Serializer, PulseRegistryType
 from qupulse.parameter_scope import Scope
 
@@ -381,29 +382,17 @@ class ArithmeticPulseTemplate(PulseTemplate):
                 ScalingTransformation(scalar_value)
             )
 
-    def _internal_create_program(self, *,
-                                 scope: Scope,
-                                 measurement_mapping: Dict[str, Optional[str]],
-                                 channel_mapping: Dict[ChannelID, Optional[ChannelID]],
-                                 global_transformation: Optional[Transformation],
-                                 to_single_waveform: Set[Union[str, 'PulseTemplate']],
-                                 program_builder: 'ProgramBuilder'):
-        """The operation is applied by modifying the transformation the pulse template operand sees."""
+    def _internal_build_program(self, program_builder: ProgramBuilder):
+        build_context = program_builder.build_context
+        scope = build_context.scope
         if not scope.get_volatile_parameters().keys().isdisjoint(self._scalar_operand_parameters):
             raise NotImplementedError('The scalar operand of arithmetic pulse template cannot be volatile')
 
-        # put arithmetic into transformation
         inner_transformation = self._get_transformation(parameters=scope,
-                                                        channel_mapping=channel_mapping)
+                                                        channel_mapping=build_context.channel_mapping)
+        with program_builder.with_transformation(inner_transformation):
+            self._pulse_template._build_program(program_builder=program_builder)
 
-        transformation = inner_transformation.chain(global_transformation)
-
-        self._pulse_template._create_program(scope=scope,
-                                             measurement_mapping=measurement_mapping,
-                                             channel_mapping=channel_mapping,
-                                             global_transformation=transformation,
-                                             to_single_waveform=to_single_waveform,
-                                             program_builder=program_builder)
 
     def build_waveform(self,
                        parameters: Dict[str, Real],

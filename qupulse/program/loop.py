@@ -3,7 +3,8 @@
 # SPDX-License-Identifier: LGPL-3.0-or-later
 
 """Program builder implementation that creates the legacy :py:class:`.Loop`."""
-
+import contextlib
+import copy
 import reprlib
 import warnings
 from collections import defaultdict, OrderedDict
@@ -11,18 +12,21 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from enum import Enum
 from typing import Set, Union, Iterable, Optional, Sequence, Tuple, List, \
-    Generator, Mapping, cast, Dict, ContextManager, Any
+    Generator, Mapping, cast, Dict, ContextManager, Any, AbstractSet
 
 import numpy as np
 
-from qupulse.parameter_scope import Scope
+from qupulse.expressions import Expression
+from qupulse.parameter_scope import Scope, DictScope
 from qupulse.program import ProgramBuilder
+from qupulse.program.protocol import BuildContext, BuildSettings, BaseProgramBuilder
 from qupulse.program.values import RepetitionCount, HardwareTime, HardwareVoltage
-from qupulse.program.transformation import Transformation
+from qupulse.program.transformation import Transformation, chain_transformations
 from qupulse.program.volatile import VolatileRepetitionCount, VolatileProperty, VolatileModificationWarning
 from qupulse.program.waveforms import SequenceWaveform, RepetitionWaveform
 from qupulse.program.waveforms import TransformingWaveform
 from qupulse.program.waveforms import Waveform, ConstantWaveform
+from qupulse.pulses.metadata import TemplateMetadata
 from qupulse.pulses.range import RangeScope
 from qupulse.utils import is_integer
 from qupulse.utils.numeric import smallest_factor_ge
@@ -136,7 +140,7 @@ class Loop(Node):
         else:
             self._measurements.extend(measurements)
 
-    def get_defined_channels(self) -> Set[ChannelID]:
+    def get_defined_channels(self) -> AbstractSet[ChannelID]:
         return next(self.get_depth_first_iterator()).waveform.defined_channels    
 
     @property
@@ -768,11 +772,10 @@ class LoopGuard:
 @dataclass
 class StackFrame:
     loop: Union[Loop, LoopGuard]
-
     iterating: Optional[Tuple[str, int]]
 
 
-class LoopBuilder(ProgramBuilder):
+class LoopBuilder(BaseProgramBuilder):
     """
 
     Notes fduring implementation:
@@ -780,18 +783,13 @@ class LoopBuilder(ProgramBuilder):
 
     """
 
-    def __init__(self):
+    def __init__(self, initial_context: BuildContext = None, initial_settings: BuildSettings = None):
+        super().__init__(initial_context, initial_settings)
+
         self._root: Loop = Loop()
         self._top: Union[Loop, LoopGuard] = self._root
 
         self._stack: List[StackFrame] = [StackFrame(self._root, None)]
-
-    def inner_scope(self, scope: Scope) -> Scope:
-        local_vars = self._stack[-1].iterating
-        if local_vars is None:
-            return scope
-        else:
-            return RangeScope(scope, *local_vars)
 
     def _push(self, stack_entry: StackFrame):
         self._top = stack_entry.loop
@@ -824,13 +822,18 @@ class LoopBuilder(ProgramBuilder):
                        measurements: Optional[Sequence[MeasurementWindow]] = None) -> Iterable['ProgramBuilder']:
         with self.with_sequence(measurements):
             top_frame = self._stack[-1]
+            context = copy.copy(self.build_context)
+            base_scope = context.scope
+            self._build_context_stack.append(context)
             for value in rng:
                 top_frame.iterating = (index_name, value)
+                context.scope = RangeScope(base_scope, index_name, value)
                 yield self
+            self._build_context_stack.pop()
 
     @contextmanager
-    def time_reversed(self) -> ContextManager['LoopBuilder']:
-        inner_builder = LoopBuilder()
+    def time_reversed(self):
+        inner_builder = LoopBuilder(self.build_context, self.build_settings)
         yield inner_builder
         inner_program = inner_builder.to_program()
 
@@ -839,21 +842,21 @@ class LoopBuilder(ProgramBuilder):
             self._try_append(inner_program, None)
 
     @contextmanager
-    def with_sequence(self, measurements: Optional[Sequence[MeasurementWindow]] = None) -> ContextManager['ProgramBuilder']:
+    def with_sequence(self, measurements: Optional[Sequence[MeasurementWindow]] = None):
         top_frame = StackFrame(LoopGuard(self._top, measurements), None)
         self._push(top_frame)
         yield self
         self._pop()
 
-    def hold_voltage(self, duration: HardwareTime, voltages: Mapping[str, HardwareVoltage]):
+    def _transformed_hold_voltage(self, duration: HardwareTime, voltages: Mapping[str, HardwareVoltage]):
         self.play_arbitrary_waveform(ConstantWaveform.from_mapping(duration, voltages))
 
-    def play_arbitrary_waveform(self, waveform: Waveform):
+    def _transformed_play_arbitrary_waveform(self, waveform: Waveform):
         self._top.append_child(waveform=waveform)
 
     @contextmanager
-    def new_subprogram(self, global_transformation: Transformation = None) -> ContextManager['ProgramBuilder']:
-        inner_builder = LoopBuilder()
+    def new_subprogram(self, global_transformation: Transformation = None):
+        inner_builder = LoopBuilder(self.build_context, self.build_settings)
         yield inner_builder
         inner_program = inner_builder.to_program()
 
@@ -867,13 +870,13 @@ class LoopBuilder(ProgramBuilder):
                 waveform = TransformingWaveform.from_transformation(waveform, global_transformation)
             self.play_arbitrary_waveform(waveform)
 
-    def to_program(self, defined_channels: Set[ChannelID] = set()) -> Optional[Loop]:
-        #!!! the defined_channels argument is for convenience for HDAWGLinspacebuilder
-        # and not needed here.
+    def to_program(self) -> Optional[Loop]:
         if len(self._stack) != 1:
             warnings.warn("Creating program with active build stack.")
         if self._root.waveform or len(self._root.children) != 0:
             return self._root
+        else:
+            return None
 
     @classmethod
     def _testing_dummy(cls, stack):

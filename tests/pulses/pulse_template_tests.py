@@ -81,7 +81,7 @@ class PulseTemplateStub(PulseTemplate):
                                  channel_mapping: Dict[ChannelID, Optional[ChannelID]],
                                  global_transformation: Optional[Transformation],
                                  to_single_waveform: Set[Union[str, 'PulseTemplate']],
-                                 parent_loop: Loop):
+                                 program_builder):
         raise NotImplementedError()
 
     @property
@@ -215,12 +215,13 @@ class PulseTemplateTest(unittest.TestCase):
 
         template = PulseTemplateStub()
         with mock.patch.object(template, '_internal_create_program') as _internal_create_program:
-            template._create_program(scope=scope,
-                                     measurement_mapping=measurement_mapping,
-                                     channel_mapping=channel_mapping,
-                                     global_transformation=global_transformation,
-                                     to_single_waveform=to_single_waveform,
-                                     program_builder=program_builder)
+            with self.assertWarns(DeprecationWarning):
+                template._create_program(scope=scope,
+                                         measurement_mapping=measurement_mapping,
+                                         channel_mapping=channel_mapping,
+                                         global_transformation=global_transformation,
+                                         to_single_waveform=to_single_waveform,
+                                         program_builder=program_builder)
 
             _internal_create_program.assert_called_once_with(
                 scope=scope,
@@ -234,12 +235,13 @@ class PulseTemplateTest(unittest.TestCase):
 
             with self.assertRaisesRegex(NotImplementedError, "volatile"):
                 template._parameter_names = {'c'}
-                template._create_program(scope=scope,
-                                         measurement_mapping=measurement_mapping,
-                                         channel_mapping=channel_mapping,
-                                         global_transformation=global_transformation,
-                                         to_single_waveform={template},
-                                         program_builder=program_builder)
+                with self.assertWarns(DeprecationWarning):
+                    template._create_program(scope=scope,
+                                             measurement_mapping=measurement_mapping,
+                                             channel_mapping=channel_mapping,
+                                             global_transformation=global_transformation,
+                                             to_single_waveform={template},
+                                             program_builder=program_builder)
 
     def test__create_program_single_waveform(self):
         template = PulseTemplateStub(identifier='pt_identifier', parameter_names={'alpha'})
@@ -276,12 +278,13 @@ class PulseTemplateTest(unittest.TestCase):
                     with mock.patch('qupulse.program.loop.to_waveform',
                                     return_value=single_waveform) as to_waveform:
                         with mock.patch('qupulse.program.loop.LoopBuilder', return_value=inner_program_builder):
-                            template._create_program(scope=scope,
-                                                     measurement_mapping=measurement_mapping,
-                                                     channel_mapping=channel_mapping,
-                                                     global_transformation=global_transformation,
-                                                     to_single_waveform=to_single_waveform,
-                                                     program_builder=program_builder)
+                            with self.assertWarns(DeprecationWarning):
+                                template._create_program(scope=scope,
+                                                         measurement_mapping=measurement_mapping,
+                                                         channel_mapping=channel_mapping,
+                                                         global_transformation=global_transformation,
+                                                         to_single_waveform=to_single_waveform,
+                                                         program_builder=program_builder)
 
                         _internal_create_program.assert_called_once_with(scope=scope,
                                                                          measurement_mapping=measurement_mapping,

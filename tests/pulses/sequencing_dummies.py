@@ -3,6 +3,7 @@ import numbers
 import typing
 from typing import Tuple, List, Dict, Optional, Set, Any, Union, Mapping
 import copy
+from unittest import mock
 
 import numpy
 import unittest
@@ -189,9 +190,24 @@ class DummyPulseTemplate(AtomicPulseTemplate):
         if integrals is not None:
             assert isinstance(integrals, Mapping)
 
+        self._internal_build_program = mock.MagicMock(wraps=self._internal_build_program)
+
     @property
     def duration(self):
         return self._duration
+
+    def _internal_build_program(self, program_builder: ProgramBuilder):
+        measurements = self.get_measurement_windows(program_builder.build_context.scope,
+                                                    measurement_mapping=program_builder.build_context.measurement_mapping)
+        if self._program:
+            program_builder = typing.cast(program_builder, qupulse.program.loop.LoopBuilder)
+            parent_loop = program_builder._top
+
+            parent_loop.add_measurements(measurements)
+            parent_loop.append_child(waveform=self._program.waveform, children=self._program.children)
+        elif self.waveform:
+            program_builder.measure(measurements)
+            program_builder.play_arbitrary_waveform(waveform=self.waveform)
 
     @property
     def parameter_names(self) -> Set[str]:

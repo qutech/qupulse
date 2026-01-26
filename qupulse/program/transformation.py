@@ -107,6 +107,9 @@ class IdentityTransformation(Transformation, metaclass=SingletonABCMeta):
     def get_constant_output_channels(self, input_channels: AbstractSet[ChannelID]) -> AbstractSet[ChannelID]:
         return input_channels
 
+    def __bool__(self):
+        return False
+
 
 class ChainedTransformation(Transformation):
     __slots__ = ('_transformations',)

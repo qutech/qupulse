@@ -414,7 +414,9 @@ class ParallelChannelPulseTemplateTests(unittest.TestCase):
                                       measurement_names={'M'}, waveform=DummyWaveform())
         overwritten_channels = {'Y': 'c', 'Z': 'a', 'ToNone': 'foo'}
 
-        program_builder = object()
+        program_builder = mock.Mock()
+        program_builder.with_transformation = mock.MagicMock()
+
         measurement_mapping = object()
         channel_mapping = {'Y': 'O', 'Z': 'Z', 'X': 'X', 'ToNone': None}
         to_single_waveform = object()
@@ -426,24 +428,25 @@ class ParallelChannelPulseTemplateTests(unittest.TestCase):
         pccpt = ParallelChannelPulseTemplate(template, overwritten_channels)
 
         scope = DictScope.from_kwargs(c=1.2, a=3.4)
-        kwargs = {**other_kwargs, 'scope': scope, 'global_transformation': None}
-
         expected_overwritten_channels = {'O': 1.2, 'Z': 3.4}
         expected_transformation = ParallelChannelTransformation(expected_overwritten_channels)
-        expected_kwargs = {**kwargs, 'global_transformation': expected_transformation}
 
-        with mock.patch.object(template, '_create_program', spec=template._create_program) as cp_mock:
-            pccpt._internal_create_program(**kwargs)
-            cp_mock.assert_called_once_with(**expected_kwargs)
+        program_builder.build_context = mock.Mock()
+        program_builder.build_context.scope = scope
+        program_builder.build_context.channel_mapping = channel_mapping
+
+        with mock.patch.object(template, '_build_program', spec=template._build_program) as cp_mock:
+            pccpt._internal_build_program(program_builder)
+            program_builder.with_transformation.assert_called_once_with(expected_transformation)
+            cp_mock.assert_called_once_with(program_builder=program_builder.with_transformation.return_value.__enter__.return_value)
 
         global_transformation = LinearTransformation(numpy.zeros((0, 0)), [], [])
         expected_transformation = chain_transformations(global_transformation, expected_transformation)
-        kwargs = {**other_kwargs, 'scope': scope, 'global_transformation': global_transformation}
-        expected_kwargs = {**kwargs, 'global_transformation': expected_transformation}
 
-        with mock.patch.object(template, '_create_program', spec=template._create_program) as cp_mock:
-            pccpt._internal_create_program(**kwargs)
-            cp_mock.assert_called_once_with(**expected_kwargs)
+        with mock.patch.object(template, '_build_program', spec=template._build_program) as cp_mock:
+            pccpt._internal_build_program(program_builder)
+            program_builder.with_transformation.assert_called_once_with(expected_transformation)
+            cp_mock.assert_called_once_with(program_builder=program_builder.with_transformation.return_value.__enter__.return_value)
 
     def test_build_waveform(self):
         template = DummyPulseTemplate(duration='t1', defined_channels={'X', 'Y'}, parameter_names={'a', 'b'},
