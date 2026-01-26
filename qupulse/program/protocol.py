@@ -34,6 +34,8 @@ class Program(Protocol):
 
 @dataclasses.dataclass
 class BuildContext:
+    """This dataclass bundles the mutable context information during the build."""
+
     scope: Scope = None
     measurement_mapping: Mapping[str, Optional[str]] = None
     channel_mapping: Mapping[ChannelID, Optional[ChannelID]] = None
@@ -50,7 +52,6 @@ class BuildContext:
             scope = MappedScope(scope=scope, mapping=parameter_mapping)
         mapped_measurement_mapping = self.measurement_mapping
         if measurement_mapping is not None:
-            # bruh
             mapped_measurement_mapping = {k: mapped_measurement_mapping[v] for k, v in measurement_mapping.items()}
         mapped_channel_mapping = self.channel_mapping
         if channel_mapping is not None:
@@ -59,8 +60,9 @@ class BuildContext:
         return BuildContext(scope=scope, measurement_mapping=mapped_measurement_mapping, channel_mapping=mapped_channel_mapping, transformation=self.transformation, minimal_sample_rate=self.minimal_sample_rate)
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class BuildSettings:
+    """This dataclass bundles the immutable settings."""
     to_single_waveform: AbstractSet[str | object]
 
 
@@ -71,10 +73,10 @@ class ProgramBuilder(Protocol):
 
     The pulse templates call the methods that correspond to their functionality on the program builder. For example,
     :py:class:`.ConstantPulseTemplate` translates itself into a simple :py:meth:`.ProgramBuilder.hold_voltage` call while
-    :class:`SequencePulseTemplate` uses :py:meth:`.ProgramBuilder.with_sequence` to signify a logical unit with
+    :py:class:`SequencePulseTemplate` uses :py:meth:`.ProgramBuilder.with_sequence` to signify a logical unit with
     attached measurements and passes the resulting object to the sequenced sub-templates.
 
-    Due to backward compatibility the handling of measurements is a bit weird since they have to be omitted in certain
+    Due to backward compatibility, the handling of measurements is a bit weird since they have to be omitted in certain
     cases. However, this is not relevant for HDAWG specific implementations because these are expected to ignore
     :py:meth:`.ProgramBuilder.measure` calls.
 
@@ -100,7 +102,6 @@ class ProgramBuilder(Protocol):
                  global_transformation: Optional[Transformation] = None,
                  to_single_waveform: AbstractSet[str | object] = None,):
         """Override the non-None values in context and settings"""
-
 
     @abstractmethod
     def with_mappings(self, *,
@@ -223,6 +224,11 @@ class ProgramBuilder(Protocol):
 
 
 class BaseProgramBuilder(ProgramBuilder, ABC):
+    """Helper base class for program builder to reduce code duplication. The interface is defined by :py:class:`ProgramBuilder`.
+
+    This class provides shared functionality for context and settings and correct transformation handling.
+    """
+
     def __init__(self, initial_context: BuildContext = None, initial_settings: BuildSettings = None):
         self._build_context_stack: list[BuildContext] = [BuildContext() if initial_context is None else initial_context]
         self._build_settings_stack: list[BuildSettings] = [BuildSettings(set()) if initial_settings is None else initial_settings]
@@ -267,13 +273,6 @@ class BaseProgramBuilder(ProgramBuilder, ABC):
 
     @contextmanager
     def with_metadata(self, metadata: TemplateMetadata):
-        """to single waveform
-
-        can be set in the pulse_template metadata or in the build_settings
-
-         - Should the program_builder know which template is translated currently?
-        """
-
         # metadata.to_single_waveform == "always" is handled in PulseTemplate._build_program
         if metadata.minimal_sample_rate is not None:
             with self._with_patched_context(minimal_sample_rate=metadata.minimal_sample_rate) as builder:
@@ -302,11 +301,12 @@ class BaseProgramBuilder(ProgramBuilder, ABC):
 
     @abstractmethod
     def _transformed_hold_voltage(self, duration: HardwareTime, voltages: Mapping[str, HardwareVoltage]):
-        """"""
+        """This internal function gets the constant voltage values transformed by the current built context's transformation.
+        """
 
     @abstractmethod
     def _transformed_play_arbitrary_waveform(self, waveform: Waveform):
-        """"""
+        """This internal function gets the waveform transformed by the current built context's transformation."""
 
     def play_arbitrary_waveform(self, waveform: Waveform):
         transformation = self.build_context.transformation
