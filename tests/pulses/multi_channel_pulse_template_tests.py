@@ -440,14 +440,6 @@ class ParallelChannelPulseTemplateTests(unittest.TestCase):
             program_builder.with_transformation.assert_called_once_with(expected_transformation)
             cp_mock.assert_called_once_with(program_builder=program_builder.with_transformation.return_value.__enter__.return_value)
 
-        global_transformation = LinearTransformation(numpy.zeros((0, 0)), [], [])
-        expected_transformation = chain_transformations(global_transformation, expected_transformation)
-
-        with mock.patch.object(template, '_build_program', spec=template._build_program) as cp_mock:
-            pccpt._internal_build_program(program_builder)
-            program_builder.with_transformation.assert_called_once_with(expected_transformation)
-            cp_mock.assert_called_once_with(program_builder=program_builder.with_transformation.return_value.__enter__.return_value)
-
     def test_build_waveform(self):
         template = DummyPulseTemplate(duration='t1', defined_channels={'X', 'Y'}, parameter_names={'a', 'b'},
                                       measurement_names={'M'}, waveform=DummyWaveform())

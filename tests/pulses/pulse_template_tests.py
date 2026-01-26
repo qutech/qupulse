@@ -8,6 +8,7 @@ import frozendict
 import sympy
 
 from qupulse.parameter_scope import Scope, DictScope
+from qupulse.program.transformation import IdentityTransformation
 from qupulse.pulses.sequence_pulse_template import SequencePulseTemplate
 from qupulse.utils.types import ChannelID
 from qupulse.expressions import Expression, ExpressionScalar
@@ -104,6 +105,19 @@ class PulseTemplateStub(PulseTemplate):
             return self._final_values
 
 
+def get_appending_internal_build_program(waveform=DummyWaveform(),
+                                         always_append=False,
+                                         measurements: list=None):
+    def internal_create_program(program_builder: ProgramBuilder):
+        scope = program_builder.build_context.scope
+        if always_append or 'append_a_child' in scope:
+            if measurements is not None:
+                program_builder.measure(measurements=measurements)
+            program_builder.play_arbitrary_waveform(waveform=waveform)
+
+    return internal_create_program
+
+
 def get_appending_internal_create_program(waveform=DummyWaveform(),
                                           always_append=False,
                                           measurements: list=None):
@@ -176,7 +190,7 @@ class PulseTemplateTest(unittest.TestCase):
         expected_scope = DictScope.from_kwargs(foo=2.126, bar=-26.2, hugo=math.exp(math.sin(math.pi/2)),
                                                volatile=volatile, append_a_child=1)
         to_single_waveform = {'voll', 'toggo'}
-        global_transformation = TransformationStub()
+        global_transformation = IdentityTransformation()
 
         expected_internal_kwargs = dict(scope=expected_scope,
                                         measurement_mapping=measurement_mapping,
@@ -190,16 +204,18 @@ class PulseTemplateTest(unittest.TestCase):
         program_builder = LoopBuilder()
 
         with mock.patch.object(template,
-                               '_create_program',
-                               wraps=get_appending_internal_create_program(dummy_waveform)) as _create_program:
-            with mock.patch('qupulse.pulses.pulse_template.default_program_builder', return_value=program_builder):
-                program = template.create_program(parameters=parameters,
-                                                  measurement_mapping=measurement_mapping,
-                                                  channel_mapping=channel_mapping,
-                                                  to_single_waveform=to_single_waveform,
-                                                  global_transformation=global_transformation,
-                                                  volatile=volatile)
-            _create_program.assert_called_once_with(**expected_internal_kwargs, program_builder=program_builder)
+                               '_build_program',
+                               wraps=get_appending_internal_build_program(dummy_waveform)) as _build_program:
+            with mock.patch.object(program_builder, "override", wraps=program_builder.override) as override:
+                with mock.patch('qupulse.pulses.pulse_template.default_program_builder', return_value=program_builder):
+                    program = template.create_program(parameters=parameters,
+                                                      measurement_mapping=measurement_mapping,
+                                                      channel_mapping=channel_mapping,
+                                                      to_single_waveform=to_single_waveform,
+                                                      global_transformation=global_transformation,
+                                                      volatile=volatile)
+            override.assert_called_once_with(**expected_internal_kwargs)
+            _build_program.assert_called_once_with(program_builder=program_builder)
         self.assertEqual(expected_program, program)
         self.assertEqual(previos_measurement_mapping, measurement_mapping)
         self.assertEqual(previous_channel_mapping, channel_mapping)
@@ -333,10 +349,11 @@ class PulseTemplateTest(unittest.TestCase):
                                         to_single_waveform=set())
 
         with mock.patch('qupulse.pulses.pulse_template.default_program_builder') as pb:
-            with mock.patch.object(template, '_internal_create_program') as _internal_create_program:
+            with mock.patch.object(template, '_build_program') as _build_program:
                 template.create_program(channel_mapping={'A': 'C'})
             pb.assert_called_once_with()
-            _internal_create_program.assert_called_once_with(**expected_internal_kwargs, program_builder=pb.return_value)
+            pb.return_value.override.assert_called_once_with(**expected_internal_kwargs)
+            _build_program.assert_called_once_with(program_builder=pb.return_value)
 
     def test_create_program_volatile(self):
         template = PulseTemplateStub(defined_channels={'A', 'B'})
@@ -699,7 +716,7 @@ class WithMethodTests(unittest.TestCase):
 
 class AtomicPulseTemplateTests(unittest.TestCase):
 
-    def test_internal_create_program(self) -> None:
+    def test_internal_build_program(self) -> None:
         measurement_windows = [('M', 0, 5)]
         single_wf = DummyWaveform(duration=6, defined_channels={'A'})
         wf = MultiChannelWaveform([single_wf])
@@ -712,19 +729,21 @@ class AtomicPulseTemplateTests(unittest.TestCase):
 
         expected_program = Loop(children=[Loop(waveform=wf)],
                                 measurements=[('N', 0, 5)])
+        program_builder.override(
+            scope=scope,
+            measurement_mapping=measurement_mapping,
+            channel_mapping=channel_mapping,
+            global_transformation=None,
+            to_single_waveform=set()
+        )
 
         with mock.patch.object(template, 'build_waveform', return_value=wf) as build_waveform:
-            template._internal_create_program(scope=scope,
-                                              measurement_mapping=measurement_mapping,
-                                              channel_mapping=channel_mapping,
-                                              program_builder=program_builder,
-                                              to_single_waveform=set(),
-                                              global_transformation=None)
+            template._internal_build_program(program_builder=program_builder)
             build_waveform.assert_called_once_with(parameters=scope, channel_mapping=channel_mapping)
         program = program_builder.to_program()
         self.assertEqual(expected_program, program)
 
-    def test_internal_create_program_transformation(self):
+    def test_internal_build_program_transformation(self):
         inner_wf = DummyWaveform()
         template = AtomicPulseTemplateStub(parameter_names=set())
         program_builder = LoopBuilder()
@@ -732,17 +751,14 @@ class AtomicPulseTemplateTests(unittest.TestCase):
         scope = DictScope.from_kwargs()
         expected_program = Loop(children=[Loop(waveform=TransformingWaveform(inner_wf, global_transformation))])
 
+        program_builder.override(scope=scope, global_transformation=global_transformation)
+
         with mock.patch.object(template, 'build_waveform', return_value=inner_wf):
-            template._internal_create_program(scope=scope,
-                                              measurement_mapping={},
-                                              channel_mapping={},
-                                              program_builder=program_builder,
-                                              to_single_waveform=set(),
-                                              global_transformation=global_transformation)
+            template._internal_build_program(program_builder=program_builder)
         program = program_builder.to_program()
         self.assertEqual(expected_program, program)
 
-    def test_internal_create_program_no_waveform(self) -> None:
+    def test_internal_build_program_no_waveform(self) -> None:
         measurement_windows = [('M', 0, 5)]
 
         template = AtomicPulseTemplateStub(measurements=measurement_windows, parameter_names={'foo'})
@@ -750,37 +766,39 @@ class AtomicPulseTemplateTests(unittest.TestCase):
         measurement_mapping = {'M': 'N'}
         channel_mapping = {'B': 'A'}
         program_builder = LoopBuilder()
-
-        expected_program = Loop()
+        program_builder.override(
+            scope=scope,
+            measurement_mapping=measurement_mapping,
+            channel_mapping=channel_mapping,
+            global_transformation=None,
+            to_single_waveform=set()
+        )
 
         with mock.patch.object(template, 'build_waveform', return_value=None) as build_waveform:
             with mock.patch.object(template,
                                    'get_measurement_windows',
                                    wraps=template.get_measurement_windows) as get_meas_windows:
-                template._internal_create_program(scope=scope,
-                                                  measurement_mapping=measurement_mapping,
-                                                  channel_mapping=channel_mapping,
-                                                  program_builder=program_builder,
-                                                  to_single_waveform=set(),
-                                                  global_transformation=None)
+                template._internal_build_program(program_builder=program_builder)
                 build_waveform.assert_called_once_with(parameters=scope, channel_mapping=channel_mapping)
                 get_meas_windows.assert_not_called()
 
         self.assertIsNone(program_builder.to_program())
 
-    def test_internal_create_program_volatile(self):
+    def test_internal_build_program_volatile(self):
         template = AtomicPulseTemplateStub(parameter_names={'foo'})
         scope = DictScope.from_kwargs(foo=3.5, bar=3, volatile={'foo'})
         measurement_mapping = {'M': 'N'}
         channel_mapping = {'B': 'A'}
 
         program_builder = LoopBuilder()
+        program_builder.override(
+            scope=scope,
+            measurement_mapping=measurement_mapping,
+            channel_mapping=channel_mapping,
+            global_transformation=None,
+            to_single_waveform=set()
+        )
 
         with self.assertRaisesRegex(AssertionError, "volatile"):
-            template._internal_create_program(scope=scope,
-                                              measurement_mapping=measurement_mapping,
-                                              channel_mapping=channel_mapping,
-                                              program_builder=program_builder,
-                                              to_single_waveform=set(),
-                                              global_transformation=None)
+            template._internal_build_program(program_builder=program_builder)
         self.assertIsNone(program_builder.to_program())
