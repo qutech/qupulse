@@ -304,8 +304,27 @@ class _LosslessFloatPrinter(sympy.StrPrinter):
             return sympy.srepr(f)
 
 
-def get_most_simple_representation(expression: sympy.Expr) -> Union[str, int, float]:
-    str_repr = _LosslessFloatPrinter().doprint(expression)
+class _LossyFloatPrinter(sympy.StrPrinter):
+    def __init__(self,precision:float):
+        super().__init__()
+        self._precision = precision
+        
+    def _print_Float(self, f):
+        # Keep normal formatting unless it would break the round-trip
+        # for this we check using sympy.Float instead of sympy.sympify for performance reasons
+        normal_repr = super()._print_Float(f)
+        if not bool(sympy.nsimplify(sympy.Float(normal_repr)-f,tolerance=self._precision,full=False,rational=True)):
+        # if sympy.Float(normal_repr) == f:
+            return round(sympy.Float(normal_repr),abs(int(numpy.log10(self._precision))))
+        else:
+            return sympy.srepr(f)
+
+
+def get_most_simple_representation(expression: sympy.Expr, precision=None) -> Union[str, int, float]:
+    if precision is not None:
+        str_repr = _LossyFloatPrinter(precision).doprint(expression)
+    else:
+        str_repr = _LosslessFloatPrinter().doprint(expression)
 
     # try if we have valid python literals
     try:
