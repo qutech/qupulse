@@ -315,7 +315,7 @@ class _LossyFloatPrinter(sympy.StrPrinter):
         normal_repr = super()._print_Float(f)
         if not bool(sympy.nsimplify(sympy.Float(normal_repr)-f,tolerance=self._precision,full=False,rational=True)):
         # if sympy.Float(normal_repr) == f:
-            return round(sympy.Float(normal_repr),abs(int(numpy.log10(self._precision))))
+            return str(round(sympy.Float(normal_repr),abs(int(numpy.log10(self._precision)))))
         else:
             return sympy.srepr(f)
 
