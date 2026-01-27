@@ -273,7 +273,7 @@ class LinSpaceBuilder(BaseProgramBuilder):
 
     @contextlib.contextmanager
     def with_sequence(self,
-                      measurements: Optional[Sequence[MeasurementWindow]] = None) -> ContextManager['ProgramBuilder']:
+                      measurements: Optional[Sequence[MeasurementWindow]] = None) -> Iterable['ProgramBuilder']:
         yield self
 
     def new_subprogram(self, global_transformation: 'Transformation' = None) -> ContextManager['ProgramBuilder']:
@@ -294,7 +294,7 @@ class LinSpaceBuilder(BaseProgramBuilder):
             self._stack[-1].append(LinSpaceIter(body=tuple(cmds), length=len(rng)))
 
     @contextlib.contextmanager
-    def time_reversed(self) -> ContextManager['LinSpaceBuilder']:
+    def time_reversed(self) -> Iterable['LinSpaceBuilder']:
         self._stack.append([])
         yield self
         inner = self._stack.pop()

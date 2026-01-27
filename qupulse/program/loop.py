@@ -12,7 +12,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from enum import Enum
 from typing import Set, Union, Iterable, Optional, Sequence, Tuple, List, \
-    Generator, Mapping, cast, Dict, ContextManager, Any, AbstractSet
+    Generator, Mapping, cast, Dict, ContextManager, Any, AbstractSet, Iterator
 
 import numpy as np
 
@@ -832,7 +832,7 @@ class LoopBuilder(BaseProgramBuilder):
             self._build_context_stack.pop()
 
     @contextmanager
-    def time_reversed(self):
+    def time_reversed(self) -> Iterator[ProgramBuilder]:
         inner_builder = LoopBuilder(self.build_context, self.build_settings)
         yield inner_builder
         inner_program = inner_builder.to_program()
@@ -842,7 +842,7 @@ class LoopBuilder(BaseProgramBuilder):
             self._try_append(inner_program, None)
 
     @contextmanager
-    def with_sequence(self, measurements: Optional[Sequence[MeasurementWindow]] = None):
+    def with_sequence(self, measurements: Optional[Sequence[MeasurementWindow]] = None) -> Iterator[ProgramBuilder]:
         top_frame = StackFrame(LoopGuard(self._top, measurements), None)
         self._push(top_frame)
         yield self
@@ -855,7 +855,7 @@ class LoopBuilder(BaseProgramBuilder):
         self._top.append_child(waveform=waveform)
 
     @contextmanager
-    def new_subprogram(self, global_transformation: Transformation = None):
+    def new_subprogram(self, global_transformation: Transformation = None) -> Iterator[ProgramBuilder]:
         inner_builder = LoopBuilder(self.build_context, self.build_settings)
         yield inner_builder
         inner_program = inner_builder.to_program()
