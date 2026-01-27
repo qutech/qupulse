@@ -11,6 +11,7 @@ Classes:
 import itertools
 import operator
 import warnings
+import dataclasses
 from abc import ABCMeta, abstractmethod
 from numbers import Real
 from typing import (
@@ -53,13 +54,41 @@ def _to_time_type(duration: Real) -> TimeType:
         return time_from_float(float(duration), absolute_error=PULSE_TO_WAVEFORM_ERROR)
 
 
+@dataclasses.dataclass(frozen=False, eq=False, repr=False)
+class WaveformMetadata:
+    """Metadata for a waveform. Does not participate in equality and hashing!"""
+
+    minimal_sample_rate: Optional[TimeType] = None
+
+    def __init__(self, **kwargs):
+        for key, value in kwargs.items():
+            setattr(self, key, value)
+
+    def as_dict(self):
+        data = vars(self).copy()
+        for field in dataclasses.fields(self):
+            if field.default is not dataclasses.MISSING:
+                if data[field.name] == field.default:
+                    del data[field.name]
+        return data
+
+
+    def __repr__(self):
+        args = ",".join(f"{name}={value!r}"
+                        for name, value in self.as_dict().items())
+        return f'{self.__class__.__name__}({args})'
+
+
 class Waveform(metaclass=ABCMeta):
     """Represents an instantiated PulseTemplate which can be sampled to retrieve arrays of voltage
     values for the hardware."""
 
     __sampled_cache = WeakValueDictionary()
 
-    __slots__ = ('_duration',)
+    __slots__ = (
+        '_duration', # included in __hash__ and __eq__
+        '_metadata', # excluded from __hash__ and __eq__
+    )
 
     def __init__(self, duration: TimeType):
         self._duration = duration
@@ -68,6 +97,14 @@ class Waveform(metaclass=ABCMeta):
     def duration(self) -> TimeType:
         """The duration of the waveform in time units."""
         return self._duration
+
+    @property
+    def metadata(self):
+        try:
+            return self._metadata
+        except AttributeError:
+            metadata = self._metadata = WaveformMetadata()
+            return metadata
 
     @abstractmethod
     def unsafe_sample(self,
@@ -146,15 +183,23 @@ class Waveform(metaclass=ABCMeta):
 
     def __hash__(self):
         if self.__class__.__base__ is not Waveform:
+            # we require direct inheritance because self.__slots__ are the slots of the subclass
+            # we manually add self._duration but not self._metadata here
             raise NotImplementedError("Waveforms __hash__ and __eq__ implementation requires direct inheritance")
         return hash(tuple(getattr(self, slot) for slot in self.__slots__)) ^ hash(self._duration)
 
     def __eq__(self, other):
+        if self.__class__.__base__ is not Waveform:
+            # we require direct inheritance because self.__slots__ are the slots of the subclass
+            # we manually add self._duration but not self._metadata here
+            raise NotImplementedError("Waveforms __hash__ and __eq__ implementation requires direct inheritance")
         slots = self.__slots__
         if slots is getattr(other, '__slots__', None):
+            # the __slots__ attribute of self and other are identical objects -> other is of the same type
             return self._duration == other._duration and all(getattr(self, slot) == getattr(other, slot) for slot in slots)
-        # The other class might be more lenient
-        return NotImplemented
+        else:
+            # The other class might be more lenient
+            return NotImplemented
 
     @property
     @abstractmethod

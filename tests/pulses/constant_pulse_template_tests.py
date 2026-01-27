@@ -1,4 +1,5 @@
 import unittest
+from unittest import mock
 
 import qupulse.plotting
 import qupulse.program.waveforms
@@ -44,10 +45,7 @@ class TestConstantPulseTemplate(unittest.TestCase):
         self.assertEqual(pulse.duration, 12)
 
     def test_regression_duration_conversion(self):
-        old_value = qupulse.program.waveforms.PULSE_TO_WAVEFORM_ERROR
-
-        try:
-            qupulse.program.waveforms.PULSE_TO_WAVEFORM_ERROR = 1e-6
+        with mock.patch("qupulse.program.waveforms.PULSE_TO_WAVEFORM_ERROR", 1e-6):
             for duration_in_samples in [64, 936320, 24615392]:
                 p = ConstantPulseTemplate(duration_in_samples / 2.4, {'a': 0})
                 number_of_samples = p.create_program().duration * 2.4
@@ -56,33 +54,21 @@ class TestConstantPulseTemplate(unittest.TestCase):
 
                 p2 = ConstantPulseTemplate((duration_in_samples + 1) / 2.4, {'a': 0})
                 self.assertNotEqual(p.create_program().duration, p2.create_program().duration)
-        finally:
-            qupulse.program.waveforms.PULSE_TO_WAVEFORM_ERROR = old_value
 
     def test_regression_duration_conversion_functionpt(self):
-        old_value = qupulse.program.waveforms.PULSE_TO_WAVEFORM_ERROR
-
-        try:
-            qupulse.program.waveforms.PULSE_TO_WAVEFORM_ERROR = 1e-6
+        with mock.patch("qupulse.program.waveforms.PULSE_TO_WAVEFORM_ERROR", 1e-6):
             for duration_in_samples in [64, 2000, 936320]:
                 p = FunctionPT('1', duration_expression=duration_in_samples / 2.4, channel='a')
                 number_of_samples = p.create_program().duration * 2.4
                 self.assertEqual(number_of_samples.denominator, 1)
-        finally:
-            qupulse.program.waveforms.PULSE_TO_WAVEFORM_ERROR = old_value
 
     def test_regression_template_combination(self):
-        old_value = qupulse.utils.sympy.SYMPY_DURATION_ERROR_MARGIN
-
-        try:
-            qupulse.utils.sympy.SYMPY_DURATION_ERROR_MARGIN = 1e-9
+        with mock.patch("qupulse.utils.sympy.SYMPY_DURATION_ERROR_MARGIN", 1e-9):
             duration_in_seconds = 2e-6
             full_template = ConstantPulseTemplate(duration=duration_in_seconds * 1e9, amplitude_dict={'C1': 1.1})
             duration_in_seconds_derived = 1e-9 * full_template.duration
             marker_pulse = TablePT({'marker': [(0, 0), (duration_in_seconds_derived * 1e9, 0)]})
             full_template = AtomicMultiChannelPT(full_template, marker_pulse)
-        finally:
-            qupulse.utils.sympy.SYMPY_DURATION_ERROR_MARGIN = old_value
 
     def test_regression_sequencept_with_mappingpt(self):
         t1 = TablePT({'C1': [(0, 0), (100, 0)], 'C2': [(0, 1), (100, 1)]})

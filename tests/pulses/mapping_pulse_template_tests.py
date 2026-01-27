@@ -308,30 +308,17 @@ class MappingPulseTemplateSequencingTest(MeasurementWindowTestCase):
                                       parameter_names={'t'})
         st = MappingPulseTemplate(template, parameter_mapping=parameter_mapping,
                                   measurement_mapping=measurement_mapping, channel_mapping=channel_mapping)
+        program_builder = mock.Mock()
+        program_builder.with_mappings = mock.MagicMock()
 
-        pre_scope = DictScope.from_kwargs(k=5)
-        pre_measurement_mapping = {'meas2': 'meas3'}
-        pre_channel_mapping = {'default': 'A'}
-
-        program_builder = default_program_builder()
-        expected_inner_args = dict(scope=st.map_scope(pre_scope),
-                                   measurement_mapping=st.get_updated_measurement_mapping(pre_measurement_mapping),
-                                   channel_mapping=st.get_updated_channel_mapping(pre_channel_mapping),
-                                   to_single_waveform=to_single_waveform,
-                                   global_transformation=global_transformation,
-                                   program_builder=program_builder)
-
-        with mock.patch.object(template, '_create_program') as inner_create_program:
-            st._internal_create_program(scope=pre_scope,
-                                        measurement_mapping=pre_measurement_mapping,
-                                        channel_mapping=pre_channel_mapping,
-                                        to_single_waveform=to_single_waveform,
-                                        global_transformation=global_transformation,
-                                        program_builder=program_builder)
-            inner_create_program.assert_called_once_with(**expected_inner_args)
-
-        # as we mock the inner function there shouldnt be any changes
-        self.assertIsNone(program_builder.to_program())
+        with mock.patch.object(template, '_build_program') as inner_build_program:
+            st._internal_build_program(program_builder=program_builder)
+            program_builder.with_mappings.assert_called_once_with(
+                parameter_mapping=parameter_mapping,
+                measurement_mapping=measurement_mapping,
+                channel_mapping=channel_mapping
+            )
+            inner_build_program.assert_called_once_with(program_builder=program_builder.with_mappings.return_value.__enter__.return_value)
 
     def test_create_program_invalid_measurement_mapping(self) -> None:
         measurement_mapping = {'meas1': 'meas2'}
@@ -351,13 +338,13 @@ class MappingPulseTemplateSequencingTest(MeasurementWindowTestCase):
         pre_channel_mapping = {'default': 'A'}
 
         program_builder = default_program_builder()
+        program_builder.override(
+            scope=pre_scope,
+            measurement_mapping=pre_measurement_mapping,
+            channel_mapping=pre_channel_mapping
+        )
         with self.assertRaises(KeyError):
-            st._internal_create_program(scope=pre_scope,
-                                        measurement_mapping=pre_measurement_mapping,
-                                        channel_mapping=pre_channel_mapping,
-                                        to_single_waveform=set(),
-                                        global_transformation=None,
-                                        program_builder=program_builder)
+            st._build_program(program_builder=program_builder)
 
     def test_create_program_parameter_constraint_violation(self) -> None:
         measurement_mapping = {'meas1': 'meas2'}
@@ -378,13 +365,9 @@ class MappingPulseTemplateSequencingTest(MeasurementWindowTestCase):
         pre_channel_mapping = {'default': 'A'}
 
         program_builder = default_program_builder()
+        program_builder.override(scope=pre_scope, measurement_mapping=pre_measurement_mapping, channel_mapping=pre_channel_mapping)
         with self.assertRaises(ParameterConstraintViolation):
-            st._internal_create_program(scope=pre_scope,
-                                        measurement_mapping=pre_measurement_mapping,
-                                        channel_mapping=pre_channel_mapping,
-                                        to_single_waveform=set(),
-                                        global_transformation=None,
-                                        program_builder=program_builder)
+            st._build_program(program_builder=program_builder)
 
     def test_create_program_subtemplate_none(self) -> None:
         measurement_mapping = {'meas1': 'meas2'}
@@ -405,20 +388,10 @@ class MappingPulseTemplateSequencingTest(MeasurementWindowTestCase):
         pre_channel_mapping = {'default': 'A'}
 
         program_builder = LoopBuilder()
-        st._internal_create_program(scope=pre_scope,
-                                    measurement_mapping=pre_measurement_mapping,
-                                    channel_mapping=pre_channel_mapping,
-                                    to_single_waveform=set(),
-                                    global_transformation=None,
-                                    program_builder=program_builder)
+        program_builder.override(scope=pre_scope, measurement_mapping=pre_measurement_mapping, channel_mapping=pre_channel_mapping)
+        st._internal_build_program(program_builder=program_builder)
 
-        self.assertEqual(1, len(template.create_program_calls))
-        self.assertEqual((st.map_scope(pre_scope),
-                          st.get_updated_measurement_mapping(pre_measurement_mapping),
-                          st.get_updated_channel_mapping(pre_channel_mapping),
-                          program_builder),
-                         template.create_program_calls[-1])
-
+        template._internal_build_program.assert_called_once_with(program_builder)
         self.assertIsNone(program_builder.to_program())
 
     def test_same_channel_error(self):

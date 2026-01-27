@@ -132,34 +132,23 @@ class RepetitionPulseTemplate(LoopPulseTemplate, ParameterConstrainer, Measureme
     def duration(self) -> ExpressionScalar:
         return self.repetition_count * self.body.duration
 
-    def _internal_create_program(self, *,
-                                 scope: Scope,
-                                 measurement_mapping: Dict[str, Optional[str]],
-                                 channel_mapping: Dict[ChannelID, Optional[ChannelID]],
-                                 global_transformation: Optional['Transformation'],
-                                 to_single_waveform: AbstractSet[Union[str, 'PulseTemplate']],
-                                 program_builder: ProgramBuilder) -> None:
-        self.validate_scope(scope)
+    def _internal_build_program(self, program_builder: ProgramBuilder):
+        build_context = program_builder.build_context
+        scope = build_context.scope
 
-        repetition_count = max(0, self.get_repetition_count_value(scope))
+        repetition_count = self.get_repetition_count_value(scope)
+        if not (repetition_count > 0):
+            return
 
-        if repetition_count > 0:
-            if scope.get_volatile_parameters().keys() & self.repetition_count.variables:
-                repetition_definition = VolatileRepetitionCount(self.repetition_count, scope)
-                assert int(repetition_definition) == repetition_count
-            else:
-                repetition_definition = repetition_count
+        if scope.get_volatile_parameters().keys() & self.repetition_count.variables:
+            repetition_definition = VolatileRepetitionCount(self.repetition_count, scope)
+            assert int(repetition_definition) == repetition_count
+        else:
+            repetition_definition = repetition_count
 
-            measurements = self.get_measurement_windows(scope, measurement_mapping)
-
-            for repetition_program_builder in program_builder.with_repetition(repetition_definition,
-                                                                              measurements=measurements):
-                self.body._create_program(scope=repetition_program_builder.inner_scope(scope),
-                                          measurement_mapping=measurement_mapping,
-                                          channel_mapping=channel_mapping,
-                                          global_transformation=global_transformation,
-                                          to_single_waveform=to_single_waveform,
-                                          program_builder=repetition_program_builder)
+        measurements = self.get_measurement_windows(scope, build_context.measurement_mapping)
+        for repetition_program_builder in program_builder.with_repetition(repetition_definition, measurements=measurements):
+            self.body._build_program(program_builder=repetition_program_builder)
 
     def get_serialization_data(self, serializer: Optional[Serializer]=None) -> Dict[str, Any]:
         data = super().get_serialization_data(serializer)

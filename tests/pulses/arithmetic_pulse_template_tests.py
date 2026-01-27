@@ -423,17 +423,18 @@ class ArithmeticPulseTemplateTest(unittest.TestCase):
         evaluated = symbolic.evaluate_in_scope({'t_gauss': t_gauss})
         np.testing.assert_allclose(expected, evaluated)
 
-    def test_internal_create_program(self):
+    def test_internal_build_program(self):
         lhs = 'x + y'
         rhs = DummyPulseTemplate(defined_channels={'u', 'v', 'w'})
         arith = ArithmeticPulseTemplate(lhs, '-', rhs)
 
         scope = DictScope.from_kwargs(x=3, y=5, z=8, volatile={'some_parameter'})
         channel_mapping = dict(u='a', v='b', w=None)
-        measurement_mapping = dict(m1='m2')
-        global_transformation = OffsetTransformation({'unrelated': 1.})
-        to_single_waveform = {'something_else'}
-        program_builder = mock.Mock()
+        program_builder = mock.MagicMock()
+
+        build_context = program_builder.build_context
+        build_context.scope = scope
+        build_context.channel_mapping = channel_mapping
 
         expected_transformation = mock.create_autospec(IdentityTransformation,instance=True)
         with self.assertWarns(DeprecationWarning):
@@ -442,35 +443,20 @@ class ArithmeticPulseTemplateTest(unittest.TestCase):
         inner_trafo = mock.create_autospec(spec=IdentityTransformation,instance=True)
         inner_trafo.chain.return_value = expected_transformation
 
-        with mock.patch.object(rhs, '_create_program') as inner_create_program:
+        with mock.patch.object(rhs, '_build_program') as inner_build_program:
             with mock.patch.object(arith, '_get_transformation', return_value=inner_trafo) as get_transformation:
-                arith._internal_create_program(
-                    scope=scope,
-                    measurement_mapping=measurement_mapping,
-                    channel_mapping=channel_mapping,
-                    global_transformation=global_transformation,
-                    to_single_waveform=to_single_waveform,
+                arith._internal_build_program(
                     program_builder=program_builder
                 )
                 get_transformation.assert_called_once_with(parameters=scope, channel_mapping=channel_mapping)
-
-            inner_trafo.chain.assert_called_once_with(global_transformation)
-            inner_create_program.assert_called_once_with(
-                scope=scope,
-                measurement_mapping=measurement_mapping,
-                channel_mapping=channel_mapping,
-                global_transformation=expected_transformation,
-                to_single_waveform=to_single_waveform,
+            program_builder.with_transformation.assert_called_once_with(inner_trafo)
+            inner_build_program.assert_called_once_with(
                 program_builder=program_builder
             )
 
+            build_context.scope = DictScope.from_kwargs(x=3, y=5, z=8, volatile={'x'})
             with self.assertRaisesRegex(NotImplementedError, 'volatile'):
-                arith._internal_create_program(
-                    scope=DictScope.from_kwargs(x=3, y=5, z=8, volatile={'x'}),
-                    measurement_mapping=measurement_mapping,
-                    channel_mapping=channel_mapping,
-                    global_transformation=global_transformation,
-                    to_single_waveform=to_single_waveform,
+                arith._internal_build_program(
                     program_builder=program_builder
                 )
 

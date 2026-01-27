@@ -1,15 +1,20 @@
 """Definition of the program builder protocol."""
-
-from abc import abstractmethod
-from typing import runtime_checkable, Protocol, Mapping, Optional, Sequence, Iterable, ContextManager
+import copy
+import dataclasses
+from abc import abstractmethod, ABC
+from contextlib import contextmanager
+from typing import runtime_checkable, Protocol, Mapping, Optional, Sequence, Iterable, ContextManager, AbstractSet, \
+    Union
 
 from qupulse import MeasurementWindow
-from qupulse.parameter_scope import Scope
-from qupulse.program.waveforms import Waveform
-from qupulse.program.transformation import Transformation
+from qupulse.expressions import Expression
+from qupulse.parameter_scope import Scope, MappedScope
+from qupulse.program.waveforms import Waveform, ConstantWaveform, TransformingWaveform
+from qupulse.program.transformation import Transformation, chain_transformations
 from qupulse.program.values import RepetitionCount, HardwareTime, HardwareVoltage
+from qupulse.pulses.metadata import TemplateMetadata
 
-from qupulse.utils.types import TimeType
+from qupulse.utils.types import TimeType, ChannelID
 
 
 @runtime_checkable
@@ -22,6 +27,44 @@ class Program(Protocol):
     def duration(self) -> TimeType:
         """The duration of the program in nanoseconds."""
 
+    @abstractmethod
+    def get_defined_channels(self) -> AbstractSet[ChannelID]:
+        """Get the set of channels that are used in this program."""
+
+
+@dataclasses.dataclass
+class BuildContext:
+    """This dataclass bundles the mutable context information during the build."""
+
+    scope: Scope = None
+    measurement_mapping: Mapping[str, Optional[str]] = None
+    channel_mapping: Mapping[ChannelID, Optional[ChannelID]] = None
+    transformation: Optional[Transformation] = None
+    minimal_sample_rate: Optional[TimeType] = None
+
+    def apply_mappings(self,
+                       parameter_mapping: Mapping[str, Expression] = None,
+                       measurement_mapping: Mapping[str, Optional[str]] = None,
+                       channel_mapping: Mapping[ChannelID, Optional[ChannelID]] = None,
+                       ) -> "BuildContext":
+        scope = self.scope
+        if parameter_mapping is not None:
+            scope = MappedScope(scope=scope, mapping=parameter_mapping)
+        mapped_measurement_mapping = self.measurement_mapping
+        if measurement_mapping is not None:
+            mapped_measurement_mapping = {k: mapped_measurement_mapping[v] for k, v in measurement_mapping.items()}
+        mapped_channel_mapping = self.channel_mapping
+        if channel_mapping is not None:
+            mapped_channel_mapping = {inner_ch: None if outer_ch is None else mapped_channel_mapping[outer_ch]
+                                      for inner_ch, outer_ch in channel_mapping.items()}
+        return BuildContext(scope=scope, measurement_mapping=mapped_measurement_mapping, channel_mapping=mapped_channel_mapping, transformation=self.transformation, minimal_sample_rate=self.minimal_sample_rate)
+
+
+@dataclasses.dataclass(frozen=True)
+class BuildSettings:
+    """This dataclass bundles the immutable settings."""
+    to_single_waveform: AbstractSet[str | object]
+
 
 @runtime_checkable
 class ProgramBuilder(Protocol):
@@ -30,10 +73,10 @@ class ProgramBuilder(Protocol):
 
     The pulse templates call the methods that correspond to their functionality on the program builder. For example,
     :py:class:`.ConstantPulseTemplate` translates itself into a simple :py:meth:`.ProgramBuilder.hold_voltage` call while
-    :class:`SequencePulseTemplate` uses :py:meth:`.ProgramBuilder.with_sequence` to signify a logical unit with
+    :py:class:`SequencePulseTemplate` uses :py:meth:`.ProgramBuilder.with_sequence` to signify a logical unit with
     attached measurements and passes the resulting object to the sequenced sub-templates.
 
-    Due to backward compatibility the handling of measurements is a bit weird since they have to be omitted in certain
+    Due to backward compatibility, the handling of measurements is a bit weird since they have to be omitted in certain
     cases. However, this is not relevant for HDAWG specific implementations because these are expected to ignore
     :py:meth:`.ProgramBuilder.measure` calls.
 
@@ -41,18 +84,46 @@ class ProgramBuilder(Protocol):
     and repetition implementation.
     """
 
+    @property
     @abstractmethod
-    def inner_scope(self, scope: Scope) -> Scope:
-        """This function is part of the iteration protocol and necessary to inject program builder specific parameter
-        implementations into the build process. :py:meth:`.ProgramBuilder.with_iteration` and
-        `.ProgramBuilder.with_iteration` callers *must* call this function inside the iteration.
+    def build_context(self) -> BuildContext:
+        """Get the current build context."""
+
+    @property
+    @abstractmethod
+    def build_settings(self) -> BuildSettings:
+        """Get the current build settings"""
+
+    @abstractmethod
+    def override(self,
+                 scope: Scope = None,
+                 measurement_mapping: Optional[Mapping[str, Optional[str]]] = None,
+                 channel_mapping: Optional[Mapping[ChannelID, Optional[ChannelID]]] = None,
+                 global_transformation: Optional[Transformation] = None,
+                 to_single_waveform: AbstractSet[str | object] = None,):
+        """Override the non-None values in context and settings"""
+
+    @abstractmethod
+    def with_mappings(self, *,
+                      parameter_mapping: Mapping[str, Expression],
+                      measurement_mapping: Mapping[str, Optional[str]],
+                      channel_mapping: Mapping[ChannelID, Optional[ChannelID]],
+                      ) -> ContextManager['ProgramBuilder']:
+        """Modify the build context for the duration of the context manager.
 
         Args:
-            scope: The parameter scope outside the iteration.
-
-        Returns:
-            The parameter scope inside the iteration.
+            parameter_mapping: A mapping of parameter names to expressions.
+            measurement_mapping: A mapping of measurement names to measurement names or None.
+            channel_mapping: A mapping of channel IDs to channel IDs or None.
         """
+
+    @abstractmethod
+    def with_transformation(self, transformation: Transformation) -> ContextManager['ProgramBuilder']:
+        """Modify the build context for the duration of the context manager."""
+
+    @abstractmethod
+    def with_metadata(self, metadata: TemplateMetadata) -> ContextManager['ProgramBuilder']:
+        """Modify the build context for the duration of the context manager."""
 
     @abstractmethod
     def hold_voltage(self, duration: HardwareTime, voltages: Mapping[str, HardwareVoltage]):
@@ -115,12 +186,9 @@ class ProgramBuilder(Protocol):
         """
 
     @abstractmethod
-    def new_subprogram(self, global_transformation: 'Transformation' = None) -> ContextManager['ProgramBuilder']:
+    def new_subprogram(self) -> ContextManager['ProgramBuilder']:
         """Create a context managed program builder whose contents are translated into a single waveform upon exit if
         it is not empty.
-
-        Args:
-            global_transformation: This transformation is applied to the waveform
 
         Returns:
             A context manager that returns a :py:class:`ProgramBuilder` on entering.
@@ -153,3 +221,109 @@ class ProgramBuilder(Protocol):
         Returns:
             A program implementation. None if nothing was added to this program builder.
         """
+
+
+class BaseProgramBuilder(ProgramBuilder, ABC):
+    """Helper base class for program builder to reduce code duplication. The interface is defined by :py:class:`ProgramBuilder`.
+
+    This class provides shared functionality for context and settings and correct transformation handling.
+    """
+
+    def __init__(self, initial_context: BuildContext = None, initial_settings: BuildSettings = None):
+        self._build_context_stack: list[BuildContext] = [BuildContext() if initial_context is None else initial_context]
+        self._build_settings_stack: list[BuildSettings] = [BuildSettings(set()) if initial_settings is None else initial_settings]
+
+    @property
+    def build_context(self) -> BuildContext:
+        return self._build_context_stack[-1]
+
+    @property
+    def build_settings(self) -> BuildSettings:
+        return self._build_settings_stack[-1]
+
+    def override(self,
+                 scope: Scope = None,
+                 measurement_mapping: Optional[Mapping[str, Optional[str]]] = None,
+                 channel_mapping: Optional[Mapping[ChannelID, Optional[ChannelID]]] = None,
+                 global_transformation: Optional[Transformation] = None,
+                 to_single_waveform: AbstractSet[Union[str, 'PulseTemplate']] = None):
+        old_context = self._build_context_stack[-1]
+        context = BuildContext(
+            scope=old_context.scope if scope is None else scope,
+            measurement_mapping=old_context.measurement_mapping if measurement_mapping is None else measurement_mapping,
+            channel_mapping=old_context.channel_mapping if channel_mapping is None else channel_mapping,
+            transformation=old_context.transformation if global_transformation is None else global_transformation,
+        )
+        old_settings = self._build_settings_stack[-1]
+        settings = BuildSettings(
+            to_single_waveform=old_settings.to_single_waveform if to_single_waveform is None else to_single_waveform,
+        )
+
+        self._build_context_stack.append(context)
+        self._build_settings_stack.append(settings)
+
+    @contextmanager
+    def _with_patched_context(self, **kwargs):
+        context = copy.copy(self._build_context_stack[-1])
+        for name, value in kwargs.items():
+            setattr(context, name, value)
+        self._build_context_stack.append(context)
+        yield
+        self._build_context_stack.pop()
+
+    @contextmanager
+    def with_metadata(self, metadata: TemplateMetadata):
+        # metadata.to_single_waveform == "always" is handled in PulseTemplate._build_program
+        if metadata.minimal_sample_rate is not None:
+            with self._with_patched_context(minimal_sample_rate=metadata.minimal_sample_rate) as builder:
+                yield builder
+        else:
+            yield self
+
+    @contextmanager
+    def with_transformation(self, transformation: Transformation):
+        context = copy.copy(self.build_context)
+        context.transformation = chain_transformations(context.transformation, transformation)
+        self._build_context_stack.append(context)
+        yield self
+        self._build_context_stack.pop()
+
+    @contextmanager
+    def with_mappings(self, *,
+                      parameter_mapping: Mapping[str, Expression],
+                      measurement_mapping: Mapping[str, Optional[str]],
+                      channel_mapping: Mapping[ChannelID, Optional[ChannelID]],
+                      ):
+        context = self.build_context.apply_mappings(parameter_mapping, measurement_mapping, channel_mapping)
+        self._build_context_stack.append(context)
+        yield self
+        self._build_context_stack.pop()
+
+    @abstractmethod
+    def _transformed_hold_voltage(self, duration: HardwareTime, voltages: Mapping[str, HardwareVoltage]):
+        """This internal function gets the constant voltage values transformed by the current built context's transformation.
+        """
+
+    @abstractmethod
+    def _transformed_play_arbitrary_waveform(self, waveform: Waveform):
+        """This internal function gets the waveform transformed by the current built context's transformation."""
+
+    def play_arbitrary_waveform(self, waveform: Waveform):
+        transformation = self.build_context.transformation
+        if transformation:
+            transformed_waveform = TransformingWaveform(waveform, transformation)
+            self._transformed_play_arbitrary_waveform(transformed_waveform)
+        else:
+            self._transformed_play_arbitrary_waveform(waveform)
+
+    def hold_voltage(self, duration: HardwareTime, voltages: Mapping[str, HardwareVoltage]):
+        transformation = self.build_context.transformation
+        if transformation:
+            if transformation.get_constant_output_channels(voltages.keys()) != transformation.get_output_channels(voltages.keys()):
+                waveform = TransformingWaveform(ConstantWaveform.from_mapping(duration, voltages), transformation)
+                self._transformed_play_arbitrary_waveform(waveform)
+            else:
+                transformed_voltages = transformation(0.0, voltages)
+                self._transformed_hold_voltage(duration, transformed_voltages)
+        else:
+            self._transformed_hold_voltage(duration, voltages)

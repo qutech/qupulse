@@ -13,14 +13,15 @@ import copy
 from dataclasses import dataclass
 from abc import ABC, abstractmethod
 from typing import Mapping, Optional, Sequence, ContextManager, Iterable, Tuple, \
-    Union, Dict, List, Set, ClassVar, Callable, Any
+    Union, Dict, List, Set, ClassVar, Callable, Any, AbstractSet
 from collections import OrderedDict
 
 from qupulse import ChannelID, MeasurementWindow
 from qupulse.parameter_scope import Scope, MappedScope, FrozenDict
-from qupulse.program.protocol import (ProgramBuilder, Waveform, )
+from qupulse.program.protocol import (ProgramBuilder, Waveform, BaseProgramBuilder, Program, )
 from qupulse.program.values import RepetitionCount, HardwareTime, HardwareVoltage, DynamicLinearValue, TimeType
 from qupulse.program.volatile import VolatileRepetitionCount, InefficientVolatility
+from qupulse.program.waveforms import TransformingWaveform
 
 # this resolution is used to unify increments
 # the increments themselves remain floats
@@ -173,7 +174,7 @@ class LinSpaceIter(LinSpaceNode):
         return reversed_iter
 
 
-class LinSpaceBuilder(ProgramBuilder):
+class LinSpaceBuilder(BaseProgramBuilder):
     """This program builder supports efficient translation of pulse templates that use symbolic linearly
     spaced voltages and durations.
 
@@ -208,7 +209,7 @@ class LinSpaceBuilder(ProgramBuilder):
     def _get_ranges(self):
         return dict(self._ranges)
 
-    def hold_voltage(self, duration: HardwareTime, voltages: Mapping[ChannelID, HardwareVoltage]):
+    def _transformed_hold_voltage(self, duration: HardwareTime, voltages: Mapping[ChannelID, HardwareVoltage]):
         voltages = sorted((self._name_to_idx[ch_name], value) for ch_name, value in voltages.items())
         voltages = [value for _, value in voltages]
 
@@ -249,7 +250,7 @@ class LinSpaceBuilder(ProgramBuilder):
 
         self._stack[-1].append(set_cmd)
 
-    def play_arbitrary_waveform(self, waveform: Waveform):
+    def _transformed_play_arbitrary_waveform(self, waveform: Waveform):
         return self._stack[-1].append(LinSpaceArbitraryWaveform(waveform, self._idx_to_name))
 
     def measure(self, measurements: Optional[Sequence[MeasurementWindow]]):
@@ -272,7 +273,7 @@ class LinSpaceBuilder(ProgramBuilder):
 
     @contextlib.contextmanager
     def with_sequence(self,
-                      measurements: Optional[Sequence[MeasurementWindow]] = None) -> ContextManager['ProgramBuilder']:
+                      measurements: Optional[Sequence[MeasurementWindow]] = None) -> Iterable['ProgramBuilder']:
         yield self
 
     def new_subprogram(self, global_transformation: 'Transformation' = None) -> ContextManager['ProgramBuilder']:
@@ -284,28 +285,30 @@ class LinSpaceBuilder(ProgramBuilder):
             return
         self._stack.append([])
         self._ranges.append((index_name, rng))
-        yield self
+        scope = self.build_context.scope.overwrite({index_name: DynamicLinearValue(base=0, factors={index_name: 1})})
+        with self._with_patched_context(scope=scope):
+            yield self
         cmds = self._stack.pop()
         self._ranges.pop()
         if cmds:
             self._stack[-1].append(LinSpaceIter(body=tuple(cmds), length=len(rng)))
 
     @contextlib.contextmanager
-    def time_reversed(self) -> ContextManager['LinSpaceBuilder']:
+    def time_reversed(self) -> Iterable['LinSpaceBuilder']:
         self._stack.append([])
         yield self
         inner = self._stack.pop()
         offset = len(self._ranges)
         self._stack[-1].extend(node.reversed(offset, []) for node in reversed(inner))
 
-    def to_program(self, defined_channels: set[ChannelID]) -> Optional['LinSpaceTopLevel']:
-        if self._root():
-            return LinSpaceTopLevel(body=tuple(self._root()),
-                                    _defined_channels=defined_channels)
-        #TODO: the argument defined_channels currently does not do anything,
-        #it is included for convenience for the HDAWGLinspaceBuilder
-        #The extra class for the top level is to shift program specific functionality
-        #from awg/base to the respective program files.
+    def to_program(self) -> Optional['LinSpaceProgram']:
+        if root := self._root():
+            return LinSpaceProgram(
+                root=tuple(root),
+                defined_channels=self._idx_to_name,
+            )
+        else:
+            return None
 
 
 @dataclass
@@ -510,10 +513,10 @@ class _TranslationState:
             raise TypeError("The node type is not handled", type(node), node)
 
 
-def to_increment_commands(linspace_nodes: 'LinSpaceTopLevel') -> List[Command]:
+def to_increment_commands(linspace_nodes: 'LinSpaceProgram') -> List[Command]:
     """translate the given linspace node tree to a minimal sequence of set and increment commands as well as loops."""
     state = _TranslationState()
-    state.add_node(linspace_nodes.body)
+    state.add_node(linspace_nodes.root)
     return state.commands
 
 
@@ -550,20 +553,23 @@ def _get_waveforms_dict(transformed_commands: Sequence[Command]) -> Mapping[Wave
 
 
 @dataclass
-class LinSpaceTopLevel(LinSpaceNode):
-    
-    body: Tuple[LinSpaceNode, ...]
-    _defined_channels: set[ChannelID]
+class LinSpaceProgram(Program):
+    root: Tuple[LinSpaceNode, ...]
+    defined_channels: Tuple[ChannelID, ...]
+
+    @property
+    def duration(self) -> TimeType:
+        raise NotImplementedError("TODO")
+
+    def get_defined_channels(self) -> AbstractSet[ChannelID]:
+        return set(self.defined_channels)
     
     def dependencies(self):
         dependencies = {}
-        for node in self.body:
+        for node in self.root:
             for idx, deps in node.dependencies().items():
                 dependencies.setdefault(idx, set()).update(deps)
         return dependencies
-    
-    def get_defined_channels(self) -> set[ChannelID]:
-        return self._defined_channels
     
     def get_waveforms_dict(self,
                            channels: Sequence[ChannelID], #!!! this argument currently does not do anything.

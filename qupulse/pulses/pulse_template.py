@@ -26,7 +26,7 @@ from qupulse.serialization import Serializable
 from qupulse.expressions import ExpressionScalar, Expression, ExpressionLike
 from qupulse.program.transformation import Transformation
 
-from qupulse.program.waveforms import Waveform, TransformingWaveform
+from qupulse.program.waveforms import Waveform, TransformingWaveform, WaveformMetadata
 from qupulse.pulses.measurement import MeasurementDefiner, MeasurementDeclaration
 from qupulse.parameter_scope import Scope, DictScope
 
@@ -237,37 +237,42 @@ class PulseTemplate(Serializable):
                               category=UnknownVolatileParameter,
                               stacklevel=2)
 
+        program_builder.override(
+            scope=scope,
+            measurement_mapping=measurement_mapping,
+            channel_mapping=complete_channel_mapping,
+            global_transformation=global_transformation,
+            to_single_waveform=to_single_waveform,
+        )
+
         # call subclass specific implementation
-        self._create_program(scope=scope,
-                             measurement_mapping=measurement_mapping,
-                             channel_mapping=complete_channel_mapping,
-                             global_transformation=global_transformation,
-                             to_single_waveform=to_single_waveform,
-                             program_builder=program_builder)
+        self._build_program(program_builder=program_builder)
+        return program_builder.to_program()
 
-        return program_builder.to_program(set(complete_channel_mapping.values()))
+    def _build_program(self, program_builder: ProgramBuilder):
+        """New method that keeps state in program builder"""
+        if (validate_scope := getattr(self, "validate_scope", None)) is not None:
+            validate_scope(program_builder.build_context.scope)
 
-    @abstractmethod
-    def _internal_create_program(self, *,
-                                 scope: Scope,
-                                 measurement_mapping: Dict[str, Optional[str]],
-                                 channel_mapping: Dict[ChannelID, Optional[ChannelID]],
-                                 global_transformation: Optional[Transformation],
-                                 to_single_waveform: Set[Union[str, 'PulseTemplate']],
-                                 program_builder: ProgramBuilder) -> None:
-        """The subclass specific implementation of create_program().
+        to_single_waveform = program_builder.build_settings.to_single_waveform
+        if self.metadata.to_single_waveform == 'always' or self.identifier in to_single_waveform or self in to_single_waveform:
+            with program_builder.new_subprogram() as inner_program_builder:
+                self._internal_build_program(inner_program_builder)
+        else:
+            self._internal_build_program(program_builder)
 
-        Receives a Loop instance parent_loop to which it should append measurements and its own Loops as children.
-
-        Subclasses should not overwrite create_program() directly but provide their implementation here. This method
-        is called by create_program().
-        Implementations should not call create_program() of any subtemplates to obtain Loop objects for them but
-        call subtemplate._internal_create_program() instead, providing an adequate parent_loop object to which
-        the subtemplate will append. Implementations must make sure not to append invalid Loop objects (no waveform or no children).
-
-        In case of an error (e.g. invalid measurement mapping, missing parameters, violated parameter constraints, etc),
-        implementations of this method must throw an adequate exception. They do not have to ensure that the parent_loop
-        remains unchanged in this case."""
+    def _internal_build_program(self, program_builder: ProgramBuilder):
+        """The subclass specific implementation of create_program()."""
+        context = program_builder.build_context
+        settings = program_builder.build_settings
+        self._internal_create_program(
+            scope=context.scope,
+            measurement_mapping=dict(context.measurement_mapping),
+            channel_mapping=dict(context.channel_mapping),
+            global_transformation=context.transformation,
+            to_single_waveform=set(settings.to_single_waveform),
+            program_builder=program_builder
+        )
 
     def _create_program(self, *,
                         scope: Scope,
@@ -278,6 +283,9 @@ class PulseTemplate(Serializable):
                         program_builder: ProgramBuilder):
         """Generic part of create program. This method handles to_single_waveform and the configuration of the
         transformer."""
+        warnings.warn("_create_program is deprecated. "
+                      "Update your driver to use _build_program",
+                      DeprecationWarning, stacklevel=2)
         if self.metadata.to_single_waveform == 'always' or self.identifier in to_single_waveform or self in to_single_waveform:
             with program_builder.new_subprogram(global_transformation=global_transformation) as inner_program_builder:
 
@@ -689,35 +697,24 @@ class AtomicPulseTemplate(PulseTemplate, MeasurementDefiner):
 
     measurement_names = MeasurementDefiner.measurement_names
 
-    def _internal_create_program(self, *,
-                                 scope: Scope,
-                                 measurement_mapping: Dict[str, Optional[str]],
-                                 channel_mapping: Dict[ChannelID, Optional[ChannelID]],
-                                 global_transformation: Optional[Transformation],
-                                 to_single_waveform: Set[Union[str, 'PulseTemplate']],
-                                 program_builder: ProgramBuilder) -> None:
-        """Parameter constraints are validated in build_waveform because build_waveform is guaranteed to be called
-        during sequencing"""
-        ### current behavior (same as previously): only adds EXEC Loop and measurements if a waveform exists.
-        ### measurements are directly added to parent_loop (to reflect behavior of Sequencer + MultiChannelProgram)
+    def _internal_build_program(self, program_builder: ProgramBuilder):
+        context = program_builder.build_context
+        scope = context.scope
         assert not scope.get_volatile_parameters().keys() & self.parameter_names, "AtomicPT cannot be volatile"
 
         waveform = self.build_waveform(parameters=scope,
-                                       channel_mapping=channel_mapping)
-        if waveform:
-            measurements = self.get_measurement_windows(parameters=scope,
-                                                        measurement_mapping=measurement_mapping)
-            program_builder.measure(measurements)
+                                       channel_mapping=context.channel_mapping)
+        if not waveform:
+            return
 
-            if global_transformation:
-                waveform = TransformingWaveform.from_transformation(waveform, global_transformation)
-
-            constant_values = waveform.constant_value_dict()
-            if constant_values is None:
-                program_builder.play_arbitrary_waveform(waveform)
-            else:
-                program_builder.hold_voltage(waveform.duration, constant_values)
-
+        measurements = self.get_measurement_windows(parameters=scope,
+                                                    measurement_mapping=context.measurement_mapping)
+        program_builder.measure(measurements)
+        constant_values = waveform.constant_value_dict()
+        if constant_values is None:
+            program_builder.play_arbitrary_waveform(waveform)
+        else:
+            program_builder.hold_voltage(waveform.duration, constant_values)
 
     @abstractmethod
     def build_waveform(self,

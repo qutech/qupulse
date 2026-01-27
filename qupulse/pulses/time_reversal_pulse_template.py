@@ -57,10 +57,10 @@ class TimeReversalPulseTemplate(PulseTemplate):
     @property
     def final_values(self) -> Dict[ChannelID, ExpressionScalar]:
         return self._inner.initial_values
-    
-    def _internal_create_program(self, *, program_builder: ProgramBuilder, **kwargs) -> None:
-        with program_builder.time_reversed() as reversed_builder:
-            self._inner._internal_create_program(program_builder=reversed_builder, **kwargs)
+
+    def _internal_build_program(self, program_builder: ProgramBuilder):
+        with program_builder.time_reversed() as inner_program_builder:
+            self._inner._internal_build_program(inner_program_builder)
 
     def build_waveform(self,
                        *args, **kwargs) -> Optional[Waveform]:

@@ -3,6 +3,7 @@ import dataclasses
 
 from typing import Literal, Optional
 
+from qupulse.utils.types import TimeType
 
 SingleWaveformStrategy = Literal['always']
 
@@ -17,11 +18,16 @@ class TemplateMetadata:
     """
 
     to_single_waveform: Optional[SingleWaveformStrategy] = dataclasses.field(default=None)
+    minimal_sample_rate: Optional[TimeType] = dataclasses.field(default=None)
 
-    def __init__(self, to_single_waveform: Optional[SingleWaveformStrategy] = None, **kwargs):
+    def __init__(self,
+                 to_single_waveform: Optional[SingleWaveformStrategy] = None,
+                 minimal_sample_rate: Optional[TimeType] = None,
+                 **kwargs):
         # TODO: generate this init automatically
         #       The reason for the custom init is that we want to allow additional kwargs
         self.to_single_waveform = to_single_waveform
+        self.minimal_sample_rate = minimal_sample_rate
         for key, value in kwargs.items():
             setattr(self, key, value)
 

@@ -170,28 +170,15 @@ class ForLoopPulseTemplate(LoopPulseTemplate, MeasurementDefiner, ParameterConst
         for loop_index_value in loop_range:
             yield _ForLoopScope(scope, loop_index_name, loop_index_value)
 
-    def _internal_create_program(self, *,
-                                 scope: Scope,
-                                 measurement_mapping: Dict[str, Optional[str]],
-                                 channel_mapping: Dict[ChannelID, Optional[ChannelID]],
-                                 global_transformation: Optional['Transformation'],
-                                 to_single_waveform: Set[Union[str, 'PulseTemplate']],
-                                 program_builder: ProgramBuilder) -> None:
-        self.validate_scope(scope=scope)
-
+    def _internal_build_program(self, program_builder: ProgramBuilder):
+        build_context = program_builder.build_context
+        scope = build_context.scope
         loop_range = self._loop_range.to_range(scope)
         loop_index_name = self._loop_index
 
-        measurements = self.get_measurement_windows(scope, measurement_mapping)
-
-        for iteration_program_builder in program_builder.with_iteration(loop_index_name, loop_range,
-                                                                        measurements=measurements):
-            self.body._create_program(scope=iteration_program_builder.inner_scope(scope),
-                                      measurement_mapping=measurement_mapping,
-                                      channel_mapping=channel_mapping,
-                                      global_transformation=global_transformation,
-                                      to_single_waveform=to_single_waveform,
-                                      program_builder=iteration_program_builder)
+        measurements = self.get_measurement_windows(scope, build_context.measurement_mapping)
+        for iteration_program_builder in program_builder.with_iteration(loop_index_name, loop_range, measurements=measurements):
+            self.body._build_program(program_builder=iteration_program_builder)
 
     def build_waveform(self, parameter_scope: Scope) -> ForLoopWaveform:
         return ForLoopWaveform([self.body.build_waveform(local_scope)

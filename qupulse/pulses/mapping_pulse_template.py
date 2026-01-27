@@ -347,22 +347,12 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
         return {inner_ch: None if outer_ch is None else channel_mapping[outer_ch]
                 for inner_ch, outer_ch in self.__channel_mapping.items()}
 
-    def _internal_create_program(self, *,
-                                 scope: Scope,
-                                 measurement_mapping: Dict[str, Optional[str]],
-                                 channel_mapping: Dict[ChannelID, Optional[ChannelID]],
-                                 global_transformation: Optional['Transformation'],
-                                 to_single_waveform: Set[Union[str, 'PulseTemplate']],
-                                 program_builder: ProgramBuilder) -> None:
-        self.validate_scope(scope)
-
-        # parameters are validated in map_parameters() call, no need to do it here again explicitly
-        self.template._create_program(scope=self.map_scope(scope),
-                                      measurement_mapping=self.get_updated_measurement_mapping(measurement_mapping),
-                                      channel_mapping=self.get_updated_channel_mapping(channel_mapping),
-                                      global_transformation=global_transformation,
-                                      to_single_waveform=to_single_waveform,
-                                      program_builder=program_builder)
+    def _internal_build_program(self, program_builder: ProgramBuilder):
+        with program_builder.with_mappings(
+                parameter_mapping=self.__parameter_mapping,
+                channel_mapping=self.__channel_mapping,
+                measurement_mapping=self.__measurement_mapping) as inner_builder:
+            self.__template._build_program(program_builder=inner_builder)
 
     def build_waveform(self,
                        parameters: Dict[str, numbers.Real],

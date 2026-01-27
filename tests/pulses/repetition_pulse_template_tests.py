@@ -3,7 +3,7 @@ import warnings
 from unittest import mock
 
 from qupulse.parameter_scope import Scope, DictScope
-from qupulse.program.waveforms import RepetitionWaveform
+from qupulse.program.waveforms import RepetitionWaveform, TransformingWaveform
 from qupulse.utils.types import FrozenDict
 
 from qupulse.program import default_program_builder
@@ -17,7 +17,8 @@ from tests.pulses.sequencing_dummies import DummyPulseTemplate, DummyWaveform, M
 from tests.serialization_dummies import DummySerializer
 from tests.serialization_tests import SerializableTests
 from tests._program.transformation_tests import TransformationStub
-from tests.pulses.pulse_template_tests import PulseTemplateStub, get_appending_internal_create_program
+from tests.pulses.pulse_template_tests import PulseTemplateStub, get_appending_internal_create_program, \
+    get_appending_internal_build_program
 
 
 class RepetitionPulseTemplateTest(unittest.TestCase):
@@ -119,7 +120,7 @@ class RepetitionPulseTemplateTest(unittest.TestCase):
 
 
 class RepetitionPulseTemplateSequencingTests(MeasurementWindowTestCase):
-    def test_internal_create_program(self):
+    def test_internal_build_program(self):
         wf = DummyWaveform(duration=2.)
         body = PulseTemplateStub()
 
@@ -136,36 +137,32 @@ class RepetitionPulseTemplateSequencingTests(MeasurementWindowTestCase):
         to_single_waveform = {'to', 'single', 'waveform'}
 
         program_builder = LoopBuilder()
-        expected_program = Loop(children=[Loop(children=[Loop(waveform=wf)], repetition_count=6)],
+        expected_wf = TransformingWaveform(wf, global_transformation)
+        expected_program = Loop(children=[Loop(children=[Loop(waveform=expected_wf)], repetition_count=6)],
                                 measurements=[('l', .1, .2)])
+        program_builder.override(
+            scope=scope,
+            measurement_mapping=measurement_mapping,
+            channel_mapping=channel_mapping,
+            global_transformation=global_transformation,
+            to_single_waveform=to_single_waveform,
+        )
+        program_builder.with_repetition = mock.Mock(wraps=program_builder.with_repetition)
 
-        real_relevant_parameters = dict(n_rep=3, mul=2, a=0.1, b=0.2)
+        with mock.patch.object(body, '_build_program',
+                               wraps=get_appending_internal_build_program(wf, always_append=True)) as body_build_program:
+            with mock.patch.object(rpt, 'get_repetition_count_value', return_value=6) as get_repetition_count_value:
+                with mock.patch.object(rpt, 'get_measurement_windows', return_value=[('l', .1, .2)]) as get_meas:
+                    rpt._internal_build_program(program_builder=program_builder)
+                    program = program_builder.to_program()
 
-        with mock.patch.object(body, '_create_program',
-                               wraps=get_appending_internal_create_program(wf, always_append=True)) as body_create_program:
-            with mock.patch.object(rpt, 'validate_scope') as validate_scope:
-                with mock.patch.object(rpt, 'get_repetition_count_value', return_value=6) as get_repetition_count_value:
-                    with mock.patch.object(rpt, 'get_measurement_windows', return_value=[('l', .1, .2)]) as get_meas:
-                        rpt._internal_create_program(scope=scope,
-                                                     measurement_mapping=measurement_mapping,
-                                                     channel_mapping=channel_mapping,
-                                                     global_transformation=global_transformation,
-                                                     to_single_waveform=to_single_waveform,
-                                                     program_builder=program_builder)
-                        program = program_builder.to_program()
+                    self.assertEqual(program, expected_program)
+                    body_build_program.assert_called_once_with(program_builder=program_builder)
+                    get_repetition_count_value.assert_called_once_with(scope)
+                    get_meas.assert_called_once_with(scope, measurement_mapping)
+                    program_builder.with_repetition.assert_called_once_with(6, measurements=[('l', .1, .2)])
 
-                        self.assertEqual(program, expected_program)
-                        body_create_program.assert_called_once_with(scope=scope,
-                                                                    measurement_mapping=measurement_mapping,
-                                                                    channel_mapping=channel_mapping,
-                                                                    global_transformation=global_transformation,
-                                                                    to_single_waveform=to_single_waveform,
-                                                                    program_builder=program_builder)
-                        validate_scope.assert_called_once_with(scope)
-                        get_repetition_count_value.assert_called_once_with(scope)
-                        get_meas.assert_called_once_with(scope, measurement_mapping)
-
-    def test_create_program_constant_success_measurements(self) -> None:
+    def test_build_program_constant_success_measurements(self) -> None:
         repetitions = 3
         body = DummyPulseTemplate(duration=2.0, waveform=DummyWaveform(duration=2, defined_channels={'A'}), measurements=[('b', 0, 1)])
         t = RepetitionPulseTemplate(body, repetitions, parameter_constraints=['foo<9'], measurements=[('my', 2, 2)])
@@ -173,12 +170,13 @@ class RepetitionPulseTemplateSequencingTests(MeasurementWindowTestCase):
         measurement_mapping = {'my': 'thy', 'b': 'b'}
         channel_mapping = {}
         program_builder = LoopBuilder()
-        t._internal_create_program(scope=scope,
-                                   measurement_mapping=measurement_mapping,
-                                   channel_mapping=channel_mapping,
-                                   to_single_waveform=set(),
-                                   global_transformation=None,
-                                   program_builder=program_builder)
+        program_builder.override(
+            scope=scope,
+            measurement_mapping=measurement_mapping,
+            channel_mapping=channel_mapping,
+        )
+
+        t._internal_build_program(program_builder=program_builder)
 
         program = program_builder.to_program()
 
@@ -187,9 +185,7 @@ class RepetitionPulseTemplateSequencingTests(MeasurementWindowTestCase):
         self.assertEqual(repetitions, internal_loop.repetition_count)
 
         self.assertEqual(1, len(internal_loop))
-        self.assertEqual((scope, measurement_mapping, channel_mapping, program_builder), body.create_program_calls[-1])
         self.assertEqual(body.waveform, internal_loop[0].waveform)
-
         self.assert_measurement_windows_equal({'b': ([0, 2, 4], [1, 1, 1]), 'thy': ([2], [2])}, program.get_measurement_windows())
 
         # done in MultiChannelProgram
@@ -198,39 +194,7 @@ class RepetitionPulseTemplateSequencingTests(MeasurementWindowTestCase):
         self.assert_measurement_windows_equal({'b': ([0, 2, 4], [1, 1, 1]), 'thy': ([2], [2])},
                                               program.get_measurement_windows())
 
-    def test_create_program_declaration_success(self) -> None:
-        repetitions = "foo"
-        body = DummyPulseTemplate(duration=2.0, waveform=DummyWaveform(duration=2, defined_channels={'A'}))
-        t = RepetitionPulseTemplate(body, repetitions, parameter_constraints=['foo<9'])
-        scope = DictScope.from_kwargs(foo=3)
-        measurement_mapping = dict(moth='fire')
-        channel_mapping = dict(asd='f')
-        program_builder = LoopBuilder()
-        t._internal_create_program(scope=scope,
-                                   measurement_mapping=measurement_mapping,
-                                   channel_mapping=channel_mapping,
-                                   to_single_waveform=set(),
-                                   global_transformation=None,
-                                   program_builder=program_builder)
-        program = program_builder.to_program()
-
-        self.assertEqual(1, program.repetition_count)
-        self.assertEqual(1, len(program.children))
-        internal_loop = program.children[0]  # type: Loop
-        self.assertEqual(scope[repetitions], internal_loop.repetition_count)
-
-        self.assertEqual(1, len(internal_loop))
-        self.assertEqual((scope, measurement_mapping, channel_mapping, program_builder),
-                         body.create_program_calls[-1])
-        self.assertEqual(body.waveform, internal_loop[0].waveform)
-
-        self.assert_measurement_windows_equal({}, program.get_measurement_windows())
-
-        # ensure same result as from Sequencer
-        ## not the same as from Sequencer. Sequencer simplifies the whole thing to a single loop executing the waveform 3 times
-        ## due to absence of non-repeated measurements. create_program currently does no such optimization
-
-    def test_create_program_declaration_success_appended_measurements(self) -> None:
+    def test_build_program_declaration_success_appended_measurements(self) -> None:
         repetitions = "foo"
         body = DummyPulseTemplate(duration=2.0, waveform=DummyWaveform(duration=2), measurements=[('b', 0, 1)])
         t = RepetitionPulseTemplate(body, repetitions, parameter_constraints=['foo<9'],
@@ -241,14 +205,9 @@ class RepetitionPulseTemplateSequencingTests(MeasurementWindowTestCase):
         children = [Loop(waveform=DummyWaveform(duration=0))]
         program = Loop(children=children, measurements=[('a', [0], [1])], repetition_count=2)
         program_builder = LoopBuilder._testing_dummy([program])
+        program_builder.override(scope=scope, measurement_mapping=measurement_mapping, channel_mapping=channel_mapping)
 
-        t._internal_create_program(scope=scope,
-                                   measurement_mapping=measurement_mapping,
-                                   channel_mapping=channel_mapping,
-                                   to_single_waveform=set(),
-                                   global_transformation=None,
-                                   program_builder=program_builder)
-
+        t._internal_build_program(program_builder=program_builder)
         self.assertEqual(2, program.repetition_count)
         self.assertEqual(2, len(program.children))
         self.assertIs(program.children[0], children[0])
@@ -256,17 +215,12 @@ class RepetitionPulseTemplateSequencingTests(MeasurementWindowTestCase):
         self.assertEqual(scope[repetitions], internal_loop.repetition_count)
 
         self.assertEqual(1, len(internal_loop))
-        self.assertEqual((scope, measurement_mapping, channel_mapping, program_builder), body.create_program_calls[-1])
         self.assertEqual(body.waveform, internal_loop[0].waveform)
-
         self.assert_measurement_windows_equal({'fire': ([0, 6], [7.1, 7.1]),
                                          'b': ([0, 2, 4, 6, 8, 10], [1, 1, 1, 1, 1, 1]),
                                          'a': ([0], [1])}, program.get_measurement_windows())
 
-        # not ensure same result as from Sequencer here - we're testing appending to an already existing parent loop
-        # which is a use case that does not immediately arise from using Sequencer
-
-    def test_create_program_declaration_success_measurements(self) -> None:
+    def test_build_program_declaration_success_measurements(self) -> None:
         repetitions = "foo"
         body = DummyPulseTemplate(duration=2.0, waveform=DummyWaveform(duration=2), measurements=[('b', 0, 1)])
         t = RepetitionPulseTemplate(body, repetitions, parameter_constraints=['foo<9'], measurements=[('moth', 0, 'meas_end')])
@@ -274,12 +228,8 @@ class RepetitionPulseTemplateSequencingTests(MeasurementWindowTestCase):
         measurement_mapping = dict(moth='fire', b='b')
         channel_mapping = dict(asd='f')
         program_builder = LoopBuilder()
-        t._internal_create_program(scope=scope,
-                                   measurement_mapping=measurement_mapping,
-                                   channel_mapping=channel_mapping,
-                                   to_single_waveform=set(),
-                                   global_transformation=None,
-                                   program_builder=program_builder)
+        program_builder.override(scope=scope, measurement_mapping=measurement_mapping, channel_mapping=channel_mapping)
+        t._internal_build_program(program_builder=program_builder)
         program = program_builder.to_program()
 
         self.assertEqual(1, program.repetition_count)
@@ -288,12 +238,11 @@ class RepetitionPulseTemplateSequencingTests(MeasurementWindowTestCase):
         self.assertEqual(scope[repetitions], internal_loop.repetition_count)
 
         self.assertEqual(1, len(internal_loop))
-        self.assertEqual((scope, measurement_mapping, channel_mapping, program_builder), body.create_program_calls[-1])
         self.assertEqual(body.waveform, internal_loop[0].waveform)
 
         self.assert_measurement_windows_equal({'fire': ([0], [7.1]), 'b': ([0, 2, 4], [1, 1, 1])}, program.get_measurement_windows())
 
-    def test_create_program_declaration_exceeds_bounds(self) -> None:
+    def test_build_program_declaration_exceeds_bounds(self) -> None:
         repetitions = "foo"
         body_program = Loop(waveform=DummyWaveform(duration=1.0))
         body = DummyPulseTemplate(duration=2.0, program=body_program)
@@ -305,20 +254,16 @@ class RepetitionPulseTemplateSequencingTests(MeasurementWindowTestCase):
         children = [Loop(waveform=DummyWaveform(duration=0))]
         program = Loop(children=children)
         program_builder = LoopBuilder._testing_dummy([program])
+        program_builder.override(scope=scope, measurement_mapping=measurement_mapping, channel_mapping=channel_mapping)
         with self.assertRaises(ParameterConstraintViolation):
-            t._internal_create_program(scope=scope,
-                                       measurement_mapping=measurement_mapping,
-                                       channel_mapping=channel_mapping,
-                                       to_single_waveform=set(),
-                                       global_transformation=None,
-                                       program_builder=program_builder)
+            t._build_program(program_builder=program_builder)
         self.assertFalse(body.create_program_calls)
         self.assertEqual(1, program.repetition_count)
         self.assertEqual(children, list(program.children))
         self.assertIsNone(program.waveform)
         self.assert_measurement_windows_equal({}, program.get_measurement_windows())
 
-    def test_create_program_declaration_parameter_not_provided(self) -> None:
+    def test_build_program_declaration_parameter_not_provided(self) -> None:
         repetitions = "foo"
         body = DummyPulseTemplate(waveform=DummyWaveform(duration=2.0))
         t = RepetitionPulseTemplate(body, repetitions, parameter_constraints=['foo<9'], measurements=[('a', 'd', 1)])
@@ -328,21 +273,9 @@ class RepetitionPulseTemplateSequencingTests(MeasurementWindowTestCase):
         children = [Loop(waveform=DummyWaveform(duration=0))]
         program = Loop(children=children)
         program_builder = LoopBuilder._testing_dummy([program])
+        program_builder.override(scope=scope, measurement_mapping=measurement_mapping, channel_mapping=channel_mapping)
         with self.assertRaises(ParameterNotProvidedException):
-            t._internal_create_program(scope=scope,
-                                       measurement_mapping=measurement_mapping,
-                                       channel_mapping=channel_mapping,
-                                       to_single_waveform=set(),
-                                       global_transformation=None,
-                                       program_builder=program_builder)
-
-        with self.assertRaises(ParameterNotProvidedException):
-            t._internal_create_program(scope=scope,
-                                       measurement_mapping=measurement_mapping,
-                                       channel_mapping=channel_mapping,
-                                       to_single_waveform=set(),
-                                       global_transformation=None,
-                                       program_builder=program_builder)
+            t._internal_build_program(program_builder=program_builder)
 
         self.assertFalse(body.create_program_calls)
         self.assertEqual(1, program.repetition_count)
@@ -350,7 +283,7 @@ class RepetitionPulseTemplateSequencingTests(MeasurementWindowTestCase):
         self.assertIsNone(program.waveform)
         self.assert_measurement_windows_equal({}, program.get_measurement_windows())
 
-    def test_create_program_declaration_parameter_value_not_whole(self) -> None:
+    def test_build_program_declaration_parameter_value_not_whole(self) -> None:
         repetitions = "foo"
         body = DummyPulseTemplate(duration=2.0, waveform=DummyWaveform(duration=2.0))
         t = RepetitionPulseTemplate(body, repetitions, parameter_constraints=['foo<9'])
@@ -360,21 +293,17 @@ class RepetitionPulseTemplateSequencingTests(MeasurementWindowTestCase):
         children = [Loop(waveform=DummyWaveform(duration=0))]
         program = Loop(children=children)
         program_builder = LoopBuilder._testing_dummy([program])
+        program_builder.override(scope=scope, measurement_mapping=measurement_mapping, channel_mapping=channel_mapping)
 
         with self.assertRaises(ParameterNotIntegerException):
-            t._internal_create_program(scope=scope,
-                                       measurement_mapping=measurement_mapping,
-                                       channel_mapping=channel_mapping,
-                                       to_single_waveform=set(),
-                                       global_transformation=None,
-                                       program_builder=program_builder)
+            t._internal_build_program(program_builder=program_builder)
         self.assertFalse(body.create_program_calls)
         self.assertEqual(1, program.repetition_count)
         self.assertEqual(children, list(program.children))
         self.assertIsNone(program.waveform)
         self.assert_measurement_windows_equal({}, program.get_measurement_windows())
 
-    def test_create_program_constant_measurement_mapping_failure(self) -> None:
+    def test_build_program_constant_measurement_mapping_failure(self) -> None:
         repetitions = "foo"
         body = DummyPulseTemplate(duration=2.0, waveform=DummyWaveform(duration=2.0), measurements=[('b', 0, 1)])
         t = RepetitionPulseTemplate(body, repetitions, parameter_constraints=['foo<9'], measurements=[('a', 0, 1)])
@@ -384,31 +313,26 @@ class RepetitionPulseTemplateSequencingTests(MeasurementWindowTestCase):
         children = [Loop(waveform=DummyWaveform(duration=0))]
         program = Loop(children=children)
         program_builder = LoopBuilder._testing_dummy([program])
+        program_builder.override(
+            scope=scope,
+            channel_mapping=channel_mapping,
+            measurement_mapping=measurement_mapping,)
 
         with self.assertRaises(KeyError):
-            t._internal_create_program(scope=scope,
-                                       measurement_mapping=measurement_mapping,
-                                       channel_mapping=channel_mapping,
-                                       to_single_waveform=set(),
-                                       global_transformation=None,
-                                       program_builder=program_builder)
+            t._internal_build_program(program_builder=program_builder)
 
         # test for failure on child level
         measurement_mapping = dict(a='a')
+        program_builder.override(measurement_mapping=measurement_mapping)
         with self.assertRaises(KeyError):
-            t._internal_create_program(scope=scope,
-                                       measurement_mapping=measurement_mapping,
-                                       channel_mapping=channel_mapping,
-                                       to_single_waveform=set(),
-                                       global_transformation=None,
-                                       program_builder=program_builder)
+            t._internal_build_program(program_builder=program_builder)
         self.assertFalse(body.create_program_calls)
         self.assertEqual(1, program.repetition_count)
         self.assertEqual(children, list(program.children))
         self.assertIsNone(program.waveform)
         self.assert_measurement_windows_equal({}, program.get_measurement_windows())
 
-    def test_create_program_rep_count_zero_constant(self) -> None:
+    def test_build_program_rep_count_zero_constant(self) -> None:
         repetitions = 0
         body_program = Loop(waveform=DummyWaveform(duration=1.0))
         body = DummyPulseTemplate(duration=2.0, program=body_program)
@@ -422,17 +346,13 @@ class RepetitionPulseTemplateSequencingTests(MeasurementWindowTestCase):
         channel_mapping = dict(asd='f')
 
         program_builder = LoopBuilder()
-        t._internal_create_program(scope=scope,
-                                   measurement_mapping=measurement_mapping,
-                                   channel_mapping=channel_mapping,
-                                   to_single_waveform=set(),
-                                   global_transformation=None,
-                                   program_builder=program_builder)
+        program_builder.override(scope=scope, measurement_mapping=measurement_mapping, channel_mapping=channel_mapping)
+        t._internal_build_program(program_builder=program_builder)
         program = program_builder.to_program()
         self.assertFalse(body.create_program_calls)
         self.assertIsNone(program)
 
-    def test_create_program_rep_count_zero_constant_with_measurement(self) -> None:
+    def test_build_program_rep_count_zero_constant_with_measurement(self) -> None:
         repetitions = 0
         body_program = Loop(waveform=DummyWaveform(duration=1.0))
         body = DummyPulseTemplate(duration=2.0, program=body_program)
@@ -446,17 +366,12 @@ class RepetitionPulseTemplateSequencingTests(MeasurementWindowTestCase):
         channel_mapping = dict(asd='f')
 
         program_builder = default_program_builder()
-        t._internal_create_program(scope=scope,
-                                   measurement_mapping=measurement_mapping,
-                                   channel_mapping=channel_mapping,
-                                   to_single_waveform=set(),
-                                   global_transformation=None,
-                                   program_builder=program_builder)
+        program_builder.override(scope=scope, measurement_mapping=measurement_mapping, channel_mapping=channel_mapping)
+        t._internal_build_program(program_builder=program_builder)
         program = program_builder.to_program()
-        self.assertFalse(body.create_program_calls)
         self.assertIsNone(program)
 
-    def test_create_program_rep_count_zero_declaration(self) -> None:
+    def test_build_program_rep_count_zero_declaration(self) -> None:
         repetitions = "foo"
         body_program = Loop(waveform=DummyWaveform(duration=1.0))
         body = DummyPulseTemplate(duration=2.0, program=body_program)
@@ -470,17 +385,13 @@ class RepetitionPulseTemplateSequencingTests(MeasurementWindowTestCase):
         channel_mapping = dict(asd='f')
 
         program_builder = default_program_builder()
-        t._internal_create_program(scope=scope,
-                                   measurement_mapping=measurement_mapping,
-                                   channel_mapping=channel_mapping,
-                                   to_single_waveform=set(),
-                                   global_transformation=None,
-                                   program_builder=program_builder)
+        program_builder.override(scope=scope, measurement_mapping=measurement_mapping, channel_mapping=channel_mapping)
+        t._internal_build_program(program_builder=program_builder)
         program = program_builder.to_program()
         self.assertFalse(body.create_program_calls)
         self.assertIsNone(program)
 
-    def test_create_program_rep_count_zero_declaration_with_measurement(self) -> None:
+    def test_build_program_rep_count_zero_declaration_with_measurement(self) -> None:
         repetitions = "foo"
         body_program = Loop(waveform=DummyWaveform(duration=1.0))
         body = DummyPulseTemplate(duration=2.0, program=body_program)
@@ -494,22 +405,19 @@ class RepetitionPulseTemplateSequencingTests(MeasurementWindowTestCase):
         channel_mapping = dict(asd='f')
 
         program_builder = default_program_builder()
-        t._internal_create_program(scope=scope,
-                                   measurement_mapping=measurement_mapping,
-                                   channel_mapping=channel_mapping,
-                                   to_single_waveform=set(),
-                                   global_transformation=None,
-                                   program_builder=program_builder)
+        program_builder.override(scope=scope, measurement_mapping=measurement_mapping, channel_mapping=channel_mapping)
+        t._internal_build_program(program_builder=program_builder)
         program = program_builder.to_program()
         self.assertFalse(body.create_program_calls)
         self.assertIsNone(program)
 
-    def test_create_program_rep_count_neg_declaration(self) -> None:
+    def test_build_program_rep_count_neg_declaration(self) -> None:
         repetitions = "foo"
         body_program = Loop(waveform=DummyWaveform(duration=1.0))
         body = DummyPulseTemplate(duration=2.0, program=body_program)
 
-        # suppress warning about 0 repetitions on construction here, we are only interested in correct behavior during sequencing (i.e., do nothing)
+        # suppress warning about 0 repetitions on construction here.
+        # We are only interested in correct behavior during sequencing (i.e., do nothing)
         with warnings.catch_warnings(record=True):
             t = RepetitionPulseTemplate(body, repetitions)
 
@@ -518,17 +426,15 @@ class RepetitionPulseTemplateSequencingTests(MeasurementWindowTestCase):
         channel_mapping = dict(asd='f')
 
         program_builder = default_program_builder()
-        t._internal_create_program(scope=scope,
-                                   measurement_mapping=measurement_mapping,
-                                   channel_mapping=channel_mapping,
-                                   to_single_waveform=set(),
-                                   global_transformation=None,
-                                   program_builder=program_builder)
+        program_builder.override(
+            scope=scope, measurement_mapping=measurement_mapping, channel_mapping=channel_mapping,
+        )
+        t._internal_build_program(program_builder=program_builder)
         program = program_builder.to_program()
         self.assertFalse(body.create_program_calls)
         self.assertIsNone(program)
 
-    def test_create_program_rep_count_neg_declaration_with_measurements(self) -> None:
+    def test_build_program_rep_count_neg_declaration_with_measurements(self) -> None:
         repetitions = "foo"
         body_program = Loop(waveform=DummyWaveform(duration=1.0))
         body = DummyPulseTemplate(duration=2.0, program=body_program)
@@ -542,17 +448,13 @@ class RepetitionPulseTemplateSequencingTests(MeasurementWindowTestCase):
         channel_mapping = dict(asd='f')
 
         program_builder = default_program_builder()
-        t._internal_create_program(scope=scope,
-                                   measurement_mapping=measurement_mapping,
-                                   channel_mapping=channel_mapping,
-                                   to_single_waveform=set(),
-                                   global_transformation=None,
-                                   program_builder=program_builder)
+        program_builder.override(scope=scope, measurement_mapping=measurement_mapping, channel_mapping=channel_mapping)
+        t._internal_build_program(program_builder=program_builder)
         program = program_builder.to_program()
         self.assertFalse(body.create_program_calls)
         self.assertIsNone(program)
 
-    def test_create_program_none_subprogram(self) -> None:
+    def test_build_program_none_subprogram(self) -> None:
         repetitions = "foo"
         body = DummyPulseTemplate(duration=0.0, waveform=None)
         t = RepetitionPulseTemplate(body, repetitions, parameter_constraints=['foo<9'])
@@ -560,15 +462,11 @@ class RepetitionPulseTemplateSequencingTests(MeasurementWindowTestCase):
         measurement_mapping = dict(moth='fire')
         channel_mapping = dict(asd='f')
         program_builder = default_program_builder()
-        t._internal_create_program(scope=scope,
-                                   measurement_mapping=measurement_mapping,
-                                   channel_mapping=channel_mapping,
-                                   to_single_waveform=set(),
-                                   global_transformation=None,
-                                   program_builder=program_builder)
+        program_builder.override(scope=scope, measurement_mapping=measurement_mapping, channel_mapping=channel_mapping)
+        t._internal_build_program(program_builder=program_builder)
         self.assertIsNone(program_builder.to_program())
 
-    def test_create_program_none_subprogram_with_measurement(self) -> None:
+    def test_build_program_none_subprogram_with_measurement(self) -> None:
         repetitions = "foo"
         body = DummyPulseTemplate(duration=2.0, waveform=None, measurements=[('b', 2, 3)])
         t = RepetitionPulseTemplate(body, repetitions, parameter_constraints=['foo<9'],
@@ -577,13 +475,9 @@ class RepetitionPulseTemplateSequencingTests(MeasurementWindowTestCase):
         measurement_mapping = dict(moth='fire', b='b')
         channel_mapping = dict(asd='f')
         program_builder = default_program_builder()
+        program_builder.override(scope=scope, measurement_mapping=measurement_mapping, channel_mapping=channel_mapping)
 
-        t._internal_create_program(scope=scope,
-                                   measurement_mapping=measurement_mapping,
-                                   channel_mapping=channel_mapping,
-                                   to_single_waveform=set(),
-                                   global_transformation=None,
-                                   program_builder=program_builder)
+        t._internal_build_program(program_builder=program_builder)
         self.assertIsNone(program_builder.to_program())
 
     def test_single_waveform(self):

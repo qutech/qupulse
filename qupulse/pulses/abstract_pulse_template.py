@@ -137,10 +137,8 @@ class AbstractPulseTemplate(PulseTemplate):
         else:
             raise RuntimeError('Cannot call "%s". No linked target to refer to', method_name)
 
-    def _internal_create_program(self, **kwargs):
-        raise NotImplementedError('this should never be called as we overrode _create_program')  # pragma: no cover
-
     _create_program = partialmethod(_forward_if_linked, '_create_program')
+    _build_program = partialmethod(_forward_if_linked, '_build_program')
 
     defined_channels = property(partial(_get_property, property_name='defined_channels'),
                                 doc=_PROPERTY_DOC.format(name='defined_channels'))

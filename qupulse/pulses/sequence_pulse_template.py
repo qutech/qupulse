@@ -134,24 +134,12 @@ class SequencePulseTemplate(PulseTemplate, ParameterConstrainer, MeasurementDefi
             [sub_template.build_waveform(parameters, channel_mapping=channel_mapping)
              for sub_template in self.__subtemplates])
 
-    def _internal_create_program(self, *,
-                                 scope: Scope,
-                                 measurement_mapping: Dict[str, Optional[str]],
-                                 channel_mapping: Dict[ChannelID, Optional[ChannelID]],
-                                 global_transformation: Optional['Transformation'],
-                                 to_single_waveform: Set[Union[str, 'PulseTemplate']],
-                                 program_builder: ProgramBuilder) -> None:
-        self.validate_scope(scope)
-
-        measurements = self.get_measurement_windows(scope, measurement_mapping)
+    def _internal_build_program(self, program_builder: ProgramBuilder):
+        build_context = program_builder.build_context
+        measurements = self.get_measurement_windows(build_context.scope, build_context.measurement_mapping)
         with program_builder.with_sequence(measurements=measurements) as sequence_program_builder:
             for subtemplate in self.subtemplates:
-                subtemplate._create_program(scope=scope,
-                                            measurement_mapping=measurement_mapping,
-                                            channel_mapping=channel_mapping,
-                                            global_transformation=global_transformation,
-                                            to_single_waveform=to_single_waveform,
-                                            program_builder=sequence_program_builder)
+                subtemplate._build_program(program_builder=sequence_program_builder)
 
     def get_serialization_data(self, serializer: Optional[Serializer]=None) -> Dict[str, Any]:
         data = super().get_serialization_data(serializer)
