@@ -1,0 +1,2 @@
+The keyword argument `to_single_waveform` of `PulseTemplate.create_waveform` no longer accepts pulse template objects, only identifiers.
+Use `PulseTemplate.metadata.to_single_waveform` to enforce single waveform translation.

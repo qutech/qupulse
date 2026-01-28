@@ -568,11 +568,11 @@ class TransformedRampTest(TestCase):
 
     def test_local_trafo_program(self):
         program_builder = LinSpaceBuilder(('a',))
+        self.pulse_template.metadata.to_single_waveform = "always"
         with self.assertRaises(NotImplementedError):
             # not implemented yet. This test should work as soon as its implemented
             program = self.pulse_template.create_program(program_builder=program_builder,
-                                                         global_transformation=self.transformation,
-                                                         to_single_waveform={self.pulse_template})
+                                                         global_transformation=self.transformation)
             self.assertEqual(self.program, program)
 
 
