@@ -681,8 +681,9 @@ class AtomicPulseTemplate(PulseTemplate, MeasurementDefiner):
 
     def __init__(self, *,
                  identifier: Optional[str],
-                 measurements: Optional[List[MeasurementDeclaration]]):
-        PulseTemplate.__init__(self, identifier=identifier)
+                 measurements: Optional[List[MeasurementDeclaration]],
+                 metadata: TemplateMetadata | dict = None):
+        PulseTemplate.__init__(self, identifier=identifier, metadata=metadata)
         MeasurementDefiner.__init__(self, measurements=measurements)
 
     def with_parallel_atomic(self, *parallel: 'AtomicPulseTemplate') -> 'AtomicPulseTemplate':

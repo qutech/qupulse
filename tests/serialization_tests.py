@@ -25,9 +25,16 @@ from tests.pulses.sequencing_dummies import DummyPulseTemplate
 
 class DummySerializable(Serializable):
 
-    def __init__(self, identifier: Optional[str]=None, registry: PulseRegistryType=None, **kwargs) -> None:
+    def __init__(self,
+                 identifier: Optional[str]=None,
+                 registry: PulseRegistryType=None,
+                 **kwargs) -> None:
         super().__init__(identifier)
         for name in kwargs:
+            if name == "metadata":
+                # this was the easiest way to adjust this test
+                # metadata is not a Serializable but a PulseTemplate attribute so it is a hacky solution
+                continue
             setattr(self, name, kwargs[name])
 
         self._register(registry=registry)
@@ -79,13 +86,15 @@ class SerializableTests(metaclass=ABCMeta):
     def assert_equal_instance_except_id(self, lhs, rhs):
         pass
 
-    def make_instance(self, identifier=None, registry=None):
-        return self.class_to_test(identifier=identifier, registry=registry, **self.make_kwargs())
+    def make_instance(self, identifier=None, registry=None, metadata=None):
+        return self.class_to_test(identifier=identifier, registry=registry, metadata=metadata, **self.make_kwargs())
 
-    def make_serialization_data(self, identifier=None):
+    def make_serialization_data(self, identifier=None, metadata=None):
         data = {Serializable.type_identifier_name: self.class_to_test.get_type_identifier(), **self.make_kwargs()}
         if identifier:
             data[Serializable.identifier_name] = identifier
+        if metadata:
+            data["metadata"] = metadata
         return data
 
     def test_identifier(self) -> None:

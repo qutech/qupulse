@@ -7,6 +7,7 @@ from typing import Optional, Set, Dict, Union
 from qupulse import ChannelID
 from qupulse.program import ProgramBuilder
 from qupulse.program.waveforms import Waveform
+from qupulse.pulses.metadata import TemplateMetadata
 from qupulse.serialization import PulseRegistryType
 from qupulse.expressions import ExpressionScalar
 
@@ -18,8 +19,10 @@ class TimeReversalPulseTemplate(PulseTemplate):
 
     def __init__(self, inner: PulseTemplate,
                  identifier: Optional[str] = None,
-                 registry: PulseRegistryType = None):
-        super(TimeReversalPulseTemplate, self).__init__(identifier=identifier)
+                 registry: PulseRegistryType = None,
+                 metadata: TemplateMetadata | dict = None,
+                 ):
+        super(TimeReversalPulseTemplate, self).__init__(identifier=identifier, metadata=metadata)
         self._inner = inner
         self._register(registry=registry)
 

@@ -10,6 +10,7 @@ import numbers
 import sympy
 import numpy as np
 
+from qupulse.pulses.metadata import TemplateMetadata
 from qupulse.utils.sympy import IndexedBroadcast
 from qupulse.utils.types import ChannelID
 from qupulse.expressions import Expression, ExpressionScalar
@@ -50,9 +51,11 @@ class PointPulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
                  parameter_constraints: Optional[List[Union[str, ParameterConstraint]]]=None,
                  measurements: Optional[List[MeasurementDeclaration]]=None,
                  identifier: Optional[str]=None,
-                 registry: PulseRegistryType=None) -> None:
+                 registry: PulseRegistryType=None,
+                 metadata: TemplateMetadata | dict = None,
+                 ) -> None:
 
-        AtomicPulseTemplate.__init__(self, identifier=identifier, measurements=measurements)
+        AtomicPulseTemplate.__init__(self, identifier=identifier, measurements=measurements, metadata=metadata)
         ParameterConstrainer.__init__(self, parameter_constraints=parameter_constraints)
 
         self._channels = tuple(channel_names)

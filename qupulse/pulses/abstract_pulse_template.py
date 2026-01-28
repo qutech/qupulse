@@ -8,6 +8,7 @@ import warnings
 
 from qupulse import ChannelID
 from qupulse.expressions import ExpressionScalar
+from qupulse.pulses.metadata import TemplateMetadata
 from qupulse.serialization import PulseRegistryType
 from qupulse.pulses.pulse_template import PulseTemplate
 
@@ -80,6 +81,11 @@ class AbstractPulseTemplate(PulseTemplate):
         self.serialize_linked = False
 
         self._register(registry=registry)
+
+    @property
+    def metadata(self) -> TemplateMetadata:
+        raise NotImplementedError('AbstractPulseTemplate does not support metadata yet. '
+                                  'Please file an issue if you need this feature.')
 
     def link_to(self, target: PulseTemplate, serialize_linked: bool=None):
         """Link to another pulse template.
