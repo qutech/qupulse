@@ -1,3 +1,4 @@
+import typing
 import unittest
 from unittest import mock
 import warnings
@@ -205,10 +206,6 @@ class ArithmeticAtomicPulseTemplateSerializationTest(SerializableTests, unittest
             'arithmetic_operator': '-',
             'measurements': [('m1', 0., .1)]
         }
-
-    def make_instance(self, identifier=None, registry=None):
-        kwargs = self.make_kwargs()
-        return self.class_to_test(identifier=identifier, **kwargs, registry=registry)
 
     def assert_equal_instance_except_id(self, lhs: ArithmeticAtomicPulseTemplate, rhs: ArithmeticAtomicPulseTemplate):
         self.assertIsInstance(lhs, ArithmeticAtomicPulseTemplate)
@@ -681,3 +678,19 @@ class ArithmeticUsageTests(unittest.TestCase):
         _ = self.complex_pt - '4.5'
 
 
+class ArithmeticPulseTemplateSerializationTest(SerializableTests, unittest.TestCase):
+    def assert_equal_instance_except_id(self, lhs: ArithmeticPulseTemplate, rhs: ArithmeticPulseTemplate):
+        self.assertEqual(lhs.lhs, rhs.lhs)
+        self.assertEqual(lhs.rhs, rhs.rhs)
+        self.assertEqual(lhs._arithmetic_operator, rhs._arithmetic_operator)
+
+    @property
+    def class_to_test(self) -> typing.Any:
+        return ArithmeticPulseTemplate
+
+    def make_kwargs(self) -> dict:
+        return {
+            "lhs": 42.2,
+            "rhs": DummyPulseTemplate(),
+            "arithmetic_operator": "+",
+        }
