@@ -10,6 +10,7 @@ import numbers
 from typing import Any, Dict, List, Optional, Union, Mapping, AbstractSet
 
 from qupulse.program.waveforms import ConstantWaveform
+from qupulse.pulses.metadata import TemplateMetadata
 from qupulse.utils.types import TimeType, ChannelID
 from qupulse.utils import cached_property
 from qupulse.expressions import ExpressionScalar, ExpressionLike
@@ -27,7 +28,9 @@ class ConstantPulseTemplate(AtomicPulseTemplate):  # type: ignore
                  identifier: Optional[str] = None,
                  name: Optional[str] = None,
                  measurements: Optional[List[MeasurementDeclaration]] = None,
-                 registry: PulseRegistryType=None) -> None:
+                 registry: PulseRegistryType=None,
+                 metadata: TemplateMetadata | dict = None
+                 ) -> None:
         """An atomic pulse template qupulse representing a multi-channel pulse with constant values.
 
         As an optimization, this class does not convert plain floats or ints to qupulse expressions.
@@ -40,7 +43,7 @@ class ConstantPulseTemplate(AtomicPulseTemplate):  # type: ignore
             measurements: Passed to :py:class:`.MeasurementDefiner` superclass
             registry: The pulse is registered in this mapping after construction if an identifier is provided
         """
-        super().__init__(identifier=identifier, measurements=measurements)
+        super().__init__(identifier=identifier, measurements=measurements, metadata=metadata)
 
         # we special case numeric values in this PulseTemplate for performance reasons
         self._duration = duration if isinstance(duration, (float, int, TimeType)) else ExpressionScalar(duration)

@@ -156,8 +156,9 @@ class DummyPulseTemplate(AtomicPulseTemplate):
                  final_values: Dict[ChannelID, Any]=None,
                  program: Optional[Loop]=None,
                  identifier=None,
+                 metadata=None,
                  registry=None) -> None:
-        super().__init__(identifier=identifier, measurements=measurements)
+        super().__init__(identifier=identifier, measurements=measurements, metadata=metadata)
         self.requires_stop_ = requires_stop
         self.requires_stop_arguments = []
 

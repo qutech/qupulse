@@ -13,6 +13,7 @@ import numbers
 import sympy
 
 from qupulse.expressions import ExpressionScalar
+from qupulse.pulses.metadata import TemplateMetadata
 from qupulse.serialization import Serializer, PulseRegistryType
 
 from qupulse.utils.types import ChannelID, TimeType, time_from_float
@@ -44,7 +45,9 @@ class FunctionPulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
                  *,
                  measurements: Optional[List[MeasurementDeclaration]]=None,
                  parameter_constraints: Optional[List[Union[str, ParameterConstraint]]]=None,
-                 registry: PulseRegistryType=None) -> None:
+                 registry: PulseRegistryType=None,
+                 metadata: TemplateMetadata | dict = None,
+                 ) -> None:
         """
         Args:
             expression: The function represented by this FunctionPulseTemplate
@@ -61,7 +64,7 @@ class FunctionPulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
                 :py:class:`~qupulse.pulses.measurement.ParameterConstrainer` superclass
             registry: After initialization this pulse is registered in the given mapping if an identifier is provided.
         """
-        AtomicPulseTemplate.__init__(self, identifier=identifier, measurements=measurements)
+        AtomicPulseTemplate.__init__(self, identifier=identifier, measurements=measurements, metadata=metadata)
         ParameterConstrainer.__init__(self, parameter_constraints=parameter_constraints)
 
         self.__expression = ExpressionScalar.make(expression)

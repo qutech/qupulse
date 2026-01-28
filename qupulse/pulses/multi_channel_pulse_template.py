@@ -16,6 +16,7 @@ import numbers
 import warnings
 
 from qupulse.program import ProgramBuilder
+from qupulse.pulses.metadata import TemplateMetadata
 from qupulse.serialization import Serializer, PulseRegistryType
 from qupulse.parameter_scope import Scope
 
@@ -40,7 +41,9 @@ class AtomicMultiChannelPulseTemplate(AtomicPulseTemplate, ParameterConstrainer)
                  parameter_constraints: Optional[List] = None,
                  measurements: Optional[List[MeasurementDeclaration]] = None,
                  registry: PulseRegistryType = None,
-                 duration: Optional[ExpressionLike] = None) -> None:
+                 duration: Optional[ExpressionLike] = None,
+                 metadata: TemplateMetadata | dict = None,
+                 ) -> None:
         """Combines multiple AtomicPulseTemplates of the same duration that are defined on different channels into an
         AtomicPulseTemplate.
         If the duration keyword argument is given it is enforced that the instantiated pulse template has this duration.
@@ -55,7 +58,7 @@ class AtomicMultiChannelPulseTemplate(AtomicPulseTemplate, ParameterConstrainer)
             duration: Enforced duration of the pulse template on instantiation. build_waveform checks all sub-waveforms
             have this duration. If True the equality of durations is only checked durtin instantiation not construction.
         """
-        AtomicPulseTemplate.__init__(self, identifier=identifier, measurements=measurements)
+        AtomicPulseTemplate.__init__(self, identifier=identifier, measurements=measurements, metadata=metadata)
         ParameterConstrainer.__init__(self, parameter_constraints=parameter_constraints)
 
         self._subtemplates = [st if isinstance(st, PulseTemplate) else MappingPulseTemplate.from_tuple(st) for st in
@@ -227,7 +230,9 @@ class ParallelChannelPulseTemplate(PulseTemplate):
                  template: PulseTemplate,
                  overwritten_channels: Mapping[ChannelID, Union[ExpressionScalar, Sympifyable]], *,
                  identifier: Optional[str]=None,
-                 registry: Optional[PulseRegistryType] = None):
+                 registry: Optional[PulseRegistryType] = None,
+                 metadata: TemplateMetadata | dict = None,
+                 ):
         """Pulse template to add new or overwrite existing channels of a contained pulse template. The channel values
         may be time dependent if the contained pulse template is atomic.
 
@@ -238,7 +243,7 @@ class ParallelChannelPulseTemplate(PulseTemplate):
             identifier: Name of the pulse template for serialization
             registry: Pulse template gets registered here if not None.
         """
-        super().__init__(identifier=identifier)
+        super().__init__(identifier=identifier, metadata=metadata)
 
         self._template = template
         self._overwritten_channels = {channel: ExpressionScalar(value)
