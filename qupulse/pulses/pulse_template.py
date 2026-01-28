@@ -163,7 +163,7 @@ class PulseTemplate(Serializable):
                        measurement_mapping: Optional[Mapping[str, Optional[str]]]=None,
                        channel_mapping: Optional[Mapping[ChannelID, Optional[ChannelID]]]=None,
                        global_transformation: Optional[Transformation]=None,
-                       to_single_waveform: Set[Union[str, 'PulseTemplate']]=None,
+                       to_single_waveform: Set[str]=None,
                        volatile: Union[Set[str], str] = None,
                        program_builder: ProgramBuilder = None) -> Optional[Program]:
         """Translates this PulseTemplate into a program Loop.
@@ -177,8 +177,7 @@ class PulseTemplate(Serializable):
             measurement_mapping: A mapping of measurement window names. Windows that are mapped to None are omitted.
             channel_mapping: A mapping of channel names. Channels that are mapped to None are omitted.
             global_transformation: This transformation is applied to every waveform
-            to_single_waveform: A set of pulse templates (or identifiers) which are directly translated to a
-                waveform. This might change how transformations are applied. TODO: clarify
+            to_single_waveform: A set of identifiers which are directly translated to a waveform.
             volatile: Everything in the final program that depends on these parameters is marked as volatile
             program_builder: This program builder is used to build the return value. If `None` `default_program_builder`
                 is used.
@@ -193,6 +192,11 @@ class PulseTemplate(Serializable):
             channel_mapping = dict()
         if to_single_waveform is None:
             to_single_waveform = set()
+        elif not all(isinstance(elem, str) for elem in to_single_waveform):
+            non_str_types = {type(elem).__name__ for elem in to_single_waveform if not isinstance(elem, str)}
+            warnings.warn(f"Non str to_single_waveform members are ignored: {non_str_types}",
+                          category=NonStrToSingleWaveformWarning, stacklevel=2)
+            to_single_waveform = {elem for elem in to_single_waveform if isinstance(elem, str)}
         if volatile is None:
             volatile = set()
         elif isinstance(volatile, str):
@@ -254,12 +258,8 @@ class PulseTemplate(Serializable):
         if (validate_scope := getattr(self, "validate_scope", None)) is not None:
             validate_scope(program_builder.build_context.scope)
 
-        to_single_waveform = program_builder.build_settings.to_single_waveform
-        if self.metadata.to_single_waveform == 'always' or self.identifier in to_single_waveform or self in to_single_waveform:
-            with program_builder.new_subprogram() as inner_program_builder:
-                self._internal_build_program(inner_program_builder)
-        else:
-            self._internal_build_program(program_builder)
+        with program_builder.with_metadata(self.metadata, self.identifier) as inner_program_builder:
+            self._internal_build_program(inner_program_builder)
 
     def _internal_build_program(self, program_builder: ProgramBuilder):
         """The subclass specific implementation of create_program()."""
@@ -783,4 +783,7 @@ class UnknownVolatileParameter(RuntimeWarning):
 
 
 class MetadataComparison(RuntimeWarning):
+    pass
+
+class NonStrToSingleWaveformWarning(RuntimeWarning):
     pass

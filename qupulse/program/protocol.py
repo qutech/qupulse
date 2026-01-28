@@ -1,4 +1,5 @@
 """Definition of the program builder protocol."""
+import contextlib
 import copy
 import dataclasses
 from abc import abstractmethod, ABC
@@ -63,7 +64,7 @@ class BuildContext:
 @dataclasses.dataclass(frozen=True)
 class BuildSettings:
     """This dataclass bundles the immutable settings."""
-    to_single_waveform: AbstractSet[str | object]
+    to_single_waveform: AbstractSet[str]
 
 
 @runtime_checkable
@@ -122,7 +123,7 @@ class ProgramBuilder(Protocol):
         """Modify the build context for the duration of the context manager."""
 
     @abstractmethod
-    def with_metadata(self, metadata: TemplateMetadata) -> ContextManager['ProgramBuilder']:
+    def with_metadata(self, metadata: TemplateMetadata, identifier: str | None) -> ContextManager['ProgramBuilder']:
         """Modify the build context for the duration of the context manager."""
 
     @abstractmethod
@@ -272,13 +273,19 @@ class BaseProgramBuilder(ProgramBuilder, ABC):
         self._build_context_stack.pop()
 
     @contextmanager
-    def with_metadata(self, metadata: TemplateMetadata):
-        # metadata.to_single_waveform == "always" is handled in PulseTemplate._build_program
+    def with_metadata(self, metadata: TemplateMetadata, identifier: str | None):
+        stack = contextlib.ExitStack()
+
+        builder = self
+
         if metadata.minimal_sample_rate is not None:
-            with self._with_patched_context(minimal_sample_rate=metadata.minimal_sample_rate) as builder:
-                yield builder
-        else:
-            yield self
+            builder = stack.enter_context(builder._with_patched_context(minimal_sample_rate=metadata.minimal_sample_rate))
+
+        if metadata.to_single_waveform == "always" or identifier in self.build_settings.to_single_waveform:
+            builder = stack.enter_context(builder.new_subprogram())
+
+        with stack:
+            yield builder
 
     @contextmanager
     def with_transformation(self, transformation: Transformation):
