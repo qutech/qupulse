@@ -999,7 +999,7 @@ class LinSpaceBuilder(ProgramBuilder):
             if global_transformation:
                 potential_waveform = TransformingWaveform.from_transformation(potential_waveform, global_transformation)
             constant_values = potential_waveform.constant_value_dict()
-        except:
+        except Exception:
             constant_values = None
         
         if constant_values is None:
