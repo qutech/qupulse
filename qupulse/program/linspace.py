@@ -1080,7 +1080,12 @@ def _get_concatenated_blocks(blocks: Sequence[LinSpaceNode],
     def combine_nodes_into_one(nodes: Sequence[LinSpaceArbitraryWaveform]) -> LinSpaceArbitraryWaveform:
         assert all(isinstance(n,LinSpaceArbitraryWaveform) for n in nodes), 'can only combine type LinSpaceArbitraryWaveform'
         seq_wf = SequenceWaveform.from_sequence([n.waveform for n in nodes])
-        combined_labwf = LinSpaceArbitraryWaveform(waveform=seq_wf,channels=seq_wf.defined_channels)
+        meas, cum_dur = [], 0.
+        for node in nodes:
+            meas.extend([(label,start+cum_dur,dur) for (label,start,dur) in node._measurement_memory.measurements])
+            cum_dur += float(node.body_duration)
+        combined_labwf = LinSpaceArbitraryWaveform(waveform=seq_wf,channels=seq_wf.defined_channels,)
+        combined_labwf._measurement_memory.add_measurements(meas)
         return combined_labwf
         
     
