@@ -244,7 +244,8 @@ class ProgramEntry:
                         if not isinstance(command,Play):
                             continue
                         if isinstance(command.waveform,TruncationWaveform):
-                            waveforms_trunc_ref[command.waveform] = (command.waveform._inner,command.waveform._used_duration)
+                            samples = numpy.int64(numpy.rint(float(command.waveform._used_duration*sample_rate)))
+                            waveforms_trunc_ref[command.waveform] = (command.waveform._inner,samples)
                             waveforms_d[command.waveform._inner] = None
                         elif isinstance(command.waveform,Waveform):
                             waveforms_d[command.waveform] = None

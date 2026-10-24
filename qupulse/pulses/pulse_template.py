@@ -12,19 +12,19 @@ from typing import Dict, Tuple, Set, Optional, Union, List, Callable, Any, Gener
 import itertools
 import collections
 from numbers import Real, Number
-from functools import cached_property
+from functools import cached_property, partial
 
 import numpy
 import sympy
 
 from qupulse.utils.types import ChannelID, DocStringABCMeta, FrozenDict
-from qupulse.utils import forced_hash
+from qupulse.utils import forced_hash, _MagicLoopElements
 from qupulse.serialization import Serializable
 from qupulse.expressions import ExpressionScalar, Expression, ExpressionLike
 from qupulse.program.loop import Loop, to_waveform
 from qupulse.program.transformation import Transformation, IdentityTransformation, ChainedTransformation, chain_transformations
 
-from qupulse.program.waveforms import Waveform, TransformingWaveform
+from qupulse.program.waveforms import Waveform, TransformingWaveform, TruncationWaveform
 from qupulse.pulses.measurement import MeasurementDefiner, MeasurementDeclaration
 from qupulse.parameter_scope import Scope, DictScope
 
@@ -522,7 +522,24 @@ class PulseTemplate(Serializable):
         if self.__cached_hash_value is None:
             self.__cached_hash_value = forced_hash(self.get_serialization_data())
         return self.__cached_hash_value
-
+    
+    @property
+    def _potential_truncation_context(self) -> bool:
+        #hackily evaluate whether one variable with magic truncation keyword in
+        #duration expression exists -> expect total duration reference in scope
+        if not self.duration.variables or not any(v.endswith(_MagicLoopElements.truncate.value) for v in self.duration.variables):
+            return False
+        #there may be a better check necessary to test whether one t-expression only contains one variable.
+        # elif len(self.duration.variables)>1:
+        #     #avoid this mess of multiple vars for now
+        #     assert not any(v.endswith(_MagicLoopElements.truncate.value) for v in self.duration.variables), "Multiple duration vars in trunc not expected"
+        #     return False
+        else:
+            assert len(self.duration.variables)>=1
+            dur_var, = self.duration.variables
+            assert dur_var.endswith(_MagicLoopElements.truncate.value)
+            return True
+    
 
 class AtomicPulseTemplate(PulseTemplate, MeasurementDefiner):
     """A PulseTemplate that does not imply any control flow disruptions and can be directly
@@ -571,6 +588,7 @@ class AtomicPulseTemplate(PulseTemplate, MeasurementDefiner):
         
         # "hackedy":
         if program_builder.evaluate_nested_stepping(scope,self.parameter_names):
+            assert not self._potential_truncation_context, "Combniation of stepped loop and truncation not yet supported"
             measurements = self.get_measurement_windows(parameters=scope,
                                                         measurement_mapping=measurement_mapping)
             program_builder.measure(measurements)
@@ -585,15 +603,22 @@ class AtomicPulseTemplate(PulseTemplate, MeasurementDefiner):
                                                            )
             return
         
-        waveform = self.build_waveform(parameters=scope,
-                                       channel_mapping=channel_mapping)
+        #for the hacky feature of truncation, we need to fake the total duration and get the used duration:
+        waveform = self._get_wrapped_wf_build_func(scope,channel_mapping)()
+            
         if waveform:
             measurements = self.get_measurement_windows(parameters=scope,
                                                         measurement_mapping=measurement_mapping)
             program_builder.measure(measurements)
 
             if global_transformation:
-                waveform = TransformingWaveform.from_transformation(waveform, global_transformation)
+                if isinstance(waveform,TruncationWaveform):
+                    #one could do this more elegantly.
+                    #in this hack, the time truncation property has to precede
+                    #the voltage trafo
+                    waveform = waveform.apply_trafo(global_transformation)
+                else:
+                    waveform = TransformingWaveform.from_transformation(waveform, global_transformation)
                 
             waveform._pow_2_divisor = self._pow_2_divisor
                 
@@ -602,7 +627,23 @@ class AtomicPulseTemplate(PulseTemplate, MeasurementDefiner):
                 program_builder.play_arbitrary_waveform(waveform)
             else:
                 program_builder.hold_voltage(waveform.duration, constant_values)
-
+        
+    def _get_wrapped_wf_build_func(self, scope: Scope, channel_mapping: Dict[ChannelID, Optional[ChannelID]]) -> Callable[[],Waveform]:
+        if self._potential_truncation_context:
+            dur_var, = self.duration.variables
+            #expect in scope:
+            #(_var_ val - not necessarily the actual duration in time units)
+            total_dur = scope[dur_var+_MagicLoopElements.truncate_ref.value]
+            context_scope = scope.overwrite({dur_var: total_dur})
+            used_dur_eval = self.duration.evaluate_in_scope(scope)
+            #and wrap the resulting waveform...
+            def _wrap_in_trunc_wf():
+                wf = self.build_waveform(context_scope,channel_mapping)
+                if wf:
+                    return TruncationWaveform(wf,used_dur_eval)
+                return None
+            return _wrap_in_trunc_wf
+        return partial(self.build_waveform,scope,channel_mapping)
 
     @abstractmethod
     def build_waveform(self,

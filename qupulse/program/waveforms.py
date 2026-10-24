@@ -27,6 +27,7 @@ from qupulse.utils import checked_int_cast, isclose
 from qupulse.utils.types import TimeType, time_from_float
 from qupulse.utils import pairwise
 
+
 class ConstantFunctionPulseTemplateWarning(UserWarning):
     """  This warning indicates a constant waveform is constructed from a FunctionPulseTemplate """
     pass
@@ -1348,7 +1349,7 @@ class TruncationWaveform(ShareableWaveform):
     __slots__ = ('_inner','_used_duration')
 
     def __init__(self, inner: Waveform, used_duration: TimeType):
-        assert used_duration <= self._inner.duration, \
+        assert used_duration <= inner.duration, \
             f"commanded duration {used_duration} for truncation !<= waveform's total duration {self._inner.duration}"
         super().__init__(duration=used_duration)
         self._inner = inner
@@ -1358,7 +1359,10 @@ class TruncationWaveform(ShareableWaveform):
                       output_array: Union[np.ndarray, None] = None) -> np.ndarray:
         inner_output = self._inner_waveform.unsafe_sample(channel, sample_times, output_array)
         return inner_output
-
+    
+    def apply_trafo(self, trafo) -> 'TruncationWaveform':
+        return self.__class__(TransformingWaveform.from_transformation(self._inner, trafo),self._used_duration)
+    
     @property
     def defined_channels(self) -> AbstractSet[ChannelID]:
         return self._inner.defined_channels
