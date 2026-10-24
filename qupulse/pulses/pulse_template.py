@@ -536,8 +536,8 @@ class PulseTemplate(Serializable):
         #     return False
         else:
             assert len(self.duration.variables)>=1
-            dur_var, = self.duration.variables
-            assert dur_var.endswith(_MagicLoopElements.truncate.value)
+            # dur_var, = self.duration.variables
+            # assert all(dur_var.endswith(_MagicLoopElements.truncate.value) for dur_var in dur_vars)
             return True
     
 
@@ -629,7 +629,8 @@ class AtomicPulseTemplate(PulseTemplate, MeasurementDefiner):
                 program_builder.hold_voltage(waveform.duration, constant_values)
         
     def _get_wrapped_wf_build_func(self, scope: Scope, channel_mapping: Dict[ChannelID, Optional[ChannelID]]) -> Callable[[],Waveform]:
-        if self._potential_truncation_context:
+        if self._potential_truncation_context and self.duration.variables:
+            assert len(self.duration.variables)==1, "unexpected number of vars in duration: {self.duration.variables}"
             dur_var, = self.duration.variables
             #expect in scope:
             #(_var_ val - not necessarily the actual duration in time units)
