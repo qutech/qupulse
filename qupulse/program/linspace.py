@@ -17,7 +17,7 @@ from qupulse.parameter_scope import Scope, MappedScope, FrozenDict
 # from qupulse.pulses import ForLoopPT
 from qupulse.program import ProgramBuilder, HardwareTime, HardwareVoltage, Waveform, RepetitionCount, TimeType
 from qupulse.expressions.simple import SimpleExpression, NumVal, SimpleExpressionStepped
-from qupulse.program.waveforms import MultiChannelWaveform, TransformingWaveform, WaveformCollection, SequenceWaveform
+from qupulse.program.waveforms import MultiChannelWaveform, TransformingWaveform, WaveformCollection, SequenceWaveform, ShareableWaveform, TruncationWaveform
 
 from qupulse.program.transformation import ChainedTransformation, ScalingTransformation, OffsetTransformation,\
     IdentityTransformation, ParallelChannelTransformation, Transformation
@@ -28,6 +28,11 @@ from qupulse.program.transformation import ChainedTransformation, ScalingTransfo
 # just a programmatic 'small epsilon' to avoid rounding errors.
 DEFAULT_INCREMENT_RESOLUTION: float = 1e-9
 DEFAULT_TIME_RESOLUTION: float = 1e-3
+
+
+class _MagicLoopElements(Enum):
+    truncate = '__truncate__'
+
 
 class DepDomain(Enum):
     VOLTAGE = 0
@@ -751,7 +756,7 @@ class LinSpaceBuilder(ProgramBuilder):
         
         if stepped_var_list:
             # the index ordering shall be with the last index changing fastest.
-            # (assuming the WaveformColleciton will be flattened)
+            # (assuming the WaveformCollection will be flattened)
             # this means increments on last shall be 1, next lower 1*len(fastest),
             # next 1*len(fastest)*len(second_fastest),... -> product(higher_reg_range_lens)
             # total_reg_len = len(stepped_var_list)
@@ -1090,7 +1095,7 @@ def _get_concatenated_blocks(blocks: Sequence[LinSpaceNode],
         
     
     for node in blocks:
-        if not isinstance(node,LinSpaceArbitraryWaveform):
+        if not isinstance(node,LinSpaceArbitraryWaveform) or isinstance(node.waveform,ShareableWaveform):
             if current_blocks: concat_blocks.append(combine_nodes_into_one(current_blocks))
             concat_blocks.append(node)
             current_blocks, current_len = [], 0.

@@ -19,7 +19,7 @@ from qupulse.utils.types import ChannelID
 from qupulse.program.linspace import LinSpaceNode, LinSpaceArbitraryWaveform, to_increment_commands, Command, \
     Increment, Set as LSPSet, LoopLabel, LoopJmp, Wait, Play, DEFAULT_INCREMENT_RESOLUTION, DepDomain
 from qupulse.program.loop import Loop
-from qupulse.program.waveforms import Waveform, WaveformCollection
+from qupulse.program.waveforms import Waveform, WaveformCollection, TruncationWaveform
 from qupulse.comparable import Comparable
 from qupulse.utils.types import TimeType
 
@@ -228,7 +228,10 @@ class ProgramEntry:
         if program_type == _ProgramType.Linspace:
             #!!! the voltage resolution may not be adequately represented if voltage transformations are not None?
             self._transformed_commands = self._transform_linspace_commands(to_increment_commands(program,))
-            
+        
+        #reference another waveform in self._waveforms with a truncated playback duration of [int] samples
+        waveforms_trunc_ref: dict[Waveform,Waveform] = {}
+
         if waveforms is None:
             if program_type is _ProgramType.Loop:
                     waveforms = OrderedDict((node.waveform, None)
@@ -240,7 +243,10 @@ class ProgramEntry:
                     for command in self._transformed_commands:
                         if not isinstance(command,Play):
                             continue
-                        if isinstance(command.waveform,Waveform):
+                        if isinstance(command.waveform,TruncationWaveform):
+                            waveforms_trunc_ref[command.waveform] = (command.waveform._inner,command.waveform._used_duration)
+                            waveforms_d[command.waveform._inner] = None
+                        elif isinstance(command.waveform,Waveform):
                             waveforms_d[command.waveform] = None
                         elif isinstance(command.waveform,WaveformCollection):
                             for w in command.waveform.flatten():
@@ -255,6 +261,8 @@ class ProgramEntry:
             self._waveforms = OrderedDict(zip(waveforms, self._sample_waveforms(waveforms)))
         else:
             self._waveforms = OrderedDict()
+        #insert last to force sampling of others beforehand
+        self._waveforms |= waveforms_trunc_ref #backends must be able to interpret this in order to not induce errors
     
     @property
     def _loop(self,) -> Loop:

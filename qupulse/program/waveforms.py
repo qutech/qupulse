@@ -1337,3 +1337,38 @@ class WaveformCollection():
         divs = set(wf._pow_2_divisor for wf in self.flatten())
         assert len(divs)==1
         return divs.pop()
+
+
+class ShareableWaveform(Waveform):
+    pass
+
+
+class TruncationWaveform(ShareableWaveform):
+    
+    __slots__ = ('_inner','_used_duration')
+
+    def __init__(self, inner: Waveform, used_duration: TimeType):
+        assert used_duration <= self._inner.duration, \
+            f"commanded duration {used_duration} for truncation !<= waveform's total duration {self._inner.duration}"
+        super().__init__(duration=used_duration)
+        self._inner = inner
+        self._used_duration = used_duration
+        
+    def unsafe_sample(self, channel: ChannelID, sample_times: np.ndarray,
+                      output_array: Union[np.ndarray, None] = None) -> np.ndarray:
+        inner_output = self._inner_waveform.unsafe_sample(channel, sample_times, output_array)
+        return inner_output
+
+    @property
+    def defined_channels(self) -> AbstractSet[ChannelID]:
+        return self._inner.defined_channels
+
+    def unsafe_get_subset_for_channels(self, channels: AbstractSet[ChannelID]) -> 'Waveform':
+        return self._inner.get_subset_for_channels(channels)
+
+    @property
+    def compare_key(self) -> Hashable:
+        return self._inner.compare_key, self._used_duration
+    
+    def _compare_subset_key(self, channel_subset: Set[ChannelID]) -> Any:
+        return self._inner._compare_subset_key(channel_subset), self._used_duration
