@@ -246,6 +246,8 @@ class ProgramEntry:
                         if isinstance(command.waveform,TruncationWaveform):
                             samples = numpy.int64(numpy.rint(float(command.waveform._used_duration*sample_rate)))
                             waveforms_trunc_ref[command.waveform] = (command.waveform._inner,samples)
+                            #another dirty efficiency hack: set the inner waveform's duration to _total_duration_to_sample
+                            #but that is likely too brittle now with the @property decorator for duration
                             waveforms_d[command.waveform._inner] = None
                         elif isinstance(command.waveform,Waveform):
                             waveforms_d[command.waveform] = None

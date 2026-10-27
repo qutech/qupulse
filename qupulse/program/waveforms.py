@@ -1348,20 +1348,34 @@ class TruncationWaveform(ShareableWaveform):
     
     __slots__ = ('_inner','_used_duration')
 
-    def __init__(self, inner: Waveform, used_duration: TimeType):
+    def __init__(self, inner: Waveform, used_duration: TimeType, total_duration_to_sample: TimeType|None = None):
         assert used_duration <= inner.duration, \
-            f"commanded duration {used_duration} for truncation !<= waveform's total duration {self._inner.duration}"
+            f"commanded duration {used_duration} for truncation !<= waveform's total duration {inner.duration}"
+        if total_duration_to_sample is not None:
+            assert total_duration_to_sample <= inner.duration, \
+                f"commanded total duration {total_duration_to_sample} !<= waveform's original duration {inner.duration}"
         super().__init__(duration=used_duration)
         self._inner = inner
         self._used_duration = used_duration
-        
+        # in case some time variable was overwritten for reference length a maximum needed
+        # duration may be supplied. again a very hacky hack abusing the system.
+        self._total_duration_to_sample = total_duration_to_sample
+    
+    @property
+    def duration(self) -> TimeType:
+        # could become relevant with further optimization - but hacky
+        if self._total_duration_to_sample is not None:
+            return self._total_duration_to_sample
+        return self._inner.duration
+    
     def unsafe_sample(self, channel: ChannelID, sample_times: np.ndarray,
                       output_array: Union[np.ndarray, None] = None) -> np.ndarray:
         inner_output = self._inner_waveform.unsafe_sample(channel, sample_times, output_array)
         return inner_output
     
     def apply_trafo(self, trafo) -> 'TruncationWaveform':
-        return self.__class__(TransformingWaveform.from_transformation(self._inner, trafo),self._used_duration)
+        return self.__class__(TransformingWaveform.from_transformation(self._inner, trafo),
+                              self._used_duration,self._total_duration_to_sample)
     
     @property
     def defined_channels(self) -> AbstractSet[ChannelID]:
@@ -1372,7 +1386,7 @@ class TruncationWaveform(ShareableWaveform):
 
     @property
     def compare_key(self) -> Hashable:
-        return self._inner.compare_key, self._used_duration
+        return self._inner.compare_key, self._used_duration, self._total_duration_to_sample
     
     def _compare_subset_key(self, channel_subset: Set[ChannelID]) -> Any:
-        return self._inner._compare_subset_key(channel_subset), self._used_duration
+        return self._inner._compare_subset_key(channel_subset), self._used_duration, self._total_duration_to_sample

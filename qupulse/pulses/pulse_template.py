@@ -17,7 +17,7 @@ from functools import cached_property, partial
 import numpy
 import sympy
 
-from qupulse.utils.types import ChannelID, DocStringABCMeta, FrozenDict
+from qupulse.utils.types import ChannelID, DocStringABCMeta, FrozenDict, TimeType
 from qupulse.utils import forced_hash, _MagicLoopElements
 from qupulse.serialization import Serializable
 from qupulse.expressions import ExpressionScalar, Expression, ExpressionLike
@@ -65,6 +65,7 @@ class PulseTemplate(Serializable):
         self.__cached_hash_value = None
         self._pow_2_divisor: int = 0
         # self.__cached_serialization_data = None
+        self._truncation_context_pretend_dur_for_sampling: float|None = None
         
     @property
     @abstractmethod
@@ -634,14 +635,28 @@ class AtomicPulseTemplate(PulseTemplate, MeasurementDefiner):
             dur_var, = self.duration.variables
             #expect in scope:
             #(_var_ val - not necessarily the actual duration in time units)
+            if self._truncation_context_pretend_dur_for_sampling:
+                #the PT has some info about what to set the duration variable to to pretend for sampling
+                total_pretend_dur = self._truncation_context_pretend_dur_for_sampling
+            else:
+                #otherwise assume the max rng val as both
+                total_pretend_dur = scope[dur_var+_MagicLoopElements.truncate_ref.value]
+            
+            context_scope = scope.overwrite({dur_var: total_pretend_dur})
+            #the maximum duration needed to sample is still the maximum rng val in the assumed loop
             total_dur = scope[dur_var+_MagicLoopElements.truncate_ref.value]
-            context_scope = scope.overwrite({dur_var: total_dur})
+            max_dur_scope = scope.overwrite({dur_var: total_dur})
+            #!the following is not used yet but could provide further optimization
+            #to tell the sampler/uploader that some suration is the asserted maximum duration needed.
+            asserted_max_dur = self.duration.evaluate_in_scope(max_dur_scope)
+            #actually used dur is always the true value for consistency
             used_dur_eval = self.duration.evaluate_in_scope(scope)
+            
             #and wrap the resulting waveform...
             def _wrap_in_trunc_wf():
                 wf = self.build_waveform(context_scope,channel_mapping)
                 if wf:
-                    return TruncationWaveform(wf,used_dur_eval)
+                    return TruncationWaveform(wf,used_dur_eval,asserted_max_dur)
                 return None
             return _wrap_in_trunc_wf
         return partial(self.build_waveform,scope,channel_mapping)
