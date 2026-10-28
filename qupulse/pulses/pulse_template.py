@@ -60,13 +60,36 @@ class PulseTemplate(Serializable):
     _CAST_INT_TO_INT64 = True
 
     def __init__(self, *,
-                 identifier: Optional[str]) -> None:
+                 identifier: Optional[str],
+                 _pow_2_divisor: int = 0,
+                 _truncation_context_pretend_dur_for_sampling: Optional[float] = None) -> None:
         super().__init__(identifier=identifier)
         self.__cached_hash_value = None
-        self._pow_2_divisor: int = 0
+        self.__pow_2_divisor = _pow_2_divisor
         # self.__cached_serialization_data = None
-        self._truncation_context_pretend_dur_for_sampling: float|None = None
-        
+        self.__truncation_context_pretend_dur_for_sampling = _truncation_context_pretend_dur_for_sampling
+
+    @property
+    def _pow_2_divisor(self) -> int:
+        """Power-of-two exponent used to reduce the waveform sampling rate."""
+        return self.__pow_2_divisor
+
+    @property
+    def _truncation_context_pretend_dur_for_sampling(self) -> Optional[float]:
+        """Optional reference duration for sampling in a truncation context."""
+        return self.__truncation_context_pretend_dur_for_sampling
+
+    def get_serialization_data(self, serializer=None) -> Dict[str, Any]:
+        if serializer is not None and (self._pow_2_divisor != 0 or
+                                       self._truncation_context_pretend_dur_for_sampling is not None):
+            raise NotImplementedError('Legacy serialization does not support sampling options.')
+        data = super().get_serialization_data(serializer)
+        if self._pow_2_divisor != 0:
+            data['_pow_2_divisor'] = self._pow_2_divisor
+        if self._truncation_context_pretend_dur_for_sampling is not None:
+            data['_truncation_context_pretend_dur_for_sampling'] = self._truncation_context_pretend_dur_for_sampling
+        return data
+
     @property
     @abstractmethod
     def parameter_names(self) -> Set[str]:
@@ -552,8 +575,9 @@ class AtomicPulseTemplate(PulseTemplate, MeasurementDefiner):
 
     def __init__(self, *,
                  identifier: Optional[str],
-                 measurements: Optional[List[MeasurementDeclaration]]):
-        PulseTemplate.__init__(self, identifier=identifier)
+                 measurements: Optional[List[MeasurementDeclaration]],
+                 **kwargs):
+        PulseTemplate.__init__(self, identifier=identifier, **kwargs)
         MeasurementDefiner.__init__(self, measurements=measurements)
 
     def with_parallel_atomic(self, *parallel: 'AtomicPulseTemplate') -> 'AtomicPulseTemplate':

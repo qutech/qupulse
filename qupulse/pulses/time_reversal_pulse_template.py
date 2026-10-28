@@ -18,10 +18,11 @@ class AtomicTimeReversalPulseTemplate(AtomicPulseTemplate):
    
     def __init__(self, inner: PulseTemplate,
                  identifier: Optional[str] = None,
-                 registry: PulseRegistryType = None):
+                 registry: PulseRegistryType = None,
+                 **kwargs):
         
         assert isinstance(inner, AtomicPulseTemplate)
-        AtomicPulseTemplate.__init__(self, identifier=identifier,measurements=None)
+        AtomicPulseTemplate.__init__(self, identifier=identifier,measurements=None, **kwargs)
         
         self._inner = inner        
         self._register(registry=registry)    
@@ -86,8 +87,9 @@ class TimeReversalPulseTemplate(PulseTemplate):
 
     def __init__(self, inner: PulseTemplate,
                  identifier: Optional[str] = None,
-                 registry: PulseRegistryType = None):
-        super(TimeReversalPulseTemplate, self).__init__(identifier=identifier)
+                 registry: PulseRegistryType = None,
+                 **kwargs):
+        super(TimeReversalPulseTemplate, self).__init__(identifier=identifier, **kwargs)
         self._inner = inner
         self._register(registry=registry)
 

@@ -44,7 +44,8 @@ class FunctionPulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
                  *,
                  measurements: Optional[List[MeasurementDeclaration]]=None,
                  parameter_constraints: Optional[List[Union[str, ParameterConstraint]]]=None,
-                 registry: PulseRegistryType=None) -> None:
+                 registry: PulseRegistryType=None,
+                 **kwargs) -> None:
         """Creates a new FunctionPulseTemplate object.
 
         Args:
@@ -61,7 +62,7 @@ class FunctionPulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
             parameter_constraints: A list of parameter constraints forwarded to the
                 :class:`~qupulse.pulses.measurement.ParameterConstrainer` superclass
         """
-        AtomicPulseTemplate.__init__(self, identifier=identifier, measurements=measurements)
+        AtomicPulseTemplate.__init__(self, identifier=identifier, measurements=measurements, **kwargs)
         ParameterConstrainer.__init__(self, parameter_constraints=parameter_constraints)
 
         self.__expression = ExpressionScalar.make(expression)

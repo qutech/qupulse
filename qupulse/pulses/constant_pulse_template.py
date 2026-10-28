@@ -26,7 +26,8 @@ class ConstantPulseTemplate(AtomicPulseTemplate):  # type: ignore
                  identifier: Optional[str] = None,
                  name: Optional[str] = None,
                  measurements: Optional[List[MeasurementDeclaration]] = None,
-                 registry: PulseRegistryType=None) -> None:
+                 registry: PulseRegistryType=None,
+                 **kwargs) -> None:
         """An atomic pulse template qupulse representing a multi-channel pulse with constant values.
         
         Args:
@@ -34,7 +35,7 @@ class ConstantPulseTemplate(AtomicPulseTemplate):  # type: ignore
             amplitude_dict: Dictionary with values for the channels
             name: Name for the template. Not used by qupulse
         """
-        super().__init__(identifier=identifier, measurements=measurements)
+        super().__init__(identifier=identifier, measurements=measurements, **kwargs)
 
         # we special case numeric values in this PulseTemplate for performance reasons
         self._duration = duration if isinstance(duration, (float, int, TimeType)) else ExpressionScalar(duration)

@@ -30,9 +30,10 @@ class SingleWFTimeExtensionPulseTemplate(AtomicPulseTemplate):
                  identifier: Optional[str] = None,
                  *,
                  measurements: Optional[List[MeasurementDeclaration]]=None,
-                 registry: PulseRegistryType=None) -> None:
+                 registry: PulseRegistryType=None,
+                 **kwargs) -> None:
         
-         AtomicPulseTemplate.__init__(self, identifier=identifier, measurements=measurements)
+         AtomicPulseTemplate.__init__(self, identifier=identifier, measurements=measurements, **kwargs)
 
          self.__main_pt = main_pt
          self._duration = ExpressionScalar.make(new_duration)

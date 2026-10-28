@@ -22,7 +22,8 @@ class AbstractPulseTemplate(PulseTemplate):
                  measurement_names: Optional[Set[str]]=None,
                  integral: Optional[Dict[ChannelID, ExpressionScalar]]=None,
                  duration: Optional[ExpressionScalar]=None,
-                 registry: Optional[PulseRegistryType]=None):
+                 registry: Optional[PulseRegistryType]=None,
+                 **kwargs):
         """This pulse template can be used as a place holder for a pulse template with a defined interface. Pulse
         template properties like :func:`defined_channels` can be passed on initialization to declare those properties who make
         up the interface. Omitted properties raise an :class:`.NotSpecifiedError` exception if accessed. Properties
@@ -47,7 +48,7 @@ class AbstractPulseTemplate(PulseTemplate):
             duration: Optional property
             registry: Instance is registered here if specified
         """
-        super().__init__(identifier=identifier)
+        super().__init__(identifier=identifier, **kwargs)
 
         self._declared_properties = {}
         self._frozen_properties = set()

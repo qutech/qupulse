@@ -31,8 +31,8 @@ __all__ = ['ForLoopPulseTemplate', 'LoopPulseTemplate', 'LoopIndexNotUsedExcepti
 class LoopPulseTemplate(PulseTemplate):
     """Base class for loop based pulse templates. This class is still abstract and cannot be instantiated."""
     def __init__(self, body: PulseTemplate,
-                 identifier: Optional[str]):
-        super().__init__(identifier=identifier)
+                 identifier: Optional[str], **kwargs):
+        super().__init__(identifier=identifier, **kwargs)
         self.__body = body
 
     @property
@@ -65,7 +65,8 @@ class ForLoopPulseTemplate(LoopPulseTemplate, MeasurementDefiner, ParameterConst
                  *,
                  measurements: Optional[Sequence[MeasurementDeclaration]]=None,
                  parameter_constraints: Optional[Sequence]=None,
-                 registry: PulseRegistryType=None) -> None:
+                 registry: PulseRegistryType=None,
+                 **kwargs) -> None:
         """
         Args:
             body: The loop body. It is expected to have `loop_index` as an parameter
@@ -73,7 +74,7 @@ class ForLoopPulseTemplate(LoopPulseTemplate, MeasurementDefiner, ParameterConst
             loop_range: Range to loop through
             identifier: Used for serialization
         """
-        LoopPulseTemplate.__init__(self, body=body, identifier=identifier)
+        LoopPulseTemplate.__init__(self, body=body, identifier=identifier, **kwargs)
         MeasurementDefiner.__init__(self, measurements=measurements)
         ParameterConstrainer.__init__(self, parameter_constraints=parameter_constraints)
 

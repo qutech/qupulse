@@ -40,7 +40,8 @@ class SequencePulseTemplate(PulseTemplate, ParameterConstrainer, MeasurementDefi
                  identifier: Optional[str]=None,
                  parameter_constraints: Optional[Iterable[ConstraintLike]]=None,
                  measurements: Optional[List[MeasurementDeclaration]]=None,
-                 registry: PulseRegistryType=None) -> None:
+                 registry: PulseRegistryType=None,
+                 **kwargs) -> None:
         """Create a new SequencePulseTemplate instance.
 
         Requires a (correctly ordered) list of subtemplates in the form
@@ -60,7 +61,7 @@ class SequencePulseTemplate(PulseTemplate, ParameterConstrainer, MeasurementDefi
                 SequencePulseTemplate as tuples of the form (PulseTemplate, Dict(str -> str)).
             identifier (str): A unique identifier for use in serialization. (optional)
         """
-        PulseTemplate.__init__(self, identifier=identifier)
+        PulseTemplate.__init__(self, identifier=identifier, **kwargs)
         ParameterConstrainer.__init__(self, parameter_constraints=parameter_constraints)
         MeasurementDefiner.__init__(self, measurements=measurements)
 
