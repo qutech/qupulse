@@ -1,5 +1,6 @@
 import unittest
 import math
+import json
 from unittest import mock
 
 from typing import Optional, Dict, Set, Any, Union
@@ -11,9 +12,12 @@ from qupulse.parameter_scope import Scope, DictScope
 from qupulse.utils.types import ChannelID
 from qupulse.expressions import Expression, ExpressionScalar
 from qupulse.pulses import ConstantPT, FunctionPT, RepetitionPT, ForLoopPT, ParallelChannelPT, MappingPT,\
-    TimeReversalPT, AtomicMultiChannelPT
+    TimeReversalPT, AtomicMultiChannelPT, AbstractPT, SequencePT, TablePT, PointPT, ArithmeticPT,\
+    ArithmeticAtomicPT, AtomicTimeReversalPT
 from qupulse.pulses.pulse_template import AtomicPulseTemplate, PulseTemplate, UnknownVolatileParameter
 from qupulse.pulses.multi_channel_pulse_template import MultiChannelWaveform
+from qupulse.pulses.time_extension_pulse_template import SingleWFTimeExtensionPulseTemplate
+from qupulse.serialization import JSONSerializableEncoder, JSONSerializableDecoder
 from qupulse.program.loop import Loop
 from qupulse.program import ProgramBuilder, default_program_builder
 
@@ -495,6 +499,82 @@ class PulseTemplateTest(unittest.TestCase):
         self.assertEqual("PulseTemplateStub(identifier='asd')", format(a))
         self.assertEqual("PulseTemplateStub(identifier='asd', duration='5')",
                          "{:identifier;duration}".format(a))
+
+
+class SamplingOptionsTests(unittest.TestCase):
+    options = {'_pow_2_divisor': 3, '_truncation_context_pretend_dur_for_sampling': 12.5}
+
+    @staticmethod
+    def json_roundtrip(pulse):
+        encoded = json.dumps(pulse.get_serialization_data(), cls=JSONSerializableEncoder, storage={})
+        return json.loads(encoded, cls=JSONSerializableDecoder, storage={})
+
+    def test_defaults_and_readonly_properties(self):
+        pulse = ConstantPT(10, {'A': 1})
+        for name, default in zip(self.options, (0, None)):
+            self.assertEqual(default, getattr(pulse, name))
+            self.assertNotIn(name, pulse.get_serialization_data())
+            self.assertNotIn(name, repr(pulse))
+            with self.assertRaises(AttributeError):
+                setattr(pulse, name, self.options[name])
+        self.assertEqual(pulse, self.json_roundtrip(pulse))
+
+    def test_json_roundtrip_subclasses(self):
+        inner = ConstantPT(10, {'A': 1})
+        cases = [
+            (ConstantPT, (10, {'A': 1})),
+            (FunctionPT, ('t', 10, 'A')),
+            (TablePT, ({'A': [(0, 0), (10, 1)]},)),
+            (PointPT, ([(0, 0), (10, 1)], ['A'])),
+            (SequencePT, (inner, inner)),
+            (MappingPT, (inner,)),
+            (RepetitionPT, (inner, 2)),
+            (ForLoopPT, (ConstantPT(10, {'A': 'i'}), 'i', 3)),
+            (AtomicMultiChannelPT, (inner, ConstantPT(10, {'B': 2}))),
+            (ParallelChannelPT, (inner, {'B': 2})),
+            (ArithmeticPT, (inner, '+', 2)),
+            (ArithmeticAtomicPT, (inner, '+', inner)),
+            (TimeReversalPT, (inner,)),
+            (AtomicTimeReversalPT, (inner,)),
+            (SingleWFTimeExtensionPulseTemplate, (inner, 20)),
+            (AbstractPT, ('sampling_options_abstract',)),
+        ]
+        for cls, args in cases:
+            with self.subTest(template=cls.__name__):
+                pulse = cls(*args, registry={}, **self.options)
+                restored = self.json_roundtrip(pulse)
+                self.assertEqual(pulse, restored)
+                for name, value in self.options.items():
+                    self.assertEqual(value, getattr(restored, name))
+                    self.assertIn(f'{name}={value!r}', repr(pulse))
+
+    def test_repr_nested_and_renamed(self):
+        pulse = ConstantPT(10, {'A': 1}, **self.options)
+        self.assertEqual(pulse, eval(repr(pulse), {'ConstantPulseTemplate': ConstantPT}))
+        self.assertNotEqual(pulse, ConstantPT(10, {'A': 1}))
+        nested = SequencePT(pulse, pulse)
+        restored = self.json_roundtrip(nested)
+        self.assertEqual(nested, restored)
+        self.assertEqual(hash(nested), hash(restored))
+        renamed = pulse.renamed('sampling_options_copy', registry={})
+        self.assertEqual({**pulse.get_serialization_data(), '#identifier': 'sampling_options_copy'},
+                         renamed.get_serialization_data())
+
+    def test_zero_pretend_duration_arithmetic_repr(self):
+        inner = ConstantPT(10, {'A': 1})
+        for cls, rhs in ((ArithmeticPT, 2), (ArithmeticAtomicPT, inner)):
+            with self.subTest(template=cls.__name__):
+                pulse = cls(inner, '+', rhs, _truncation_context_pretend_dur_for_sampling=0.)
+                self.assertIn('_truncation_context_pretend_dur_for_sampling=0.0', repr(pulse))
+                self.assertEqual(pulse, self.json_roundtrip(pulse))
+                self.assertEqual(pulse, eval(repr(pulse), {'ConstantPulseTemplate': ConstantPT,
+                                                          'ExpressionScalar': ExpressionScalar,
+                                                          cls.__name__: cls}))
+
+    def test_legacy_serialization_rejects_sampling_options(self):
+        for options in ({'_pow_2_divisor': 1}, {'_truncation_context_pretend_dur_for_sampling': 0.}):
+            with self.subTest(options=options), self.assertRaises(NotImplementedError):
+                FunctionPT('t', 10, **options).get_serialization_data(serializer=object())
 
 
 class WithMethodTests(unittest.TestCase):
