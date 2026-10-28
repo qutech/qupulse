@@ -42,7 +42,8 @@ class ArithmeticAtomicPulseTemplate(AtomicPulseTemplate):
                  silent_atomic: bool = False,
                  measurements: List = None,
                  identifier: str = None,
-                 registry: PulseRegistryType = None):
+                 registry: PulseRegistryType = None,
+                 **kwargs):
         """Apply an operation (+ or -) channel wise to two atomic pulse templates. Channels only present in one pulse
         template have the operations neutral element on the other. The operations are defined in
         `ArithmeticWaveform.operator_map`.
@@ -57,7 +58,7 @@ class ArithmeticAtomicPulseTemplate(AtomicPulseTemplate):
             identifier: See AtomicPulseTemplate
             registry: See qupulse.serialization.PulseRegistry
         """
-        super().__init__(identifier=identifier, measurements=measurements)
+        super().__init__(identifier=identifier, measurements=measurements, **kwargs)
 
         if arithmetic_operator not in ArithmeticWaveform.operator_map:
             raise ValueError('Unknown operator. allowed: %r' % set(ArithmeticWaveform.operator_map.keys()))
@@ -178,7 +179,7 @@ class ArithmeticAtomicPulseTemplate(AtomicPulseTemplate):
         return data
 
     def __repr__(self):
-        if any(v for k, v in super().get_serialization_data().items() if k != '#type'):
+        if len(super().get_serialization_data()) > 1:
             return super().__repr__()
         else:
             return '(%r %r %r)' % (self.lhs, self.arithmetic_operator, self.rhs)
@@ -198,7 +199,8 @@ class ArithmeticPulseTemplate(PulseTemplate):
                  rhs: Union[PulseTemplate, ExpressionLike, Mapping[ChannelID, ExpressionLike]],
                  *,
                  identifier: Optional[str] = None,
-                 registry: PulseRegistryType = None):
+                 registry: PulseRegistryType = None,
+                 **kwargs):
         """Implements the arithmetics between an aribrary pulse template and scalar values. The values can be the same
         for all channels, channel specific or only for a subset of the inner pulse templates defined channels.
         The expression may be time dependent if the pulse template is atomic.
@@ -225,7 +227,7 @@ class ArithmeticPulseTemplate(PulseTemplate):
                         and a composite pulse template.
             ValueError: If the scalar is a mapping and contains channels that are not defined on the pulse template.
         """
-        PulseTemplate.__init__(self, identifier=identifier)
+        PulseTemplate.__init__(self, identifier=identifier, **kwargs)
 
         if not isinstance(lhs, PulseTemplate) and not isinstance(rhs, PulseTemplate):
             raise TypeError('At least one of the operands needs to be a pulse template.')
@@ -416,7 +418,7 @@ class ArithmeticPulseTemplate(PulseTemplate):
         return TransformingWaveform.from_transformation(inner_waveform, transformation=transformation)
 
     def __repr__(self):
-        if any(v for k, v in super().get_serialization_data().items() if k != '#type'):
+        if len(super().get_serialization_data()) > 1:
             return super().__repr__()
         else:
             return '(%r %s %r)' % (self.lhs, self._arithmetic_operator, self.rhs)

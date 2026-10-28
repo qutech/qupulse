@@ -6,6 +6,8 @@ import re
 import numbers
 from collections import OrderedDict
 from frozendict import frozendict
+from enum import Enum
+
 from qupulse.expressions import ExpressionScalar, ExpressionLike
 from qupulse.expressions.simple import SimpleExpression
 
@@ -177,3 +179,8 @@ def to_next_multiple(sample_rate: ExpressionLike, quantum: int,
             , evaluate=False)
         
         return lambda duration: ExpressionScalar(_build_sym(duration))
+
+
+class _MagicLoopElements(Enum):
+    truncate = '__truncate__'
+    truncate_ref = '_REF'

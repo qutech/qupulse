@@ -150,7 +150,8 @@ class TablePulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
                  parameter_constraints: Optional[List[Union[str, ParameterConstraint]]]=None,
                  measurements: Optional[List[MeasurementDeclaration]]=None,
                  consistency_check: bool=True,
-                 registry: PulseRegistryType=None) -> None:
+                 registry: PulseRegistryType=None,
+                 **kwargs) -> None:
         """
         Construct a `TablePulseTemplate` from a dict which maps channels to their entries. By default the consistency
         of the provided entries is checked. There are two static functions for convenience construction: from_array and
@@ -164,7 +165,7 @@ class TablePulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
             measurements: Measurement declaration list that is forwarded to the MeasurementDefiner superclass
             consistency_check: If True the consistency of the times will be checked on construction as far as possible
         """
-        AtomicPulseTemplate.__init__(self, identifier=identifier, measurements=measurements)
+        AtomicPulseTemplate.__init__(self, identifier=identifier, measurements=measurements, **kwargs)
         ParameterConstrainer.__init__(self, parameter_constraints=parameter_constraints)
 
         if not entries:

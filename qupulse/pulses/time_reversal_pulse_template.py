@@ -18,10 +18,11 @@ class AtomicTimeReversalPulseTemplate(AtomicPulseTemplate):
    
     def __init__(self, inner: PulseTemplate,
                  identifier: Optional[str] = None,
-                 registry: PulseRegistryType = None):
+                 registry: PulseRegistryType = None,
+                 **kwargs):
         
         assert isinstance(inner, AtomicPulseTemplate)
-        AtomicPulseTemplate.__init__(self, identifier=identifier,measurements=None)
+        AtomicPulseTemplate.__init__(self, identifier=identifier,measurements=None, **kwargs)
         
         self._inner = inner        
         self._register(registry=registry)    
@@ -63,15 +64,10 @@ class AtomicTimeReversalPulseTemplate(AtomicPulseTemplate):
     def deserialize(cls,
                     serializer: Optional[Serializer]=None,  # compatibility to old serialization routines, deprecated
                     **kwargs) -> 'AtomicTimeReversalPulseTemplate':
-        main_pt = kwargs['main_pt']
-        new_duration = kwargs['new_duration']
-        del kwargs['main_pt']
-        del kwargs['new_duration']
-
         if serializer: # compatibility to old serialization routines, deprecated
             raise NotImplementedError()
 
-        return cls(main_pt,new_duration,**kwargs)
+        return cls(**kwargs)
     
     def build_waveform(self,
                        *args, **kwargs) -> Optional[Waveform]:
@@ -86,8 +82,9 @@ class TimeReversalPulseTemplate(PulseTemplate):
 
     def __init__(self, inner: PulseTemplate,
                  identifier: Optional[str] = None,
-                 registry: PulseRegistryType = None):
-        super(TimeReversalPulseTemplate, self).__init__(identifier=identifier)
+                 registry: PulseRegistryType = None,
+                 **kwargs):
+        super(TimeReversalPulseTemplate, self).__init__(identifier=identifier, **kwargs)
         self._inner = inner
         self._register(registry=registry)
 

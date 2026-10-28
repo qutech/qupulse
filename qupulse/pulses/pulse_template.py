@@ -12,19 +12,19 @@ from typing import Dict, Tuple, Set, Optional, Union, List, Callable, Any, Gener
 import itertools
 import collections
 from numbers import Real, Number
-from functools import cached_property
+from functools import cached_property, partial
 
 import numpy
 import sympy
 
-from qupulse.utils.types import ChannelID, DocStringABCMeta, FrozenDict
-from qupulse.utils import forced_hash
+from qupulse.utils.types import ChannelID, DocStringABCMeta, FrozenDict, TimeType
+from qupulse.utils import forced_hash, _MagicLoopElements
 from qupulse.serialization import Serializable
 from qupulse.expressions import ExpressionScalar, Expression, ExpressionLike
 from qupulse.program.loop import Loop, to_waveform
 from qupulse.program.transformation import Transformation, IdentityTransformation, ChainedTransformation, chain_transformations
 
-from qupulse.program.waveforms import Waveform, TransformingWaveform
+from qupulse.program.waveforms import Waveform, TransformingWaveform, TruncationWaveform
 from qupulse.pulses.measurement import MeasurementDefiner, MeasurementDeclaration
 from qupulse.parameter_scope import Scope, DictScope
 
@@ -60,12 +60,36 @@ class PulseTemplate(Serializable):
     _CAST_INT_TO_INT64 = True
 
     def __init__(self, *,
-                 identifier: Optional[str]) -> None:
+                 identifier: Optional[str],
+                 _pow_2_divisor: int = 0,
+                 _truncation_context_pretend_dur_for_sampling: Optional[float] = None) -> None:
         super().__init__(identifier=identifier)
         self.__cached_hash_value = None
-        self._pow_2_divisor: int = 0
+        self.__pow_2_divisor = _pow_2_divisor
         # self.__cached_serialization_data = None
-        
+        self.__truncation_context_pretend_dur_for_sampling = _truncation_context_pretend_dur_for_sampling
+
+    @property
+    def _pow_2_divisor(self) -> int:
+        """Power-of-two exponent used to reduce the waveform sampling rate."""
+        return self.__pow_2_divisor
+
+    @property
+    def _truncation_context_pretend_dur_for_sampling(self) -> Optional[float]:
+        """Optional reference duration for sampling in a truncation context."""
+        return self.__truncation_context_pretend_dur_for_sampling
+
+    def get_serialization_data(self, serializer=None) -> Dict[str, Any]:
+        if serializer is not None and (self._pow_2_divisor != 0 or
+                                       self._truncation_context_pretend_dur_for_sampling is not None):
+            raise NotImplementedError('Legacy serialization does not support sampling options.')
+        data = super().get_serialization_data(serializer)
+        if self._pow_2_divisor != 0:
+            data['_pow_2_divisor'] = self._pow_2_divisor
+        if self._truncation_context_pretend_dur_for_sampling is not None:
+            data['_truncation_context_pretend_dur_for_sampling'] = self._truncation_context_pretend_dur_for_sampling
+        return data
+
     @property
     @abstractmethod
     def parameter_names(self) -> Set[str]:
@@ -522,7 +546,24 @@ class PulseTemplate(Serializable):
         if self.__cached_hash_value is None:
             self.__cached_hash_value = forced_hash(self.get_serialization_data())
         return self.__cached_hash_value
-
+    
+    @property
+    def _potential_truncation_context(self) -> bool:
+        #hackily evaluate whether one variable with magic truncation keyword in
+        #duration expression exists -> expect total duration reference in scope
+        if not self.duration.variables or not any(v.endswith(_MagicLoopElements.truncate.value) for v in self.duration.variables):
+            return False
+        #there may be a better check necessary to test whether one t-expression only contains one variable.
+        # elif len(self.duration.variables)>1:
+        #     #avoid this mess of multiple vars for now
+        #     assert not any(v.endswith(_MagicLoopElements.truncate.value) for v in self.duration.variables), "Multiple duration vars in trunc not expected"
+        #     return False
+        else:
+            assert len(self.duration.variables)>=1
+            # dur_var, = self.duration.variables
+            # assert all(dur_var.endswith(_MagicLoopElements.truncate.value) for dur_var in dur_vars)
+            return True
+    
 
 class AtomicPulseTemplate(PulseTemplate, MeasurementDefiner):
     """A PulseTemplate that does not imply any control flow disruptions and can be directly
@@ -534,8 +575,9 @@ class AtomicPulseTemplate(PulseTemplate, MeasurementDefiner):
 
     def __init__(self, *,
                  identifier: Optional[str],
-                 measurements: Optional[List[MeasurementDeclaration]]):
-        PulseTemplate.__init__(self, identifier=identifier)
+                 measurements: Optional[List[MeasurementDeclaration]],
+                 **kwargs):
+        PulseTemplate.__init__(self, identifier=identifier, **kwargs)
         MeasurementDefiner.__init__(self, measurements=measurements)
 
     def with_parallel_atomic(self, *parallel: 'AtomicPulseTemplate') -> 'AtomicPulseTemplate':
@@ -571,6 +613,7 @@ class AtomicPulseTemplate(PulseTemplate, MeasurementDefiner):
         
         # "hackedy":
         if program_builder.evaluate_nested_stepping(scope,self.parameter_names):
+            assert not self._potential_truncation_context, "Combniation of stepped loop and truncation not yet supported"
             measurements = self.get_measurement_windows(parameters=scope,
                                                         measurement_mapping=measurement_mapping)
             program_builder.measure(measurements)
@@ -585,15 +628,22 @@ class AtomicPulseTemplate(PulseTemplate, MeasurementDefiner):
                                                            )
             return
         
-        waveform = self.build_waveform(parameters=scope,
-                                       channel_mapping=channel_mapping)
+        #for the hacky feature of truncation, we need to fake the total duration and get the used duration:
+        waveform = self._get_wrapped_wf_build_func(scope,channel_mapping)()
+            
         if waveform:
             measurements = self.get_measurement_windows(parameters=scope,
                                                         measurement_mapping=measurement_mapping)
             program_builder.measure(measurements)
 
             if global_transformation:
-                waveform = TransformingWaveform.from_transformation(waveform, global_transformation)
+                if isinstance(waveform,TruncationWaveform):
+                    #one could do this more elegantly.
+                    #in this hack, the time truncation property has to precede
+                    #the voltage trafo
+                    waveform = waveform.apply_trafo(global_transformation)
+                else:
+                    waveform = TransformingWaveform.from_transformation(waveform, global_transformation)
                 
             waveform._pow_2_divisor = self._pow_2_divisor
                 
@@ -602,7 +652,38 @@ class AtomicPulseTemplate(PulseTemplate, MeasurementDefiner):
                 program_builder.play_arbitrary_waveform(waveform)
             else:
                 program_builder.hold_voltage(waveform.duration, constant_values)
-
+        
+    def _get_wrapped_wf_build_func(self, scope: Scope, channel_mapping: Dict[ChannelID, Optional[ChannelID]]) -> Callable[[],Waveform]:
+        if self._potential_truncation_context and self.duration.variables:
+            assert len(self.duration.variables)==1, "unexpected number of vars in duration: {self.duration.variables}"
+            dur_var, = self.duration.variables
+            #expect in scope:
+            #(_var_ val - not necessarily the actual duration in time units)
+            if self._truncation_context_pretend_dur_for_sampling:
+                #the PT has some info about what to set the duration variable to to pretend for sampling
+                total_pretend_dur = self._truncation_context_pretend_dur_for_sampling
+            else:
+                #otherwise assume the max rng val as both
+                total_pretend_dur = scope[dur_var+_MagicLoopElements.truncate_ref.value]
+            
+            context_scope = scope.overwrite({dur_var: total_pretend_dur})
+            #the maximum duration needed to sample is still the maximum rng val in the assumed loop
+            total_dur = scope[dur_var+_MagicLoopElements.truncate_ref.value]
+            max_dur_scope = scope.overwrite({dur_var: total_dur})
+            #!the following is not used yet but could provide further optimization
+            #to tell the sampler/uploader that some suration is the asserted maximum duration needed.
+            asserted_max_dur = self.duration.evaluate_in_scope(max_dur_scope)
+            #actually used dur is always the true value for consistency
+            used_dur_eval = self.duration.evaluate_in_scope(scope)
+            
+            #and wrap the resulting waveform...
+            def _wrap_in_trunc_wf():
+                wf = self.build_waveform(context_scope,channel_mapping)
+                if wf:
+                    return TruncationWaveform(wf,used_dur_eval,asserted_max_dur)
+                return None
+            return _wrap_in_trunc_wf
+        return partial(self.build_waveform,scope,channel_mapping)
 
     @abstractmethod
     def build_waveform(self,

@@ -17,7 +17,8 @@ from qupulse.parameter_scope import Scope, MappedScope, FrozenDict
 # from qupulse.pulses import ForLoopPT
 from qupulse.program import ProgramBuilder, HardwareTime, HardwareVoltage, Waveform, RepetitionCount, TimeType
 from qupulse.expressions.simple import SimpleExpression, NumVal, SimpleExpressionStepped
-from qupulse.program.waveforms import MultiChannelWaveform, TransformingWaveform, WaveformCollection, SequenceWaveform
+from qupulse.program.waveforms import MultiChannelWaveform, TransformingWaveform, WaveformCollection, SequenceWaveform, ShareableWaveform, TruncationWaveform
+from qupulse.utils import _MagicLoopElements
 
 from qupulse.program.transformation import ChainedTransformation, ScalingTransformation, OffsetTransformation,\
     IdentityTransformation, ParallelChannelTransformation, Transformation
@@ -28,6 +29,7 @@ from qupulse.program.transformation import ChainedTransformation, ScalingTransfo
 # just a programmatic 'small epsilon' to avoid rounding errors.
 DEFAULT_INCREMENT_RESOLUTION: float = 1e-9
 DEFAULT_TIME_RESOLUTION: float = 1e-3
+
 
 class DepDomain(Enum):
     VOLTAGE = 0
@@ -710,9 +712,15 @@ class LinSpaceBuilder(ProgramBuilder):
         else:
             meas = None
         
+        #if there is a time truncation going on, hackily use inner for further type check.
+        if isinstance(waveform,TruncationWaveform):
+            waveform_type_check = waveform._inner
+        else:
+            waveform_type_check = waveform
+        
         # recognize voltage trafo sweep syntax from a transforming waveform.
         # other sweepable things may need different approaches.
-        if not isinstance(waveform,(TransformingWaveform,WaveformCollection)):
+        if not isinstance(waveform_type_check,(TransformingWaveform,WaveformCollection)):
             assert stepped_var_list is None
             ret = self._stack[-1].append(LinSpaceArbitraryWaveform(waveform=waveform.reversed() if self._reversed_counter%2 else waveform,
                                                                    channels=waveform.defined_channels,))
@@ -722,7 +730,7 @@ class LinSpaceBuilder(ProgramBuilder):
         
             
         #should be sufficient to test the first wf, as all should have the same trafo
-        waveform_propertyextractor = waveform
+        waveform_propertyextractor = waveform_type_check
         while isinstance(waveform_propertyextractor,WaveformCollection):
             waveform_propertyextractor = waveform_propertyextractor.waveform_collection[0] 
         
@@ -737,7 +745,7 @@ class LinSpaceBuilder(ProgramBuilder):
             dependent_trafo_vals_flag = False
         
         #fast track
-        if not dependent_trafo_vals_flag and not isinstance(waveform,WaveformCollection):
+        if not dependent_trafo_vals_flag and not isinstance(waveform_type_check,WaveformCollection):
             ret = self._stack[-1].append(LinSpaceArbitraryWaveform(waveform=waveform.reversed() if self._reversed_counter%2 else waveform,
                                                                    channels=waveform.defined_channels,))
             if meas:
@@ -751,7 +759,7 @@ class LinSpaceBuilder(ProgramBuilder):
         
         if stepped_var_list:
             # the index ordering shall be with the last index changing fastest.
-            # (assuming the WaveformColleciton will be flattened)
+            # (assuming the WaveformCollection will be flattened)
             # this means increments on last shall be 1, next lower 1*len(fastest),
             # next 1*len(fastest)*len(second_fastest),... -> product(higher_reg_range_lens)
             # total_reg_len = len(stepped_var_list)
@@ -922,8 +930,13 @@ class LinSpaceBuilder(ProgramBuilder):
                 with self.with_sequence(measurements):
                     for value in rng:
                         self._current_rollout_vars[index_name] = value
+                        if pt_obj.body._potential_truncation_context:
+                            #!!!this means a hardcoded total duration oriented at the maximum loop val.
+                            assert rng.stop>0, "Invalid loop rngstop 0"
+                            self._current_rollout_vars[index_name+_MagicLoopElements.truncate_ref.value] = rng.stop-1
                         yield self
                         self._current_rollout_vars.pop(index_name)
+                        self._current_rollout_vars.pop(index_name+_MagicLoopElements.truncate_ref.value,None)
                 return
         
         self._stack.append([])
@@ -1090,7 +1103,7 @@ def _get_concatenated_blocks(blocks: Sequence[LinSpaceNode],
         
     
     for node in blocks:
-        if not isinstance(node,LinSpaceArbitraryWaveform):
+        if not isinstance(node,LinSpaceArbitraryWaveform) or isinstance(node.waveform,ShareableWaveform):
             if current_blocks: concat_blocks.append(combine_nodes_into_one(current_blocks))
             concat_blocks.append(node)
             current_blocks, current_len = [], 0.

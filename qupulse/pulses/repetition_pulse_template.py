@@ -41,7 +41,8 @@ class RepetitionPulseTemplate(LoopPulseTemplate, ParameterConstrainer, Measureme
                  *args,
                  parameter_constraints: Optional[List]=None,
                  measurements: Optional[List[MeasurementDeclaration]]=None,
-                 registry: PulseRegistryType=None
+                 registry: PulseRegistryType=None,
+                 **kwargs
                  ) -> None:
         """Create a new RepetitionPulseTemplate instance.
 
@@ -56,7 +57,7 @@ class RepetitionPulseTemplate(LoopPulseTemplate, ParameterConstrainer, Measureme
         elif args:
             TypeError('RepetitionPulseTemplate expects 3 positional arguments, got ' + str(3 + len(args)))
 
-        LoopPulseTemplate.__init__(self, identifier=identifier, body=body)
+        LoopPulseTemplate.__init__(self, identifier=identifier, body=body, **kwargs)
         ParameterConstrainer.__init__(self, parameter_constraints=parameter_constraints)
         MeasurementDefiner.__init__(self, measurements=measurements)
 
