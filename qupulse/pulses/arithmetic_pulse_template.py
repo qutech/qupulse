@@ -179,7 +179,7 @@ class ArithmeticAtomicPulseTemplate(AtomicPulseTemplate):
         return data
 
     def __repr__(self):
-        if any(v for k, v in super().get_serialization_data().items() if k != '#type'):
+        if len(super().get_serialization_data()) > 1:
             return super().__repr__()
         else:
             return '(%r %r %r)' % (self.lhs, self.arithmetic_operator, self.rhs)
@@ -418,7 +418,7 @@ class ArithmeticPulseTemplate(PulseTemplate):
         return TransformingWaveform.from_transformation(inner_waveform, transformation=transformation)
 
     def __repr__(self):
-        if any(v for k, v in super().get_serialization_data().items() if k != '#type'):
+        if len(super().get_serialization_data()) > 1:
             return super().__repr__()
         else:
             return '(%r %s %r)' % (self.lhs, self._arithmetic_operator, self.rhs)
