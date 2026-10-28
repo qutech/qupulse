@@ -64,15 +64,10 @@ class AtomicTimeReversalPulseTemplate(AtomicPulseTemplate):
     def deserialize(cls,
                     serializer: Optional[Serializer]=None,  # compatibility to old serialization routines, deprecated
                     **kwargs) -> 'AtomicTimeReversalPulseTemplate':
-        main_pt = kwargs['main_pt']
-        new_duration = kwargs['new_duration']
-        del kwargs['main_pt']
-        del kwargs['new_duration']
-
         if serializer: # compatibility to old serialization routines, deprecated
             raise NotImplementedError()
 
-        return cls(main_pt,new_duration,**kwargs)
+        return cls(**kwargs)
     
     def build_waveform(self,
                        *args, **kwargs) -> Optional[Waveform]:
